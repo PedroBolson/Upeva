@@ -45,7 +45,7 @@ export function AdminAnimalsPage() {
           aria-hidden="true"
           className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
         >
-          <div className="w-[7.5rem] shrink-0">
+          <div className="w-30 shrink-0">
             <Input
               placeholder="Buscar por nome…"
               value={search}
@@ -68,7 +68,7 @@ export function AdminAnimalsPage() {
           </Button>
         </div>
 
-        <div className="min-w-[7.5rem] flex-1 max-w-[18rem]">
+        <div className="min-w-30 flex-1 max-w-[18rem]">
           <Input
             placeholder="Buscar por nome…"
             value={search}

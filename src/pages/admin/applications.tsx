@@ -249,7 +249,7 @@ function ApplicationMobileCard({
             <p className="text-base font-semibold text-foreground">
               {application.fullName}
             </p>
-            <p className="mt-1 break-words text-sm text-muted-foreground">
+            <p className="mt-1 wrap-break-words text-sm text-muted-foreground">
               {application.email}
             </p>
           </div>
