@@ -39,7 +39,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         {label}
       </span>
-      <span className="text-sm text-foreground break-words whitespace-pre-wrap">{value || '—'}</span>
+      <span className="text-sm text-foreground wrap-break-words whitespace-pre-wrap">{value || '—'}</span>
     </div>
   )
 }

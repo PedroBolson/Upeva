@@ -1,15 +1,14 @@
-import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PawPrint } from 'lucide-react'
-import { AnimalCardSkeleton, EmptyState, ErrorState, Pagination } from '@/components/ui'
+import { AnimalCardSkeleton, EmptyState, ErrorState, Button } from '@/components/ui'
+import { Spinner } from '@/components/ui/spinner'
+import { cn } from '@/utils/cn'
 import { AnimalCard } from '@/features/animals/components/animal-card'
 import { AnimalFilters } from '@/features/animals/components/animal-filters'
 import { useAnimals } from '@/features/animals/hooks/use-animals'
 import type { AnimalFilters as Filters } from '@/features/animals/types/animal.types'
 import type { Species, Sex, Size } from '@/types/common'
-
-const PAGE_SIZE = 12
 
 function filtersFromParams(params: URLSearchParams): Filters {
   return {
@@ -31,17 +30,13 @@ function paramsFromFilters(f: Filters): Record<string, string> {
 
 export function AnimalsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [page, setPage] = useState(1)
 
   const filters = filtersFromParams(searchParams)
-  const { animals, total, isLoading, error, refetch } = useAnimals(filters)
-
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const paginated  = animals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { animals, total, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
+    useAnimals(filters)
 
   function handleFiltersChange(next: Filters) {
     setSearchParams(paramsFromFilters(next))
-    setPage(1)
   }
 
   return (
@@ -74,10 +69,10 @@ export function AnimalsPage() {
           />
         </motion.div>
 
-        {/* Grid */}
+        {/* Grid — skeleton during initial load */}
         {isLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+            {Array.from({ length: 12 }).map((_, i) => (
               <AnimalCardSkeleton key={i} />
             ))}
           </div>
@@ -99,33 +94,58 @@ export function AnimalsPage() {
           />
         )}
 
-        {!isLoading && !error && paginated.length > 0 && (
-          <AnimatePresence mode="popLayout">
-            <motion.div
-              key={`${filters.species ?? ''}-${filters.sex ?? ''}-${filters.size ?? ''}-${filters.search ?? ''}-${page}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-              {paginated.map((animal) => (
-                <AnimalCard key={animal.id} animal={animal} />
-              ))}
-            </motion.div>
-          </AnimatePresence>
+        {!isLoading && !error && animals.length > 0 && (
+          <div className="relative">
+            {/* Subtle overlay while a new filter loads — grid stays visible */}
+            {isFiltering && (
+              <div className="absolute inset-0 z-10 flex items-start justify-center pt-16 rounded-xl bg-background/50 backdrop-blur-[1px]">
+                <Spinner />
+              </div>
+            )}
+            <AnimatePresence mode="popLayout">
+              <motion.div
+                key={`${filters.species ?? ''}-${filters.sex ?? ''}-${filters.size ?? ''}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: isFiltering ? 0.4 : 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className={cn(
+                  'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6',
+                  isFiltering && 'pointer-events-none select-none',
+                )}
+              >
+                {animals.map((animal) => (
+                  <AnimalCard key={animal.id} animal={animal} />
+                ))}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         )}
 
-        {totalPages > 1 && (
-          <Pagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={total}
-            onPageChange={(p) => {
-              setPage(p)
-              window.scrollTo({ top: 0, behavior: 'smooth' })
-            }}
-          />
+        {/* Load more */}
+        {!isLoading && !error && (hasMore || isFetchingMore) && (
+          <div className="flex flex-col items-center gap-2">
+            {total > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Mostrando {total} animal{total !== 1 ? 'is' : ''}
+              </p>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => fetchMore()}
+              disabled={isFetchingMore}
+              className="min-w-40"
+            >
+              {isFetchingMore ? (
+                <span className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  Carregando…
+                </span>
+              ) : (
+                'Carregar mais'
+              )}
+            </Button>
+          </div>
         )}
       </div>
     </div>

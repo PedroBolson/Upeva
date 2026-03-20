@@ -1,37 +1,66 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { PawPrint, ArrowRight, Clock, CheckCircle, XCircle, UserPlus, ClipboardList } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { Button } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { AnimalStatusBadge, ApplicationStatusBadge } from '@/components/ui'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
-import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
-import { useApplications } from '@/features/adoption/hooks/use-applications'
-import { formatRelativeDate } from '@/utils/format'
-import type { Timestamp } from '@/types/common'
+import { useCounts } from '@/features/admin/hooks/use-counts'
+import { formatRelativeDate, tsToDate } from '@/utils/format'
+import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
+import type { Animal } from '@/features/animals/types/animal.types'
 
-function tsToDate(ts: Timestamp | undefined): Date {
-  if (!ts) return new Date(0)
-  return typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts as unknown as number)
+// Lightweight query — only the latest 6 applications (not all 500)
+function useRecentApplications() {
+  return useQuery<AdoptionApplication[]>({
+    queryKey: ['applications', 'recent'],
+    queryFn: async () => {
+      const q = query(
+        collection(db, 'applications'),
+        orderBy('createdAt', 'desc'),
+        limit(6),
+      )
+      const snap = await getDocs(q)
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AdoptionApplication))
+    },
+    staleTime: 1000 * 60 * 2,
+  })
+}
+
+// Lightweight query — only the latest 5 animals (not all 500)
+function useRecentAnimals() {
+  return useQuery<Animal[]>({
+    queryKey: ['animals', 'recent'],
+    queryFn: async () => {
+      const q = query(
+        collection(db, 'animals'),
+        orderBy('createdAt', 'desc'),
+        limit(5),
+      )
+      const snap = await getDocs(q)
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Animal))
+    },
+    staleTime: 1000 * 60 * 5,
+  })
 }
 
 export function DashboardPage() {
-  const { data: animals = [], isLoading: animalsLoading } = useAdminAnimals()
-  const { data: applications = [], isLoading: appsLoading } = useApplications()
+  const { data: counts, isLoading: countsLoading } = useCounts()
+  const { data: recentApplications = [], isLoading: appsLoading } = useRecentApplications()
+  const { data: recentAnimals = [], isLoading: animalsLoading } = useRecentAnimals()
 
-  const stats = useMemo(() => ({
-    available:   animals.filter((a) => a.status === 'available').length,
-    pending:     applications.filter((a) => a.status === 'pending').length,
-    in_review:   applications.filter((a) => a.status === 'in_review').length,
-    approved:    applications.filter((a) => a.status === 'approved').length,
-  }), [animals, applications])
+  const stats = {
+    available:  counts?.animals?.available  ?? 0,
+    pending:    counts?.applications?.pending    ?? 0,
+    in_review:  counts?.applications?.in_review  ?? 0,
+    approved:   counts?.applications?.approved   ?? 0,
+  }
 
-  const recentApplications = useMemo(
-    () => [...applications].slice(0, 6),
-    [applications],
-  )
+  const isLoading = countsLoading || appsLoading || animalsLoading
 
-  const isLoading = animalsLoading || appsLoading
   const headerActions = useMemo(
     () => (
       <div className="flex items-center gap-2 whitespace-nowrap">
@@ -52,14 +81,7 @@ export function DashboardPage() {
     [],
   )
 
-  const headerConfig = useMemo(
-    () => ({
-      actions: headerActions,
-    }),
-    [headerActions],
-  )
-
-  useAdminPageHeader(headerConfig)
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   return (
     <div className="flex flex-col gap-8">
@@ -184,9 +206,9 @@ export function DashboardPage() {
           </div>
         )}
 
-        {!animalsLoading && animals.slice(0, 5).length > 0 && (
+        {!animalsLoading && recentAnimals.length > 0 && (
           <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
-            {animals.slice(0, 5).map((animal) => (
+            {recentAnimals.map((animal) => (
               <Link
                 key={animal.id}
                 to={`/admin/animais/${animal.id}/editar`}

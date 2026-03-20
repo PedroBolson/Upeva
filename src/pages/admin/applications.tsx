@@ -7,9 +7,10 @@ import { ErrorState } from '@/components/ui/error-state'
 import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
+import { useCounts } from '@/features/admin/hooks/use-counts'
 import { useApplications } from '@/features/adoption/hooks/use-applications'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
-import { formatRelativeDate } from '@/utils/format'
+import { formatRelativeDate, tsToDate } from '@/utils/format'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
 import { cn } from '@/utils/cn'
@@ -23,38 +24,36 @@ const STATUS_TABS: Array<{ value: ApplicationStatus | 'all'; label: string }> = 
   { value: 'withdrawn', label: 'Retiradas' },
 ]
 
-function tsToDate(ts: Timestamp | undefined): Date {
-  if (!ts) return new Date(0)
-  return typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts as unknown as number)
-}
-
 export function ApplicationsPage() {
   const navigate = useNavigate()
-  const { data: applications = [], isLoading, error, refetch } = useApplications()
   const [activeTab, setActiveTab] = useState<ApplicationStatus | 'all'>('all')
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
-  const filtered = useMemo(
-    () =>
-      activeTab === 'all'
-        ? applications
-        : applications.filter((a) => a.status === activeTab),
-    [applications, activeTab],
-  )
+  const { data: counts } = useCounts()
 
-  const statusCounts = useMemo(
-    () =>
-      STATUS_TABS.reduce<Record<string, number>>((acc, { value }) => {
-        if (value === 'all') {
-          acc[value] = applications.length
-          return acc
-        }
+  const serverStatus = activeTab === 'all' ? null : activeTab
+  const {
+    applications,
+    hasMore,
+    isLoading,
+    isFetchingMore,
+    error,
+    fetchMore,
+    refetch,
+  } = useApplications(serverStatus)
 
-        acc[value] = applications.filter((application) => application.status === value).length
-        return acc
-      }, {}),
-    [applications],
-  )
+  // Counts for tab badges come from metadata (no extra reads)
+  const statusCounts = useMemo(() => {
+    const base: Record<string, number> = {
+      all: counts?.applications?.total ?? 0,
+      pending: counts?.applications?.pending ?? 0,
+      in_review: counts?.applications?.in_review ?? 0,
+      approved: counts?.applications?.approved ?? 0,
+      rejected: counts?.applications?.rejected ?? 0,
+      withdrawn: counts?.applications?.withdrawn ?? 0,
+    }
+    return base
+  }, [counts])
 
   const tabButtons = useMemo(
     () =>
@@ -70,7 +69,7 @@ export function ApplicationsPage() {
           )}
         >
           {label}
-          {value !== 'all' && (
+          {statusCounts[value] > 0 && (
             <span className="ml-1.5 rounded-full bg-background/70 px-1.5 py-0.5 text-xs text-muted-foreground">
               {statusCounts[value]}
             </span>
@@ -116,7 +115,7 @@ export function ApplicationsPage() {
                     }}
                   >
                     <span>{label}</span>
-                    {value !== 'all' && (
+                    {statusCounts[value] > 0 && (
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-xs',
@@ -139,14 +138,7 @@ export function ApplicationsPage() {
     [activeTab, containerRef, isCompact, measureRef, statusCounts, tabButtons],
   )
 
-  const headerConfig = useMemo(
-    () => ({
-      actions: headerActions,
-    }),
-    [headerActions],
-  )
-
-  useAdminPageHeader(headerConfig)
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   const columns: Column<AdoptionApplication>[] = [
     {
@@ -179,7 +171,7 @@ export function ApplicationsPage() {
       header: 'Data',
       cell: (a) => (
         <span className="text-sm text-muted-foreground">
-          {formatRelativeDate(tsToDate(a.createdAt))}
+          {formatRelativeDate(tsToDate(a.createdAt as Timestamp | undefined))}
         </span>
       ),
     },
@@ -188,7 +180,7 @@ export function ApplicationsPage() {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-muted-foreground">
-        {filtered.length} candidatura{filtered.length !== 1 ? 's' : ''}
+        {applications.length} candidatura{applications.length !== 1 ? 's' : ''} carregada{applications.length !== 1 ? 's' : ''}
       </p>
 
       {isLoading && (
@@ -207,7 +199,7 @@ export function ApplicationsPage() {
       {!isLoading && !error && (
         <ResponsiveDataList
           columns={columns}
-          data={filtered}
+          data={applications}
           keyExtractor={(a) => a.id}
           onRowClick={(a) => navigate(`/admin/candidaturas/${a.id}`)}
           renderMobileCard={(application) => (
@@ -218,6 +210,27 @@ export function ApplicationsPage() {
           )}
           emptyMessage="Nenhuma candidatura encontrada."
         />
+      )}
+
+      {/* Load more */}
+      {!isLoading && !error && (hasMore || isFetchingMore) && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => fetchMore()}
+            disabled={isFetchingMore}
+            className="min-w-40"
+          >
+            {isFetchingMore ? (
+              <span className="flex items-center gap-2">
+                <Spinner size="sm" />
+                Carregando…
+              </span>
+            ) : (
+              'Carregar mais candidaturas'
+            )}
+          </Button>
+        </div>
       )}
     </div>
   )
@@ -274,7 +287,7 @@ function ApplicationMobileCard({
               Recebida
             </p>
             <p className="mt-1 text-sm text-foreground">
-              {formatRelativeDate(tsToDate(application.createdAt))}
+              {formatRelativeDate(tsToDate(application.createdAt as Timestamp | undefined))}
             </p>
           </div>
         </div>

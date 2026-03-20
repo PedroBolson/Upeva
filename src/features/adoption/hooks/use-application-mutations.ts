@@ -15,8 +15,14 @@ export function useUpdateApplicationStatus() {
       adminNotes?: string
     }) => updateApplicationStatus(id, status, adminNotes),
     onSuccess: (_, { id }) => {
+      // Invalidate all application list variants (any status filter)
       queryClient.invalidateQueries({ queryKey: ['applications'] })
+      queryClient.invalidateQueries({ queryKey: ['applications', 'recent'] })
       queryClient.invalidateQueries({ queryKey: ['applications', 'detail', id] })
+      // Counts will update via Cloud Function trigger; invalidate after short delay
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['metadata', 'counts'] })
+      }, 2000)
     },
   })
 }

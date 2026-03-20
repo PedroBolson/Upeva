@@ -24,18 +24,23 @@ const STATUS_FILTER_OPTIONS = [
 
 export function AdminAnimalsPage() {
   const navigate = useNavigate()
-  const { data: animals = [], isLoading, error, refetch } = useAdminAnimals()
-  const { mutate: updateStatus } = useUpdateAnimalStatus()
-
-  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<AnimalStatus | ''>('')
+  const [search, setSearch] = useState('')
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
-  const filtered = animals.filter((a) => {
-    if (statusFilter && a.status !== statusFilter) return false
-    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+  const { animals: allAnimals, hasMore, isLoading, isFetchingMore, error, fetchMore, refetch } =
+    useAdminAnimals(statusFilter || null)
+
+  const { mutate: updateStatus } = useUpdateAnimalStatus()
+
+  // Client-side name search on the current (server-filtered) set
+  const filtered = useMemo(
+    () =>
+      search
+        ? allAnimals.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
+        : allAnimals,
+    [allAnimals, search],
+  )
 
   const headerActions = useMemo(
     () => (
@@ -118,14 +123,7 @@ export function AdminAnimalsPage() {
     [containerRef, isCompact, measureRef, search, statusFilter],
   )
 
-  const headerConfig = useMemo(
-    () => ({
-      actions: headerActions,
-    }),
-    [headerActions],
-  )
-
-  useAdminPageHeader(headerConfig)
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   const columns: Column<Animal>[] = [
     {
@@ -147,9 +145,7 @@ export function AdminAnimalsPage() {
     {
       key: 'name',
       header: 'Nome',
-      cell: (a) => (
-        <span className="font-medium text-foreground">{a.name}</span>
-      ),
+      cell: (a) => <span className="font-medium text-foreground">{a.name}</span>,
     },
     {
       key: 'species',
@@ -204,7 +200,7 @@ export function AdminAnimalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-muted-foreground">
-        {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+        {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} carregado{filtered.length !== 1 ? 's' : ''}
       </p>
 
       {isLoading && (
@@ -235,6 +231,27 @@ export function AdminAnimalsPage() {
           )}
           emptyMessage="Nenhum animal encontrado com esses filtros."
         />
+      )}
+
+      {/* Load more */}
+      {!isLoading && !error && (hasMore || isFetchingMore) && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => fetchMore()}
+            disabled={isFetchingMore}
+            className="min-w-40"
+          >
+            {isFetchingMore ? (
+              <span className="flex items-center gap-2">
+                <Spinner size="sm" />
+                Carregando…
+              </span>
+            ) : (
+              'Carregar mais animais'
+            )}
+          </Button>
+        </div>
       )}
     </div>
   )
@@ -280,19 +297,17 @@ function AnimalMobileCard({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-foreground">
-                      {animal.name}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {SPECIES_LABELS[animal.species]} · {SEX_LABELS[animal.sex]}
-                      {animal.size ? ` · ${SIZE_LABELS[animal.size]}` : ''}
-                    </p>
-                  </div>
-                  <AnimalStatusBadge status={animal.status} />
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-foreground">
+                    {animal.name}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {SPECIES_LABELS[animal.species]} · {SEX_LABELS[animal.sex]}
+                    {animal.size ? ` · ${SIZE_LABELS[animal.size]}` : ''}
+                  </p>
                 </div>
+                <AnimalStatusBadge status={animal.status} />
               </div>
             </div>
           </div>

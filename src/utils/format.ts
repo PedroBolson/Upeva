@@ -1,3 +1,10 @@
+import type { Timestamp } from '@/types/common'
+
+export function tsToDate(ts: Timestamp | undefined): Date {
+  if (!ts) return new Date(0)
+  return typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts as unknown as number)
+}
+
 export function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11)
   if (digits.length <= 10) {

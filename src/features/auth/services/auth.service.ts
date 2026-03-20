@@ -5,7 +5,8 @@ import {
   type User,
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { auth, db, functions } from '@/lib/firebase'
 import type { UserProfile } from '@/types/common'
 
 export async function signIn(email: string, password: string): Promise<User> {
@@ -26,6 +27,11 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid))
   if (!snap.exists()) return null
   return snap.data() as UserProfile
+}
+
+export async function refreshUserClaims(): Promise<void> {
+  const fn = httpsCallable(functions, 'refreshUserClaims')
+  await fn({})
 }
 
 async function assertIsStaff(uid: string): Promise<void> {

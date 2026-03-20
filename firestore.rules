@@ -4,29 +4,24 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+    // Uses Custom Claims (request.auth.token.role) set by Cloud Functions.
+    // This eliminates Firestore reads inside security rules, reducing costs
+    // and latency on every request.
 
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function userPath(uid) {
-      return /databases/$(database)/documents/users/$(uid);
-    }
-
-    function currentUserExists() {
-      return isAuthenticated() && exists(userPath(request.auth.uid));
-    }
-
-    function userDoc() {
-      return get(userPath(request.auth.uid)).data;
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
     }
 
     function isAdmin() {
-      return currentUserExists() && userDoc().role == 'admin';
+      return hasRole('admin');
     }
 
     function isReviewer() {
-      return currentUserExists() && userDoc().role == 'reviewer';
+      return hasRole('reviewer');
     }
 
     function isStaff() {
@@ -42,24 +37,20 @@ service cloud.firestore {
     }
 
     // ── Adoption applications ──────────────────────────────────────────────────
-    // Anyone can submit; only staff can read or modify.
-    // On create, enforce required fields and force status = 'pending'.
+    // All creates go through the createApplication Cloud Function (Admin SDK
+    // bypasses rules). Direct client writes are blocked to enforce rate limiting
+    // and server-side validation.
 
     match /applications/{appId} {
-      allow create: if
-        request.resource.data.keys().hasAll([
-          'animalId', 'animalName', 'species', 'status',
-          'fullName', 'email', 'createdAt'
-        ])
-        && request.resource.data.status == 'pending';
+      allow create: if false; // Cloud Function only
 
       allow read, update, delete: if isStaff();
     }
 
     // ── User profiles ──────────────────────────────────────────────────────────
     // All writes go through Cloud Functions (Admin SDK bypasses rules).
-    // Any authenticated user can read their own profile. Only admins can read/list
-    // other users. Users may only edit their own display name.
+    // Any authenticated staff member can read their own profile. Only admins
+    // can read or list other users. Users may only edit their own display name.
 
     match /users/{userId} {
       allow get: if isAuthenticated() &&
@@ -85,6 +76,21 @@ service cloud.firestore {
             .hasOnly(['displayName', 'updatedAt']);
 
       allow create, delete: if false; // Cloud Functions only
+    }
+
+    // ── Metadata (counts, config) ──────────────────────────────────────────────
+    // Staff can read aggregated counts. Writes are Cloud Functions only.
+
+    match /metadata/{doc} {
+      allow read: if isStaff();
+      allow write: if false; // Cloud Functions only
+    }
+
+    // ── Rate limits ────────────────────────────────────────────────────────────
+    // Internal use only — no client access.
+
+    match /rateLimits/{doc} {
+      allow read, write: if false; // Cloud Functions only
     }
   }
 }

@@ -11,6 +11,10 @@ import {
 function invalidate() {
   queryClient.invalidateQueries({ queryKey: ['animals'] })
   queryClient.invalidateQueries({ queryKey: ['admin', 'animals'] })
+  // Cloud Function updates metadata/counts asynchronously — refresh after delay
+  setTimeout(() => {
+    queryClient.invalidateQueries({ queryKey: ['metadata', 'counts'] })
+  }, 2000)
 }
 
 export function useCreateAnimal() {

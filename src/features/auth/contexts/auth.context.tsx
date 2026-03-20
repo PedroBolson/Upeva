@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
-import { getUserProfile } from '../services/auth.service'
+import { getUserProfile, refreshUserClaims } from '../services/auth.service'
 import type { UserProfile } from '@/types/common'
 
 interface AuthContextValue {
@@ -21,6 +21,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       if (firebaseUser) {
+        // Ensure the token has the latest Custom Claims (role).
+        // If absent (existing user before Custom Claims deployment), call
+        // the Cloud Function to set the claim, then force a token refresh.
+        const tokenResult = await firebaseUser.getIdTokenResult()
+        if (!tokenResult.claims['role']) {
+          await refreshUserClaims()
+          await firebaseUser.getIdToken(true)
+        }
         const profile = await getUserProfile(firebaseUser.uid)
         setUserProfile(profile)
       } else {
