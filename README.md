@@ -1,293 +1,292 @@
-# Upeva
+# 🐾 Upeva
 
-Plataforma web para divulgacao de animais, envio de candidaturas de adocao e operacao interna da ONG.
+Plataforma web para divulgação de animais, envio de candidaturas de adoção e operação interna da ONG.
 
-O projeto atual e uma SPA em React com duas areas principais:
+O projeto é uma SPA em React com duas áreas principais:
 
-- area publica para visitantes, com vitrine de animais e formulario de adocao
-- area administrativa para equipe da ONG, protegida por Firebase Auth
+- **Área pública** — vitrine de animais e formulário de adoção em múltiplos passos
+- **Área administrativa** — painel protegido por Firebase Auth para a equipe da ONG
 
-O backend operacional usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Functions.
+O backend usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Functions, com foco em baixo custo de leitura/escrita e segurança por padrão.
 
-## Estado atual do projeto
+---
 
-Hoje o repositorio ja contem:
+## ✅ Estado atual do projeto
 
-- home publica com destaque para animais disponiveis
-- listagem publica de animais com filtros por especie, sexo, porte e busca por nome
-- pagina de detalhes do animal com galeria e CTA para adocao
-- fluxo publico de candidatura de adocao geral e por animal
-- paginas institucionais `sobre` e `contato`
-- area administrativa com login, dashboard, animais, candidaturas, usuarios e configuracoes
-- CRUD basico de animais com upload de fotos no Firebase Storage
-- triagem de candidaturas com atualizacao de status
-- gestao de usuarios internos com roles `admin` e `reviewer`
-- espelhamento automatico de usuarios do Firebase Auth para a colecao `users`
-- bootstrap automatico do primeiro admin via Cloud Function
+- Home pública com destaque para animais disponíveis
+- Listagem pública com filtros por espécie, sexo, porte e busca por nome — animações inteligentes que distinguem dados em cache de carregamentos reais
+- Página de detalhe do animal com galeria de fotos e CTA para adoção
+- Formulário público de candidatura por animal ou geral, com 8 etapas e campos condicionais por espécie
+- Páginas institucionais `sobre` e `contato`
+- Área administrativa com dashboard, animais, candidaturas, usuários e configurações
+- CRUD de animais com upload de fotos no Firebase Storage
+- Triagem de candidaturas com atualização de status e notas internas
+- Gestão de usuários internos com roles `admin` e `reviewer`
+- Paginação cursor-based em todas as listagens (público e admin)
+- Rate limiting server-side por e-mail nas candidaturas de adoção
 
-## Stack
+---
+
+## 🔒 Segurança
+
+### Firestore Rules
+
+As regras ficam em [`firestore.rules`](firestore.rules) e usam **Custom Claims** (`request.auth.token.role`) para autorização — eliminando leituras ao Firestore dentro das próprias regras.
+
+| Coleção | Leitura | Escrita |
+|---|---|---|
+| `animals` | pública | staff (create valida campos obrigatórios e enums) |
+| `applications` | staff | create bloqueado no cliente (Cloud Function only); update valida enum de status |
+| `users` | próprio doc ou admin | somente `displayName` pelo próprio usuário; resto via Cloud Functions |
+| `metadata` | staff | Cloud Functions only |
+| `rateLimits` | — | Cloud Functions only |
+| `_processedEvents` | — | Cloud Functions only |
+| qualquer outra | — | deny explícito (catch-all rule) |
+
+### Storage Rules
+
+As regras ficam em [`storage.rules`](storage.rules):
+
+- Leitura pública de imagens de animais
+- Escrita restrita a staff autenticado com Custom Claims
+- Upload limitado a `image/*` com até 10 MB
+
+### Cloud Functions — autorização
+
+Todas as functions admin verificam o role diretamente no token JWT (`request.auth.token.role`), sem fazer leitura adicional ao Firestore.
+
+### `createApplication` — allowlist de campos
+
+O payload do formulário é filtrado por allowlist antes de ser gravado no Firestore — campos arbitrários enviados pelo cliente são descartados.
+
+---
+
+## ⚡ Escalabilidade
+
+### Paginação cursor-based
+
+Todas as listagens usam o padrão `limit(N+1) + startAfter(cursor)`:
+
+| Listagem | Tamanho de página |
+|---|---|
+| Animais (público) | 12 |
+| Animais (admin) | 25 |
+| Candidaturas (admin) | 25 |
+| Usuários (admin) | 50 |
+
+### Rate limiting
+
+Candidaturas de adoção são limitadas a **5 por e-mail por 24 horas**, usando transação atômica no Firestore com hash SHA-256 do e-mail como chave.
+
+### `recalibrateCounts`
+
+Usa `count()` aggregation queries em paralelo por status — sem full scan das coleções, sem risco de timeout ou estouro de memória em produção.
+
+### `maxInstances` por function
+
+Cada Cloud Function tem seu próprio limite de instâncias:
+
+| Function | maxInstances |
+|---|---|
+| `createApplication` | 10 |
+| `onApplicationStatusChanged` | 5 |
+| `onAnimalChanged` | 5 |
+| `refreshUserClaims` | 5 |
+| `createUser` | 3 |
+| `updateUserRole` | 3 |
+| `recalibrateCounts` | 3 |
+
+### Deduplicação de triggers
+
+Os triggers `onApplicationStatusChanged` e `onAnimalChanged` usam o `event.id` para deduplicação — gravando o ID na coleção `_processedEvents` com `ref.create()` atômico, prevenindo double-counting em eventos retentados pelo Cloud Functions runtime.
+
+### Cache-Control
+
+- Imagens enviadas ao Storage recebem `Cache-Control: public, max-age=31536000, immutable` (nomes incluem timestamp, então são imutáveis)
+- Firebase Hosting serve JS, CSS e fontes com `max-age=31536000, immutable`
+- Imagens estáticas do Hosting com `max-age=31536000`
+
+---
+
+## 🧩 Stack
 
 ### Frontend
 
 - React 19
 - TypeScript
-- Vite 8
+- Vite 8 com code splitting manual (firebase, router, query, forms, motion, react-vendor)
 - React Router 7
-- TanStack Query 5
-- React Hook Form
-- Zod
+- TanStack Query 5 (`keepPreviousData`, `useInfiniteQuery`, `staleTime` por query)
+- React Hook Form + Zod
 - Tailwind CSS 4
 - Framer Motion
 - Firebase Web SDK
 
 ### Backend e infraestrutura
 
-- Firebase Hosting
-- Cloud Firestore
+- Firebase Hosting (CDN + SPA rewrite)
+- Cloud Firestore (`southamerica-east1`)
 - Firebase Storage
-- Firebase Authentication
-- Firebase Functions
-  - `onUserCreated` em 1st gen
-  - `createUser`, `updateUserRole` e `onApplicationStatusChanged` em 2nd gen
+- Firebase Authentication (email/senha)
+- Firebase Functions (`southamerica-east1`)
+  - `onUserCreated` — 1st gen (trigger de Auth)
+  - demais functions — 2nd gen
 
-## Rotas atuais
+---
 
-### Publicas
+## 🗂️ Rotas
 
-- `/`
-- `/animais`
-- `/animais/:id`
-- `/adotar`
-- `/adotar/:id`
-- `/sobre`
-- `/contato`
+### Públicas
 
-### Administrativas
+| Rota | Descrição |
+|---|---|
+| `/` | Home com destaque de animais |
+| `/animais` | Listagem com filtros |
+| `/animais/:id` | Detalhe do animal |
+| `/adotar` | Candidatura geral |
+| `/adotar/:id` | Candidatura vinculada a um animal |
+| `/sobre` | Página institucional |
+| `/contato` | Contatos da ONG |
 
-- `/admin/login`
-- `/admin`
-- `/admin/animais`
-- `/admin/animais/novo`
-- `/admin/animais/:id/editar`
-- `/admin/candidaturas`
-- `/admin/candidaturas/:id`
-- `/admin/usuarios`
-- `/admin/configuracoes`
+### Administrativas (requerem autenticação)
 
-## Auth e roles
+| Rota | Acesso |
+|---|---|
+| `/admin/login` | Público |
+| `/admin` | staff |
+| `/admin/animais` | staff |
+| `/admin/animais/novo` | staff |
+| `/admin/animais/:id/editar` | staff |
+| `/admin/candidaturas` | staff |
+| `/admin/candidaturas/:id` | staff |
+| `/admin/usuarios` | admin only |
+| `/admin/configuracoes` | staff |
 
-A autenticacao administrativa usa `email/senha` no Firebase Auth.
+---
 
-Os roles atuais sao:
+## 👥 Auth e roles
 
-- `admin`: acesso total a toda a area administrativa, incluindo gestao de usuarios
-- `reviewer`: acesso a dashboard, animais, candidaturas e configuracoes, sem acesso a gestao de usuarios
+A autenticação usa `email/senha` no Firebase Auth com **Custom Claims** para autorização.
 
-O frontend valida staff buscando `users/{uid}` no Firestore. Se o usuario autenticado nao tiver um perfil com role valido (`admin` ou `reviewer`), o login e recusado.
+| Role | Acesso |
+|---|---|
+| `admin` | acesso total, incluindo gestão de usuários e alteração de roles |
+| `reviewer` | dashboard, animais, candidaturas e configurações |
 
-## Bootstrap do primeiro admin
+O login valida se o usuário tem um perfil em `users/{uid}` com role válido. Se o token não contiver o claim `role` (usuários anteriores ao deploy dos Custom Claims), a function `refreshUserClaims` é chamada automaticamente para sincronizar.
 
-O fluxo atual para criar o primeiro admin e:
+---
 
-1. fazer deploy das Functions
-2. criar manualmente o primeiro usuario em `Firebase Console > Authentication`
-3. a function `onUserCreated` espelha esse usuario em `users/{uid}`
-4. se ainda nao existir nenhum usuario com role `admin`, o primeiro usuario espelhado recebe `role: "admin"`
+## ☁️ Cloud Functions
 
-Depois que o primeiro admin existir, a criacao normal de novos usuarios deve ser feita pela tela `/admin/usuarios`, que chama a function `createUser`.
+As functions ficam em [`functions/src/index.ts`](functions/src/index.ts).
 
-## Funcionalidades por area
+### `onUserCreated`
+Trigger de Auth — espelha o usuário em `users/{uid}` e define Custom Claims. O primeiro usuário criado recebe `role: "admin"`, os demais recebem `role: "reviewer"`.
 
-### Area publica
+### `createUser`
+Callable — somente `admin`. Cria usuário no Firebase Auth, define Custom Claims e grava o perfil em `users/{uid}`.
 
-- exibe apenas animais com `status = available`
-- pagina `/animais` aplica filtros no cliente apos buscar os animais disponiveis
-- home mostra animais disponiveis em destaque
-- formulario de adocao e multi-step, com campos condicionais por especie
-- e possivel iniciar candidatura geral em `/adotar` ou vinculada a um animal em `/adotar/:id`
+### `updateUserRole`
+Callable — somente `admin`. Atualiza role de outro usuário (autoalteração bloqueada). Atualiza Custom Claims imediatamente.
 
-### Area administrativa
+### `createApplication`
+Callable — público. Valida campos obrigatórios, filtra payload por allowlist, aplica rate limiting (5/24h por e-mail) e grava via Admin SDK (contorna as rules do cliente).
 
-- dashboard com resumo de animais e candidaturas
-- cadastro, edicao e alteracao de status de animais
-- upload e remocao de fotos de animais no Storage
-- listagem de candidaturas e tela de detalhe com atualizacao de status
-- pagina de usuarios para admins criarem staff e alterarem roles
-- pagina de configuracoes para a conta autenticada
+### `refreshUserClaims`
+Callable — usuário autenticado. Sincroniza Custom Claims a partir do Firestore para usuários que não os possuem no token.
 
-## Estrutura de dados atual
+### `recalibrateCounts`
+Callable — somente `admin`. Reconstrói `metadata/counts` usando `count()` aggregation queries em paralelo. Chamada automaticamente após o bootstrap e disponível manualmente no dashboard.
 
-### Firestore
+### `onApplicationStatusChanged`
+Trigger em `applications/{appId}` — mantém contadores em `metadata/counts` e sincroniza `animals.status` conforme o status da candidatura:
 
-Colecoes usadas hoje:
+- `in_review` → animal fica `under_review`
+- `approved` → animal fica `adopted`
+- `rejected` / `withdrawn` → animal volta a `available` se não houver outra candidatura ativa
 
-- `animals`
-- `applications`
-- `users`
+### `onAnimalChanged`
+Trigger em `animals/{animalId}` — mantém contadores de animais em `metadata/counts` por status.
+
+> Ambos os triggers usam deduplicação por `event.id` para garantir idempotência.
+
+---
+
+## 🗄️ Estrutura de dados
+
+### Coleções Firestore
+
+| Coleção | Descrição |
+|---|---|
+| `animals` | Animais da ONG |
+| `applications` | Candidaturas de adoção |
+| `users` | Perfis da equipe (espelho do Firebase Auth) |
+| `metadata` | Contadores agregados (`counts`) para o dashboard |
+| `rateLimits` | Estado do rate limiting por hash de e-mail |
+| `_processedEvents` | IDs de eventos de trigger já processados (deduplicação) |
 
 #### `animals`
 
-Cada documento representa um animal da ONG e inclui, entre outros:
+```
+name, species, sex, size?, breed?, estimatedAge?, description,
+photos, coverPhotoIndex, status, vaccines, neutered, specialNeeds?,
+createdAt, updatedAt
+```
 
-- `name`
-- `species`
-- `sex`
-- `size?`
-- `breed?`
-- `estimatedAge?`
-- `description`
-- `photos`
-- `coverPhotoIndex`
-- `status`
-- `vaccines`
-- `neutered`
-- `specialNeeds?`
-- `createdAt`
-- `updatedAt`
+Status possíveis: `available` · `under_review` · `adopted` · `archived`
 
 #### `applications`
 
-Cada documento representa uma candidatura de adocao com:
+```
+animalId?, animalName?, species, fullName, email, phone, birthDate, address,
+[respostas completas do formulário de 8 etapas],
+status, adminNotes?, createdAt, updatedAt
+```
 
-- identificacao do animal quando a candidatura e vinculada a um pet
-- respostas completas do formulario
-- `status`
-- `adminNotes?`
-- `createdAt`
-- `updatedAt`
-
-Os status atuais sao:
-
-- `pending`
-- `in_review`
-- `approved`
-- `rejected`
-- `withdrawn`
+Status possíveis: `pending` · `in_review` · `approved` · `rejected` · `withdrawn`
 
 #### `users`
 
-Cada documento espelha um usuario autenticado da equipe:
-
-- `uid`
-- `email`
-- `displayName`
-- `role`
-- `createdAt`
-- `createdBy`
-- `updatedAt?`
-
-### Storage
-
-As fotos dos animais sao armazenadas em caminhos sob:
-
-- `animals/{animalId}/...`
-
-## Cloud Functions atuais
-
-As Functions ficam em [`functions/src/index.ts`](functions/src/index.ts).
-
-### `onUserCreated`
-
-- trigger de Auth
-- espelha usuarios do Firebase Auth para `users/{uid}`
-- define o primeiro usuario como `admin`
-- define usuarios posteriores criados fora do fluxo do app como `reviewer`
-
-### `createUser`
-
-- callable function
-- somente `admin`
-- cria usuario no Firebase Auth
-- grava o espelho em `users/{uid}`
-
-### `updateUserRole`
-
-- callable function
-- somente `admin`
-- atualiza o role de outro usuario
-- bloqueia autoalteracao do proprio role
-
-### `onApplicationStatusChanged`
-
-- trigger de escrita em `applications/{appId}`
-- sincroniza `animals.status` quando o status da candidatura muda
-- uso atual:
-  - `in_review` -> `under_review`
-  - `approved` -> `adopted`
-  - `rejected` ou `withdrawn` -> volta para `available` se nao houver outra candidatura ativa
-
-## Regras atuais de seguranca
-
-### Firestore
-
-As regras atuais estao em [`firestore.rules`](firestore.rules).
-
-Resumo do comportamento atual:
-
-- `animals`
-  - leitura publica
-  - create/update/delete apenas para staff (`admin` ou `reviewer`)
-- `applications`
-  - create publico
-  - read/update/delete apenas para staff
-- `users`
-  - qualquer usuario autenticado pode ler o proprio documento
-  - apenas `admin` pode listar ou ler outros usuarios
-  - updates do proprio documento sao limitados a `displayName` e `updatedAt`
-  - create/delete via cliente bloqueados
-
-### Storage
-
-As regras atuais estao em [`storage.rules`](storage.rules).
-
-Resumo do comportamento atual:
-
-- leitura publica de imagens de animais
-- escrita apenas para usuarios autenticados
-- upload limitado a imagens com ate 10 MB
-
-## Estrutura do frontend
-
-O projeto segue uma organizacao por features.
-
-```text
-src/
-  app/
-  components/ui/
-  features/
-    adoption/
-    animals/
-    auth/
-    users/
-  layouts/
-  lib/
-  pages/
-    admin/
-    public/
-  types/
-  utils/
+```
+uid, email, displayName, role, createdAt, createdBy, updatedAt?
 ```
 
-### Pastas principais
+### Storage
 
-- `src/app`
-  - providers globais
-  - router
-  - theme provider
-- `src/components/ui`
-  - componentes reutilizaveis como button, input, modal, table, pagination, file upload e stepper
-- `src/features`
-  - regras por dominio, com hooks, services, schemas e components
-- `src/layouts`
-  - layout publico e layout admin
-- `src/pages`
-  - composicao final das rotas
-- `src/lib`
-  - integracao com Firebase e Query Client
+Fotos dos animais em `animals/{animalId}/{timestamp}_{filename}`.
 
-## Variaveis de ambiente
+---
 
-As variaveis esperadas pelo frontend estao em [`.env.example`](.env.example):
+## 🏗️ Estrutura do frontend
+
+O projeto segue organização por features:
+
+```
+src/
+  app/           # providers globais, router, theme provider
+  components/ui/ # button, input, modal, table, pagination, file-upload, stepper...
+  features/
+    adoption/    # form multi-step, hooks, schemas, services
+    animals/     # cards, galeria, filtros, hooks, services, storage
+    auth/        # context, protected-route, hooks, services
+    admin/       # header context, hooks, metadata service
+    contact/     # componentes e config de links
+    users/       # hooks e services
+  layouts/       # PublicLayout, AdminLayout
+  lib/           # firebase.ts, query-client.ts
+  pages/
+    admin/       # login, dashboard, animais, candidaturas, usuários, configurações
+    public/      # home, animais, animal-detail, adotar, sobre, contato
+  types/         # tipos compartilhados
+  utils/         # cn, animations, format
+```
+
+---
+
+## 🔧 Variáveis de ambiente
+
+Copie `.env.example` para `.env` e preencha com as credenciais do projeto Firebase:
 
 ```bash
 VITE_FIREBASE_API_KEY=
@@ -300,15 +299,49 @@ VITE_FIREBASE_MEASUREMENT_ID=
 VITE_FIREBASE_FUNCTIONS_REGION=southamerica-east1
 ```
 
-## Scripts
+---
+
+## 🚀 Como rodar localmente
+
+1. Instale dependências do frontend:
+
+```bash
+npm install
+```
+
+2. Instale dependências das Functions:
+
+```bash
+npm install --prefix functions
+```
+
+3. Crie o `.env` a partir de `.env.example` com as credenciais do projeto Firebase.
+
+4. Rode o frontend:
+
+```bash
+npm run dev
+```
+
+5. Para trabalhar nas Functions localmente:
+
+```bash
+npm --prefix functions run build
+# ou com hot reload:
+npm --prefix functions run serve
+```
+
+---
+
+## 📦 Scripts
 
 ### Raiz do projeto
 
 ```bash
-npm run dev
-npm run build
-npm run lint
-npm run preview
+npm run dev       # servidor de desenvolvimento
+npm run build     # build de produção (tsc + vite)
+npm run lint      # eslint
+npm run preview   # preview do build
 ```
 
 ### Functions
@@ -317,85 +350,49 @@ npm run preview
 npm --prefix functions run lint
 npm --prefix functions run build
 npm --prefix functions run serve
-npm --prefix functions run deploy
 ```
 
-## Como rodar localmente
+---
 
-1. Instale dependencias da raiz:
+## 🌐 Build e deploy
 
-```bash
-npm install
-```
-
-2. Instale dependencias das Functions:
-
-```bash
-npm install --prefix functions
-```
-
-3. Crie o arquivo `.env` a partir de `.env.example` e preencha com as credenciais do projeto Firebase.
-
-4. Rode o frontend:
-
-```bash
-npm run dev
-```
-
-5. Se precisar trabalhar nas Functions localmente:
-
-```bash
-npm --prefix functions run build
-```
-
-ou
-
-```bash
-npm --prefix functions run serve
-```
-
-## Build e deploy
-
-### Frontend
-
-O build de producao gera a pasta `dist`:
+### Build de produção
 
 ```bash
 npm run build
 ```
 
-### Firebase
-
-O deploy e controlado por [`firebase.json`](firebase.json):
-
-- Hosting publica `dist`
-- Functions usam `functions/` como source
-- antes do deploy das Functions, o Firebase roda:
-  - `npm --prefix "$RESOURCE_DIR" run lint`
-  - `npm --prefix "$RESOURCE_DIR" run build`
-
-Deploy completo:
+### Deploy Firebase
 
 ```bash
+# Completo (hosting + functions + rules)
 firebase deploy
-```
 
-Deploy apenas do hosting:
+# Só o backend (functions + rules)
+firebase deploy --only functions,firestore:rules,storage
 
-```bash
+# Só o frontend
 firebase deploy --only hosting
 ```
 
-Deploy apenas das functions:
+O deploy das Functions roda automaticamente `lint` e `build` antes de publicar (configurado em `predeploy` no [`firebase.json`](firebase.json)).
 
-```bash
-firebase deploy --only functions
-```
+---
 
-## Observacoes importantes
+## 🐣 Bootstrap do primeiro admin
 
-- o projeto nao possui suite automatizada de testes configurada neste momento
-- a listagem publica de animais mostra apenas animais disponiveis
-- a regiao padrao do projeto para Firestore e Functions esta configurada como `southamerica-east1`
-- `onUserCreated` usa 1st gen com regiao explicita, enquanto as demais Functions atuais usam 2nd gen
-- o repositorio ainda contem o arquivo [`PLAN.md`](PLAN.md), usado como referencia de implementacao, mas o README descreve o estado real do codigo atual
+1. Fazer deploy das Functions
+2. Criar manualmente o primeiro usuário em **Firebase Console › Authentication**
+3. A function `onUserCreated` espelha o usuário em `users/{uid}` e, como não existe nenhum admin ainda, atribui `role: "admin"` automaticamente
+4. Após o primeiro login, acessar o dashboard e clicar em **Recalibrar contadores** para inicializar `metadata/counts`
+
+A partir daí, novos usuários devem ser criados pela tela `/admin/usuarios`.
+
+---
+
+## 📝 Observações
+
+- Não há suite automatizada de testes configurada no momento
+- A região padrão do projeto para Firestore e Functions é `southamerica-east1`
+- `onUserCreated` usa 1st gen (único trigger de Auth disponível nessa geração); as demais functions usam 2nd gen
+- O arquivo [`PLAN.md`](PLAN.md) existe no repositório como referência de implementação; este README descreve o estado real do código
