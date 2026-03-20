@@ -1,0 +1,226 @@
+import { useState } from 'react'
+import { Outlet, NavLink, Link } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  PawPrint,
+  ClipboardList,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Sun,
+  Moon,
+  ChevronLeft,
+  Users,
+} from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { cn } from '@/utils/cn'
+import { Button } from '@/components/ui'
+import { useTheme } from '@/app/theme-provider'
+import { useAuth } from '@/features/auth/hooks/use-auth'
+import type { User } from 'firebase/auth'
+import type { UserRole } from '@/types/common'
+
+const navItems = [
+  { to: '/admin',               label: 'Dashboard',     icon: LayoutDashboard, end: true,  role: undefined as UserRole | undefined },
+  { to: '/admin/animais',       label: 'Animais',       icon: PawPrint,        end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/candidaturas',  label: 'Candidaturas',  icon: ClipboardList,   end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/usuarios',      label: 'Usuários',      icon: Users,           end: false, role: 'admin' as UserRole },
+  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings,        end: false, role: undefined as UserRole | undefined },
+]
+
+interface AdminSidebarProps {
+  collapsed: boolean
+  onCollapse: (value: boolean) => void
+  user: User | null
+  userRole: UserRole | undefined
+  onLogout: () => void
+}
+
+function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: AdminSidebarProps) {
+  const visibleItems = navItems.filter((item) => !item.role || item.role === userRole)
+
+  return (
+    <div
+      className={cn(
+        'flex h-full flex-col border-r border-border bg-card transition-all duration-300',
+        collapsed ? 'w-16' : 'w-60',
+      )}
+    >
+      {/* Logo */}
+      <div className="flex h-16 items-center justify-between px-4 border-b border-border">
+        {collapsed ? (
+          <div className="flex w-full justify-center">
+            <PawPrint size={20} className="text-primary" />
+          </div>
+        ) : (
+          <>
+            <Link
+              to="/admin"
+              className="flex items-center gap-2 font-bold text-primary"
+              aria-label="Dashboard"
+            >
+              <PawPrint size={20} />
+              <span>Upeva</span>
+            </Link>
+            <button
+              onClick={() => onCollapse(true)}
+              aria-label="Recolher sidebar"
+              className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav aria-label="Menu administrativo" className="flex-1 overflow-y-auto py-4 px-2">
+        <ul className="flex flex-col gap-1">
+          {visibleItems.map(({ to, label, icon: Icon, end }) => (
+            <li key={to}>
+              <NavLink
+                to={to}
+                end={end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                    collapsed && 'justify-center px-2',
+                  )
+                }
+                title={collapsed ? label : undefined}
+              >
+                <Icon size={18} className="shrink-0" />
+                {!collapsed && <span>{label}</span>}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* Footer */}
+      <div className="border-t border-border p-3 flex flex-col gap-2">
+        {!collapsed && user && (
+          <div className="px-2 py-1">
+            <p className="text-xs font-medium text-foreground truncate">
+              {user.displayName ?? user.email}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+          </div>
+        )}
+        <button
+          onClick={onLogout}
+          className={cn(
+            'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground',
+            'hover:text-danger hover:bg-danger/10 transition-colors duration-150 w-full',
+            collapsed && 'justify-center px-2',
+          )}
+          title={collapsed ? 'Sair' : undefined}
+        >
+          <LogOut size={16} className="shrink-0" />
+          {!collapsed && <span>Sair</span>}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function AdminLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const { resolvedTheme, setTheme } = useTheme()
+  const { user, userProfile, logout } = useAuth()
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex h-full shrink-0">
+        <AdminSidebar
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          user={user}
+          userRole={userProfile?.role}
+          onLogout={logout}
+        />
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-foreground/30 backdrop-blur-sm md:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: -240 }}
+              animate={{ x: 0 }}
+              exit={{ x: -240 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="fixed left-0 top-0 z-50 h-full w-60 md:hidden"
+            >
+              <AdminSidebar
+                collapsed={false}
+                onCollapse={() => setSidebarOpen(false)}
+                user={user}
+                userRole={userProfile?.role}
+                onLogout={logout}
+              />
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-4 sm:px-6 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setSidebarOpen((o) => !o)}
+            aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
+          >
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </Button>
+
+          <div className="hidden md:block">
+            {collapsed && (
+              <button
+                onClick={() => setCollapsed(false)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Expandir menu
+              </button>
+            )}
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              aria-label={resolvedTheme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </Button>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}

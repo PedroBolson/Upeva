@@ -24,7 +24,7 @@ export const db = getFirestore(app)
 export const storage = getStorage(app)
 export const functions = getFunctions(
   app,
-  import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1',
+  import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'southamerica-east1',
 )
 
 let analyticsInstance: Analytics | null = null

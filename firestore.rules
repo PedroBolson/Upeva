@@ -2,8 +2,89 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function currentUserExists() {
+      return isAuthenticated() && exists(userPath(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return currentUserExists() && userDoc().role == 'admin';
+    }
+
+    function isReviewer() {
+      return currentUserExists() && userDoc().role == 'reviewer';
+    }
+
+    function isStaff() {
+      return isAdmin() || isReviewer();
+    }
+
+    // ── Animals ────────────────────────────────────────────────────────────────
+    // Public read; staff create/edit/delete.
+
+    match /animals/{animalId} {
+      allow read: if true;
+      allow create, update, delete: if isStaff();
+    }
+
+    // ── Adoption applications ──────────────────────────────────────────────────
+    // Anyone can submit; only staff can read or modify.
+    // On create, enforce required fields and force status = 'pending'.
+
+    match /applications/{appId} {
+      allow create: if
+        request.resource.data.keys().hasAll([
+          'animalId', 'animalName', 'species', 'status',
+          'fullName', 'email', 'createdAt'
+        ])
+        && request.resource.data.status == 'pending';
+
+      allow read, update, delete: if isStaff();
+    }
+
+    // ── User profiles ──────────────────────────────────────────────────────────
+    // All writes go through Cloud Functions (Admin SDK bypasses rules).
+    // Any authenticated user can read their own profile. Only admins can read/list
+    // other users. Users may only edit their own display name.
+
+    match /users/{userId} {
+      allow get: if isAuthenticated() &&
+        (request.auth.uid == userId || isAdmin());
+
+      allow list: if isAdmin();
+
+      allow update: if isAuthenticated()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll([
+          'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy', 'updatedAt'
+        ])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['displayName', 'updatedAt']);
+
+      allow create, delete: if false; // Cloud Functions only
     }
   }
 }

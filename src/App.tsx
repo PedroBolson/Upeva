@@ -1,12 +1,10 @@
-import './App.css'
+import { Providers } from './app/providers'
+import { Router } from './app/router'
 
-function App() {
-
+export default function App() {
   return (
-    <h1 className="text-3xl font-bold underline">
-      Hello world!
-    </h1>
+    <Providers>
+      <Router />
+    </Providers>
   )
 }
-
-export default App

@@ -1,0 +1,133 @@
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { PawPrint } from 'lucide-react'
+import { AnimalCardSkeleton, EmptyState, ErrorState, Pagination } from '@/components/ui'
+import { AnimalCard } from '@/features/animals/components/animal-card'
+import { AnimalFilters } from '@/features/animals/components/animal-filters'
+import { useAnimals } from '@/features/animals/hooks/use-animals'
+import type { AnimalFilters as Filters } from '@/features/animals/types/animal.types'
+import type { Species, Sex, Size } from '@/types/common'
+
+const PAGE_SIZE = 12
+
+function filtersFromParams(params: URLSearchParams): Filters {
+  return {
+    species: (params.get('especie') as Species) || undefined,
+    sex:     (params.get('sexo') as Sex) || undefined,
+    size:    (params.get('porte') as Size) || undefined,
+    search:  params.get('busca') || undefined,
+  }
+}
+
+function paramsFromFilters(f: Filters): Record<string, string> {
+  const p: Record<string, string> = {}
+  if (f.species) p['especie'] = f.species
+  if (f.sex)     p['sexo']    = f.sex
+  if (f.size)    p['porte']   = f.size
+  if (f.search)  p['busca']   = f.search
+  return p
+}
+
+export function AnimalsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [page, setPage] = useState(1)
+
+  const filters = filtersFromParams(searchParams)
+  const { animals, total, isLoading, error, refetch } = useAnimals(filters)
+
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const paginated  = animals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  function handleFiltersChange(next: Filters) {
+    setSearchParams(paramsFromFilters(next))
+    setPage(1)
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl font-bold text-foreground">Animais disponíveis</h1>
+        <p className="text-muted-foreground mt-1">
+          Encontre seu novo companheiro entre os animais que aguardam um lar
+        </p>
+      </motion.div>
+
+      <div className="flex flex-col gap-8">
+        {/* Filters */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.08 }}
+          className="rounded-xl border border-border bg-card p-5"
+        >
+          <AnimalFilters
+            filters={filters}
+            onChange={handleFiltersChange}
+            total={total}
+          />
+        </motion.div>
+
+        {/* Grid */}
+        {isLoading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+              <AnimalCardSkeleton key={i} />
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <ErrorState
+            description="Não foi possível carregar os animais. Tente novamente."
+            onRetry={refetch}
+          />
+        )}
+
+        {!isLoading && !error && animals.length === 0 && (
+          <EmptyState
+            icon={PawPrint}
+            title="Nenhum animal encontrado"
+            description="Tente ajustar os filtros para ver mais resultados."
+            action={{ label: 'Limpar filtros', onClick: () => handleFiltersChange({}) }}
+          />
+        )}
+
+        {!isLoading && !error && paginated.length > 0 && (
+          <AnimatePresence mode="popLayout">
+            <motion.div
+              key={`${filters.species ?? ''}-${filters.sex ?? ''}-${filters.size ?? ''}-${filters.search ?? ''}-${page}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              {paginated.map((animal) => (
+                <AnimalCard key={animal.id} animal={animal} />
+              ))}
+            </motion.div>
+          </AnimatePresence>
+        )}
+
+        {totalPages > 1 && (
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={(p) => {
+              setPage(p)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
