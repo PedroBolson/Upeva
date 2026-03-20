@@ -8,10 +8,12 @@ import {
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { Input, Button } from '@/components/ui'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { recalibrateCounts } from '@/features/admin/services/metadata.service'
+import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
 export function SettingsPage() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [nameLoading, setNameLoading] = useState(false)
@@ -24,12 +26,30 @@ export function SettingsPage() {
   const [passMessage, setPassMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [passError, setPassError] = useState<string | null>(null)
 
+  const queryClient = useQueryClient()
+  const [recalibrating, setRecalibrating] = useState(false)
+  const [recalibrateMessage, setRecalibrateMessage] = useState<{ text: string; ok: boolean } | null>(null)
+
   const headerConfig = useMemo(
     () => ({}),
     [],
   )
 
   useAdminPageHeader(headerConfig)
+
+  async function handleRecalibrate() {
+    setRecalibrating(true)
+    setRecalibrateMessage(null)
+    try {
+      const counts = await recalibrateCounts()
+      queryClient.setQueryData(['metadata', 'counts'], counts)
+      setRecalibrateMessage({ text: 'Contadores atualizados com sucesso.', ok: true })
+    } catch {
+      setRecalibrateMessage({ text: 'Não foi possível recalibrar os contadores.', ok: false })
+    } finally {
+      setRecalibrating(false)
+    }
+  }
 
   async function handleUpdateName(e: React.FormEvent) {
     e.preventDefault()
@@ -145,6 +165,32 @@ export function SettingsPage() {
             </Button>
           </form>
         </div>
+
+        {/* Admin-only: recalibrate counters */}
+        {userProfile?.role === 'admin' && (
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4 xl:col-span-2">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-sm font-semibold text-foreground">Contadores do dashboard</h2>
+              <p className="text-xs text-muted-foreground">
+                Recalcula os totais de animais e candidaturas a partir dos dados existentes. Use se os contadores estiverem incorretos.
+              </p>
+            </div>
+            {recalibrateMessage && (
+              <p className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
+                {recalibrateMessage.text}
+              </p>
+            )}
+            <Button
+              variant="outline"
+              onClick={handleRecalibrate}
+              disabled={recalibrating}
+              className="w-full gap-1.5 sm:w-auto sm:self-start"
+            >
+              {recalibrating && <Loader2 size={14} className="animate-spin" />}
+              {recalibrating ? 'Recalibrando…' : 'Recalibrar contadores'}
+            </Button>
+          </div>
+        )}
     </div>
   )
 }
