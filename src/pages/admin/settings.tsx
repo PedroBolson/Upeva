@@ -82,18 +82,16 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <p className="text-sm text-muted-foreground">
-        {user?.email}
-      </p>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {/* Display name */}
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Display name + email */}
         <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-foreground">Nome de exibição</h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-sm font-semibold text-foreground">Perfil</h2>
+            <p className="text-xs text-muted-foreground">{user?.email}</p>
+          </div>
           <form onSubmit={handleUpdateName} className="flex flex-col gap-4">
             <Input
-              label="Nome"
+              label="Nome de exibição"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
@@ -147,7 +145,7 @@ export function SettingsPage() {
             </Button>
           </form>
         </div>
-      </div>
     </div>
   )
 }
+
