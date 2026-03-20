@@ -35,6 +35,7 @@ export function AnimalsPage() {
   const { animals, total, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
     useAnimals(filters)
 
+
   function handleFiltersChange(next: Filters) {
     setSearchParams(paramsFromFilters(next))
   }
@@ -96,29 +97,31 @@ export function AnimalsPage() {
 
         {!isLoading && !error && animals.length > 0 && (
           <div className="relative">
-            {/* Subtle overlay while a new filter loads — grid stays visible */}
+            {/* Spinner only during a real network fetch — no grid overlay */}
             {isFiltering && (
-              <div className="absolute inset-0 z-10 flex items-start justify-center pt-16 rounded-xl bg-background/50 backdrop-blur-[1px]">
-                <Spinner />
+              <div className="absolute -top-8 right-0 z-10">
+                <Spinner size="sm" />
               </div>
             )}
-            <AnimatePresence mode="popLayout">
-              <motion.div
-                key={`${filters.species ?? ''}-${filters.sex ?? ''}-${filters.size ?? ''}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: isFiltering ? 0.4 : 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className={cn(
-                  'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6',
-                  isFiltering && 'pointer-events-none select-none',
-                )}
-              >
+            {/* AnimatePresence wraps individual cards so Framer Motion can track
+                which IDs enter, stay, or leave across filter changes:
+                - Same ID, new position → layout animation (smooth reposition)
+                - New ID → initial animation (fade in)
+                - Removed ID → exit animation (fade out)
+                No full-grid remount, no dimming, no piscada. */}
+            <motion.div
+              layout
+              className={cn(
+                'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6',
+                isFiltering && 'pointer-events-none select-none',
+              )}
+            >
+              <AnimatePresence mode="popLayout">
                 {animals.map((animal) => (
                   <AnimalCard key={animal.id} animal={animal} />
                 ))}
-              </motion.div>
-            </AnimatePresence>
+              </AnimatePresence>
+            </motion.div>
           </div>
         )}
 

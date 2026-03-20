@@ -5,7 +5,11 @@ export async function uploadAnimalPhoto(animalId: string, file: File): Promise<s
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `animals/${animalId}/${Date.now()}_${safeName}`
   const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, file)
+  // Images are immutable (timestamp in filename) — cache for 1 year
+  await uploadBytes(storageRef, file, {
+    cacheControl: 'public, max-age=31536000, immutable',
+    contentType: file.type,
+  })
   return getDownloadURL(storageRef)
 }
 

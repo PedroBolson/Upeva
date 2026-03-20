@@ -3,6 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Catch-all deny (Melhoria 9) ────────────────────────────────────────────
+    // All collections not explicitly listed below are denied by default.
+    // This rule is evaluated last (more specific rules take precedence).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
     // Uses Custom Claims (request.auth.token.role) set by Cloud Functions.
     // This eliminates Firestore reads inside security rules, reducing costs
@@ -30,21 +37,32 @@ service cloud.firestore {
 
     // ── Animals ────────────────────────────────────────────────────────────────
     // Public read; staff create/edit/delete.
+    // Create validates required fields and enum values (Melhoria 5).
 
     match /animals/{animalId} {
       allow read: if true;
-      allow create, update, delete: if isStaff();
+
+      allow create: if isStaff()
+        && request.resource.data.keys().hasAll(['name', 'species', 'status', 'sex', 'description'])
+        && request.resource.data.status in ['available', 'under_review', 'adopted', 'archived']
+        && request.resource.data.species in ['dog', 'cat'];
+
+      allow update, delete: if isStaff();
     }
 
     // ── Adoption applications ──────────────────────────────────────────────────
     // All creates go through the createApplication Cloud Function (Admin SDK
     // bypasses rules). Direct client writes are blocked to enforce rate limiting
     // and server-side validation.
+    // Update validates status enum values to prevent invalid states (Melhoria 2).
 
     match /applications/{appId} {
       allow create: if false; // Cloud Function only
 
-      allow read, update, delete: if isStaff();
+      allow read, delete: if isStaff();
+
+      allow update: if isStaff()
+        && request.resource.data.status in ['pending', 'in_review', 'approved', 'rejected', 'withdrawn'];
     }
 
     // ── User profiles ──────────────────────────────────────────────────────────

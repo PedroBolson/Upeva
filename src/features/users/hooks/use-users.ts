@@ -1,12 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getUsers, createUser, updateUserRole } from '../services/users.service'
-import type { CreateUserPayload } from '../services/users.service'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { InfiniteData } from '@tanstack/react-query'
+import { getUsersPaginated, createUser, updateUserRole } from '../services/users.service'
+import type { UsersPage, CreateUserPayload } from '../services/users.service'
+import type { DocumentSnapshot } from 'firebase/firestore'
 import type { UserRole } from '@/types/common'
 
 export function useUsers() {
-  return useQuery({
+  return useInfiniteQuery<
+    UsersPage,
+    Error,
+    InfiniteData<UsersPage>,
+    string[],
+    DocumentSnapshot | null
+  >({
     queryKey: ['users'],
-    queryFn: getUsers,
+    queryFn: ({ pageParam }) => getUsersPaginated(pageParam),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.lastDoc : undefined,
   })
 }
 

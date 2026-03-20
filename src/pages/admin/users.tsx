@@ -24,7 +24,7 @@ const ROLE_OPTIONS = [
 
 const createUserSchema = z.object({
   displayName: z.string().min(2, 'Mínimo 2 caracteres'),
-  email: z.string().email('Email inválido'),
+  email: z.email('Email inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
   role: z.enum(['admin', 'reviewer']),
 })
@@ -33,7 +33,17 @@ type CreateUserForm = z.infer<typeof createUserSchema>
 
 export function UsersPage() {
   const { userProfile: currentUser } = useAuth()
-  const { data: users = [], isLoading, error, refetch } = useUsers()
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useUsers()
+
+  const users = data?.pages.flatMap((p) => p.users) ?? []
   const { mutateAsync: createUser, isPending: creating } = useCreateUser()
   const { mutate: updateRole } = useUpdateUserRole()
 
@@ -199,19 +209,33 @@ export function UsersPage() {
       )}
 
       {!isLoading && !error && (
-        <ResponsiveDataList
-          columns={columns}
-          data={users}
-          keyExtractor={(u) => u.uid}
-          renderMobileCard={(user) => (
-            <UserMobileCard
-              user={user}
-              isSelf={user.uid === currentUser?.uid}
-              onRoleChange={(role) => updateRole({ uid: user.uid, role })}
-            />
+        <>
+          <ResponsiveDataList
+            columns={columns}
+            data={users}
+            keyExtractor={(u) => u.uid}
+            renderMobileCard={(user) => (
+              <UserMobileCard
+                user={user}
+                isSelf={user.uid === currentUser?.uid}
+                onRoleChange={(role) => updateRole({ uid: user.uid, role })}
+              />
+            )}
+            emptyMessage="Nenhum usuário encontrado."
+          />
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                loading={isFetchingNextPage}
+                onClick={() => fetchNextPage()}
+              >
+                Carregar mais
+              </Button>
+            </div>
           )}
-          emptyMessage="Nenhum usuário encontrado."
-        />
+        </>
       )}
     </div>
   )
@@ -220,11 +244,10 @@ export function UsersPage() {
 function UserRoleBadge({ role }: { role: UserRole }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        role === 'admin'
-          ? 'bg-primary/10 text-primary'
-          : 'bg-muted text-muted-foreground'
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${role === 'admin'
+        ? 'bg-primary/10 text-primary'
+        : 'bg-muted text-muted-foreground'
+        }`}
     >
       {role === 'admin' ? <Shield size={10} /> : <Eye size={10} />}
       {ROLE_LABELS[role]}
@@ -246,7 +269,7 @@ function UserMobileCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-base font-semibold text-foreground">{user.displayName}</p>
-          <p className="mt-1 break-words text-sm text-muted-foreground">{user.email}</p>
+          <p className="mt-1 wrap-break-words text-sm text-muted-foreground">{user.email}</p>
         </div>
 
         <UserRoleBadge role={user.role} />

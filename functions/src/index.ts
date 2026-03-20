@@ -2,13 +2,11 @@ import {createHash} from "crypto";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth} from "firebase-admin/auth";
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
-import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import * as functionsV1 from "firebase-functions/v1";
 
 initializeApp();
-setGlobalOptions({maxInstances: 10, region: "southamerica-east1"});
 
 const db = getFirestore();
 const adminAuth = getAuth();
@@ -32,11 +30,17 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-async function getCallerRole(uid: string): Promise<UserRole | null> {
-  const snap = await db.collection("users").doc(uid).get();
-  if (!snap.exists) return null;
-  const role = snap.data()?.role;
-  return isUserRole(role) ? role : null;
+// ── Trigger deduplication (Melhoria 10) ───────────────────────────────────────
+// Uses doc.create() which is atomic and fails if the document already exists,
+// preventing duplicate processing of retried Firestore trigger events.
+async function markEventProcessed(eventId: string): Promise<boolean> {
+  const ref = db.collection("_processedEvents").doc(eventId);
+  try {
+    await ref.create({processedAt: FieldValue.serverTimestamp()});
+    return true; // First time — safe to proceed
+  } catch {
+    return false; // Already processed — skip
+  }
 }
 
 // ── onUserCreated: mirror Firebase Auth user → Firestore users/{uid} ──────────
@@ -85,13 +89,14 @@ export const onUserCreated = functionsV1
 
 // ── createUser: admin creates a new staff user ────────────────────────────────
 export const createUser = onCall(
-  {region: "southamerica-east1"},
+  {region: "southamerica-east1", maxInstances: 3},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
     }
 
-    const callerRole = await getCallerRole(request.auth.uid);
+    // Melhoria 3: use token claim instead of a Firestore read
+    const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
       throw new HttpsError("permission-denied", "Only admins can create users.");
     }
@@ -139,13 +144,14 @@ export const createUser = onCall(
 
 // ── updateUserRole: admin promotes or demotes another user ────────────────────
 export const updateUserRole = onCall(
-  {region: "southamerica-east1"},
+  {region: "southamerica-east1", maxInstances: 3},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
     }
 
-    const callerRole = await getCallerRole(request.auth.uid);
+    // Melhoria 3: use token claim instead of a Firestore read
+    const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
       throw new HttpsError(
         "permission-denied",
@@ -181,7 +187,7 @@ export const updateUserRole = onCall(
 // Rate limit: max 5 submissions per email per 24h.
 // Blocks direct client writes so all applications pass through validation.
 export const createApplication = onCall(
-  {region: "southamerica-east1"},
+  {region: "southamerica-east1", maxInstances: 10},
   async (request) => {
     const data = request.data as Record<string, unknown>;
 
@@ -240,14 +246,52 @@ export const createApplication = onCall(
       );
     }
 
-    const ref = await db.collection("applications").add({
-      ...data,
-      email,
+    // Melhoria 1: allowlist — only known fields are persisted, arbitrary client
+    // fields are discarded before writing to Firestore.
+    const {
+      animalId, animalName,
+      fullName, phone, birthDate, address,
+      preferredSex, preferredSize, jointAdoption,
+      adultsCount, childrenCount, childrenAges,
+      adoptionReason, isGift, hoursHomePeoplePerDay,
+      housingType, isRented, landlordAllowsPets,
+      hadPetsBefore, previousPets, hasCurrentPets,
+      currentPetsCount, currentPetsVaccinated, currentPetsVaccinationReason,
+      canAffordCosts, scratchBehaviorResponse, escapeResponse,
+      cannotKeepResponse, longTermCommitment,
+      acceptsReturnPolicy, acceptsCastrationPolicy, acceptsFollowUp,
+      acceptsNoResale, acceptsLiabilityTerms, acceptsResponsibility,
+      comments,
+    } = data;
+
+    const applicationPayload: Record<string, unknown> = {
+      animalId, animalName, species,
+      fullName, email, phone, birthDate, address,
+      adultsCount, childrenCount,
+      adoptionReason, hoursHomePeoplePerDay,
+      housingType,
+      scratchBehaviorResponse, escapeResponse, cannotKeepResponse,
       status: "pending",
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
 
+    // Optional fields — only include if present to avoid storing undefined
+    const optionalFields: Record<string, unknown> = {
+      preferredSex, preferredSize, jointAdoption,
+      childrenAges, isGift, isRented, landlordAllowsPets,
+      hadPetsBefore, previousPets, hasCurrentPets,
+      currentPetsCount, currentPetsVaccinated, currentPetsVaccinationReason,
+      canAffordCosts, longTermCommitment,
+      acceptsReturnPolicy, acceptsCastrationPolicy, acceptsFollowUp,
+      acceptsNoResale, acceptsLiabilityTerms, acceptsResponsibility,
+      comments,
+    };
+    for (const [key, value] of Object.entries(optionalFields)) {
+      if (value !== undefined) applicationPayload[key] = value;
+    }
+
+    const ref = await db.collection("applications").add(applicationPayload);
     return {id: ref.id};
   }
 );
@@ -256,7 +300,7 @@ export const createApplication = onCall(
 // Called automatically on login when the token has no role claim.
 // Covers existing users who were created before Custom Claims were deployed.
 export const refreshUserClaims = onCall(
-  {region: "southamerica-east1"},
+  {region: "southamerica-east1", maxInstances: 5},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
@@ -278,15 +322,17 @@ export const refreshUserClaims = onCall(
 );
 
 // ── recalibrateCounts: admin-only callable to rebuild metadata/counts ──────────
-// Call once after deploy to initialize counts for existing data.
+// Melhoria 6: uses count() aggregation queries instead of full collection scans,
+// preventing timeout and memory issues with large collections.
 export const recalibrateCounts = onCall(
-  {region: "southamerica-east1"},
+  {region: "southamerica-east1", maxInstances: 3},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
     }
 
-    const callerRole = await getCallerRole(request.auth.uid);
+    // Melhoria 3: use token claim instead of a Firestore read
+    const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
       throw new HttpsError("permission-denied", "Only admins can recalibrate counts.");
     }
@@ -294,24 +340,34 @@ export const recalibrateCounts = onCall(
     const animalStatuses: AnimalStatus[] = ["available", "under_review", "adopted", "archived"];
     const appStatuses: ApplicationStatus[] = ["pending", "in_review", "approved", "rejected", "withdrawn"];
 
-    const [animalSnaps, appSnaps] = await Promise.all([
-      db.collection("animals").get(),
-      db.collection("applications").get(),
+    // Run all count() queries in parallel — no full scans
+    const [animalTotalSnap, ...animalStatusSnaps] = await Promise.all([
+      db.collection("animals").count().get(),
+      ...animalStatuses.map((s) =>
+        db.collection("animals").where("status", "==", s).count().get()
+      ),
     ]);
 
-    const animalCounts: Record<string, number> = {total: animalSnaps.size};
-    for (const s of animalStatuses) animalCounts[s] = 0;
-    for (const doc of animalSnaps.docs) {
-      const status = doc.data().status as AnimalStatus;
-      if (status in animalCounts) animalCounts[status]++;
-    }
+    const [appTotalSnap, ...appStatusSnaps] = await Promise.all([
+      db.collection("applications").count().get(),
+      ...appStatuses.map((s) =>
+        db.collection("applications").where("status", "==", s).count().get()
+      ),
+    ]);
 
-    const appCounts: Record<string, number> = {total: appSnaps.size};
-    for (const s of appStatuses) appCounts[s] = 0;
-    for (const doc of appSnaps.docs) {
-      const status = doc.data().status as ApplicationStatus;
-      if (status in appCounts) appCounts[status]++;
-    }
+    const animalCounts: Record<string, number> = {
+      total: animalTotalSnap.data().count,
+    };
+    animalStatuses.forEach((s, i) => {
+      animalCounts[s] = animalStatusSnaps[i].data().count;
+    });
+
+    const appCounts: Record<string, number> = {
+      total: appTotalSnap.data().count,
+    };
+    appStatuses.forEach((s, i) => {
+      appCounts[s] = appStatusSnaps[i].data().count;
+    });
 
     await db.collection("metadata").doc("counts").set({
       animals: animalCounts,
@@ -323,9 +379,14 @@ export const recalibrateCounts = onCall(
 );
 
 // ── onApplicationStatusChanged: sync animal status + maintain counts ───────────
+// Melhoria 10: deduplicates retried events using event ID.
 export const onApplicationStatusChanged = onDocumentWritten(
-  {document: "applications/{appId}", region: "southamerica-east1"},
+  {document: "applications/{appId}", region: "southamerica-east1", maxInstances: 5},
   async (event) => {
+    // Skip if this event was already processed (at-least-once delivery guard)
+    const processed = await markEventProcessed(event.id);
+    if (!processed) return;
+
     const before = event.data?.before.data() as
       | {status: ApplicationStatus; animalId?: string}
       | undefined;
@@ -361,7 +422,7 @@ export const onApplicationStatusChanged = onDocumentWritten(
       );
     }
 
-    // ── Sync animal status (existing logic) ──────────────────────────────────
+    // ── Sync animal status ────────────────────────────────────────────────────
     if (!after) return; // document deleted
     if (before?.status === after.status) return; // status unchanged
 
@@ -397,9 +458,14 @@ export const onApplicationStatusChanged = onDocumentWritten(
 );
 
 // ── onAnimalChanged: maintain metadata/counts.animals ─────────────────────────
+// Melhoria 10: deduplicates retried events using event ID.
 export const onAnimalChanged = onDocumentWritten(
-  {document: "animals/{animalId}", region: "southamerica-east1"},
+  {document: "animals/{animalId}", region: "southamerica-east1", maxInstances: 5},
   async (event) => {
+    // Skip if this event was already processed (at-least-once delivery guard)
+    const processed = await markEventProcessed(event.id);
+    if (!processed) return;
+
     const before = event.data?.before.data() as {status: AnimalStatus} | undefined;
     const after = event.data?.after.data() as {status: AnimalStatus} | undefined;
 
