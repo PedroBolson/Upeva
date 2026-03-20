@@ -205,34 +205,35 @@ export function AnimalFormPage() {
           {existingPhotos.length > 0 && (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {existingPhotos.map((url, i) => (
-                <div key={url} className="relative aspect-square rounded-md overflow-hidden group">
+                <div key={url} className="relative aspect-square overflow-hidden rounded-md border border-border bg-card">
                   <img src={url} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" />
-                  <div className="absolute inset-0 bg-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-linear-to-t from-foreground/80 via-foreground/45 to-transparent p-2">
                     <button
                       type="button"
                       onClick={() => setCoverIndex(i)}
                       title="Definir como capa"
                       className={cn(
-                        'rounded-full p-1 transition-colors',
+                        'inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors',
                         coverIndex === i
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-white/80 text-foreground hover:bg-primary hover:text-primary-foreground',
+                          : 'bg-background/90 text-foreground hover:bg-primary hover:text-primary-foreground',
                       )}
                     >
-                      <Star size={14} />
+                      <Star size={16} />
                     </button>
                     <button
                       type="button"
                       onClick={() => removeExisting(url)}
                       title="Remover foto"
-                      className="rounded-full p-1 bg-white/80 text-danger hover:bg-danger hover:text-white transition-colors"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-danger transition-colors hover:bg-danger hover:text-danger-foreground"
                     >
-                      <X size={14} />
+                      <X size={16} />
                     </button>
                   </div>
                   {coverIndex === i && (
-                    <div className="absolute top-1 left-1 bg-primary rounded-full p-0.5">
-                      <Star size={10} className="text-primary-foreground" />
+                    <div className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground shadow-sm">
+                      <Star size={10} />
+                      Capa
                     </div>
                   )}
                 </div>
@@ -352,13 +353,15 @@ export function AnimalFormPage() {
           </p>
         )}
 
-        <div className="flex gap-3 pt-2">
-          <Button type="submit" disabled={submitting} className="gap-1.5">
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+          <Button type="submit" disabled={submitting} className="w-full gap-1.5 sm:w-auto">
             {submitting && <Loader2 size={16} className="animate-spin" />}
             {submitting ? 'Salvando…' : isEditing ? 'Salvar alterações' : 'Cadastrar animal'}
           </Button>
-          <Link to="/admin/animais">
-            <Button type="button" variant="outline">Cancelar</Button>
+          <Link to="/admin/animais" className="w-full sm:w-auto">
+            <Button type="button" variant="outline" className="w-full">
+              Cancelar
+            </Button>
           </Link>
         </div>
       </form>

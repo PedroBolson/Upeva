@@ -23,7 +23,7 @@ const values = [
     icon: Shield,
     title: 'Responsabilidade',
     description:
-      'Realizamos triagem veterinária, vacinação e castração antes de cada adoção.',
+      'Realizamos triagem veterinária e vacinação antes de cada adoção.',
   },
   {
     icon: ClipboardCheck,
@@ -76,28 +76,52 @@ export function AboutPage() {
             variants={stagger}
             initial="hidden"
             animate="show"
-            className="max-w-2xl flex flex-col gap-5"
+            className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-14"
           >
-            <motion.div variants={fadeUp}>
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-                <PawPrint size={14} />
-                Nossa história
-              </span>
+            <div className="flex max-w-2xl flex-col gap-5">
+              <motion.div variants={fadeUp}>
+                <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+                  <PawPrint size={14} />
+                  Nossa história
+                </span>
+              </motion.div>
+              <motion.h1
+                variants={fadeUp}
+                className="text-4xl sm:text-5xl font-bold text-foreground leading-tight"
+              >
+                Quem é a <span className="text-primary">Upeva</span>
+              </motion.h1>
+              <motion.p
+                variants={fadeUp}
+                className="text-lg text-muted-foreground leading-relaxed"
+              >
+                Somos uma organização sem fins lucrativos dedicada ao resgate, cuidado
+                e adoção responsável de cães e gatos. Acreditamos que todo animal
+                merece viver com dignidade, saúde e amor.
+              </motion.p>
+            </div>
+
+            <motion.div variants={fadeUp} className="flex justify-center lg:justify-end">
+              <div className="group relative w-full max-w-[420px]">
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-6 rounded-full bg-primary/12 blur-3xl"
+                />
+                <div className="relative overflow-hidden rounded-full border border-border/70 bg-card/85 p-4 shadow-[0_24px_60px_-24px_color-mix(in_oklab,var(--foreground)_22%,transparent)] backdrop-blur">
+                  <div className="relative overflow-hidden rounded-full">
+                    <img
+                      src="/upeva.jpg"
+                      alt="Logo da Upeva"
+                      className="aspect-square w-full rounded-full object-cover transition-transform duration-500 group-hover:scale-[1.045]"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 left-[-30%] w-[22%] rotate-12 bg-linear-to-r from-transparent via-background/80 to-transparent opacity-0 blur-sm transition-all duration-700 group-hover:left-[108%] group-hover:opacity-100"
+                    />
+                  </div>
+                </div>
+              </div>
             </motion.div>
-            <motion.h1
-              variants={fadeUp}
-              className="text-4xl sm:text-5xl font-bold text-foreground leading-tight"
-            >
-              Quem é a <span className="text-primary">Upeva</span>
-            </motion.h1>
-            <motion.p
-              variants={fadeUp}
-              className="text-lg text-muted-foreground leading-relaxed"
-            >
-              Somos uma organização sem fins lucrativos dedicada ao resgate, cuidado
-              e adoção responsável de cães e gatos. Acreditamos que todo animal
-              merece viver com dignidade, saúde e amor.
-            </motion.p>
           </motion.div>
         </div>
       </section>
@@ -109,23 +133,12 @@ export function AboutPage() {
           whileInView="show"
           viewport={{ once: true, amount: 0.2 }}
           variants={stagger}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start"
         >
-          <motion.div variants={fadeUp} className="flex flex-col gap-4">
+          <motion.div variants={fadeUp} className="flex min-h-24 flex-col gap-4">
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
               Nossa missão
             </h2>
-            <p className="text-muted-foreground leading-relaxed">
-              A Upeva nasceu da indignação e do amor. Sabendo que milhares de animais
-              vivem nas ruas sem cuidados, decidimos agir. Nosso trabalho é conectar
-              animais resgatados com famílias comprometidas, garantindo que cada
-              adoção seja responsável e duradoura.
-            </p>
-            <p className="text-muted-foreground leading-relaxed">
-              Trabalhamos com voluntários apaixonados, parceiros veterinários e uma
-              rede de lares temporários para garantir que todo animal receba o cuidado
-              necessário antes de encontrar seu lar definitivo.
-            </p>
           </motion.div>
 
           <motion.div variants={fadeUp}>

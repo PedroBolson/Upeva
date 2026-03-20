@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, PawPrint, Search } from 'lucide-react'
-import { Button, Input, AnimalStatusBadge, DataTable } from '@/components/ui'
+import { Button, Card, Input, AnimalStatusBadge, ResponsiveDataList, Select } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
-import { Select } from '@/components/ui/select'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
 import { useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
 import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS } from '@/features/animals/types/animal.types'
@@ -27,8 +26,6 @@ export function AdminAnimalsPage() {
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<AnimalStatus | ''>('')
-
-
 
   const filtered = animals.filter((a) => {
     if (statusFilter && a.status !== statusFilter) return false
@@ -119,8 +116,8 @@ export function AdminAnimalsPage() {
             {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link to="/admin/animais/novo">
-          <Button className="gap-1.5">
+        <Link to="/admin/animais/novo" className="w-full sm:w-auto">
+          <Button className="w-full gap-1.5 sm:w-auto">
             <Plus size={16} />
             Cadastrar animal
           </Button>
@@ -128,20 +125,22 @@ export function AdminAnimalsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <div className="flex-1 min-w-48">
           <Input
             placeholder="Buscar por nome…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             leftIcon={<Search size={14} />}
+            className="h-11 rounded-xl"
           />
         </div>
-        <div className="w-48">
+        <div className="w-full sm:w-56">
           <Select
             options={STATUS_FILTER_OPTIONS}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as AnimalStatus | '')}
+            className="h-11 rounded-xl"
           />
         </div>
       </div>
@@ -160,14 +159,112 @@ export function AdminAnimalsPage() {
       )}
 
       {!isLoading && !error && (
-        <DataTable
+        <ResponsiveDataList
           columns={columns}
           data={filtered}
           keyExtractor={(a) => a.id}
           onRowClick={(a) => navigate(`/admin/animais/${a.id}/editar`)}
+          renderMobileCard={(animal) => (
+            <AnimalMobileCard
+              animal={animal}
+              onEdit={() => navigate(`/admin/animais/${animal.id}/editar`)}
+              onStatusChange={(status) => updateStatus({ id: animal.id, status })}
+            />
+          )}
           emptyMessage="Nenhum animal encontrado com esses filtros."
         />
       )}
+    </div>
+  )
+}
+
+function AnimalMobileCard({
+  animal,
+  onEdit,
+  onStatusChange,
+}: {
+  animal: Animal
+  onEdit: () => void
+  onStatusChange: (status: AnimalStatus) => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onEdit()
+        }
+      }}
+      className="cursor-pointer"
+    >
+      <Card className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+            {animal.photos[animal.coverPhotoIndex] ? (
+              <img
+                src={animal.photos[animal.coverPhotoIndex]}
+                alt={animal.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <PawPrint size={18} className="text-muted-foreground" />
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold text-foreground">
+                      {animal.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {SPECIES_LABELS[animal.species]} · {SEX_LABELS[animal.sex]}
+                      {animal.size ? ` · ${SIZE_LABELS[animal.size]}` : ''}
+                    </p>
+                  </div>
+                  <AnimalStatusBadge status={animal.status} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <Select
+              options={[
+                { value: 'available', label: 'Disponível' },
+                { value: 'under_review', label: 'Em análise' },
+                { value: 'adopted', label: 'Adotado' },
+                { value: 'archived', label: 'Arquivar' },
+              ]}
+              value={animal.status}
+              onChange={(e) => onStatusChange(e.target.value as AnimalStatus)}
+              className="h-11 rounded-xl text-sm"
+              aria-label={`Alterar status de ${animal.name}`}
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            Editar animal
+          </Button>
+        </div>
+      </Card>
     </div>
   )
 }

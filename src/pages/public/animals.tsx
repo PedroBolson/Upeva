@@ -65,7 +65,7 @@ export function AnimalsPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.08 }}
-          className="rounded-xl border border-border bg-card p-5"
+          className="rounded-[1.75rem] border border-border bg-card/95 p-5 shadow-sm backdrop-blur sm:p-6"
         >
           <AnimalFilters
             filters={filters}

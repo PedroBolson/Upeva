@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Heart, ArrowRight, PawPrint, Shield, Users } from 'lucide-react'
-import { Button, AnimalCardSkeleton, EmptyState, ErrorState } from '@/components/ui'
-import { AnimalCard } from '@/features/animals/components/animal-card'
-import { useFeaturedAnimals } from '@/features/animals/hooks/use-animals'
+import { Heart, PawPrint, Shield, Users } from 'lucide-react'
+import { Button } from '@/components/ui'
+import { FeaturedAnimalRail } from '@/features/animals/components/featured-animal-rail'
 import { fadeUp, stagger } from '@/utils/animations'
 
 const steps = [
@@ -25,8 +24,6 @@ const steps = [
 ]
 
 export function HomePage() {
-  const { data: featured = [], isLoading, error, refetch } = useFeaturedAnimals(6)
-
   return (
     <div className="flex flex-col">
       {/* ── Hero ─────────────────────────────────────────── */}
@@ -46,14 +43,8 @@ export function HomePage() {
             variants={stagger}
             initial="hidden"
             animate="show"
-            className="flex flex-col items-start gap-6 max-w-2xl"
+            className="flex max-w-2xl flex-col items-start gap-5"
           >
-            <motion.div variants={fadeUp}>
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-                <PawPrint size={14} />
-                ONG de adoção de animais
-              </span>
-            </motion.div>
 
             <motion.h1
               variants={fadeUp}
@@ -89,78 +80,7 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ── Featured animals ─────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-16 w-full">
-        <motion.div
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.1 }}
-          variants={stagger}
-          className="flex flex-col gap-10"
-        >
-          <motion.div
-            variants={fadeUp}
-            className="flex items-end justify-between gap-4 flex-wrap"
-          >
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-                Esperando por você
-              </h2>
-              <p className="text-muted-foreground mt-1">
-                Conheça alguns dos animais disponíveis para adoção
-              </p>
-            </div>
-            <Link to="/animais">
-              <Button variant="ghost" className="gap-1.5 text-primary hover:text-primary">
-                Ver todos
-                <ArrowRight size={16} />
-              </Button>
-            </Link>
-          </motion.div>
-
-          {isLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <AnimalCardSkeleton key={i} />
-              ))}
-            </div>
-          )}
-
-          {error && (
-            <ErrorState
-              description="Não foi possível carregar os animais agora. Tente novamente."
-              onRetry={refetch}
-            />
-          )}
-
-          {!isLoading && !error && featured.length === 0 && (
-            <EmptyState
-              icon={PawPrint}
-              title="Em breve novos animais"
-              description="Ainda não temos animais cadastrados, mas logo teremos novidades!"
-            />
-          )}
-
-          {!isLoading && !error && featured.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {featured.map((animal) => (
-                <AnimalCard key={animal.id} animal={animal} />
-              ))}
-            </div>
-          )}
-
-          {featured.length > 0 && (
-            <motion.div variants={fadeUp} className="flex justify-center">
-              <Link to="/animais">
-                <Button variant="outline" size="lg" className="gap-2">
-                  Ver todos os animais
-                  <ArrowRight size={16} />
-                </Button>
-              </Link>
-            </motion.div>
-          )}
-        </motion.div>
-      </section>
+      <FeaturedAnimalRail />
 
       {/* ── How it works ─────────────────────────────────── */}
       <section className="bg-muted/30 border-t border-border">

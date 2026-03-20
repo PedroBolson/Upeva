@@ -3,7 +3,7 @@ import { UserPlus, Shield, Eye } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
-import { Button, Input, Select, DataTable } from '@/components/ui'
+import { Button, Card, Input, Select, ResponsiveDataList } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
@@ -78,18 +78,7 @@ export function UsersPage() {
     {
       key: 'role',
       header: 'Papel',
-      cell: (u) => (
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            u.role === 'admin'
-              ? 'bg-primary/10 text-primary'
-              : 'bg-muted text-muted-foreground'
-          }`}
-        >
-          {u.role === 'admin' ? <Shield size={10} /> : <Eye size={10} />}
-          {ROLE_LABELS[u.role]}
-        </span>
-      ),
+      cell: (u) => <UserRoleBadge role={u.role} />,
     },
     {
       key: 'actions',
@@ -125,7 +114,7 @@ export function UsersPage() {
             {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button className="gap-1.5" onClick={() => { setShowForm((v) => !v); setCreateSuccess(false) }}>
+        <Button className="w-full gap-1.5 sm:w-auto" onClick={() => { setShowForm((v) => !v); setCreateSuccess(false) }}>
           <UserPlus size={16} />
           Novo usuário
         </Button>
@@ -165,11 +154,11 @@ export function UsersPage() {
             {createError && (
               <p className="sm:col-span-2 text-sm text-danger">{createError}</p>
             )}
-            <div className="sm:col-span-2 flex gap-3">
-              <Button type="submit" loading={creating}>
+            <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row">
+              <Button type="submit" loading={creating} className="w-full sm:w-auto">
                 Criar usuário
               </Button>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setShowForm(false)}>
                 Cancelar
               </Button>
             </div>
@@ -192,13 +181,72 @@ export function UsersPage() {
       )}
 
       {!isLoading && !error && (
-        <DataTable
+        <ResponsiveDataList
           columns={columns}
           data={users}
           keyExtractor={(u) => u.uid}
+          renderMobileCard={(user) => (
+            <UserMobileCard
+              user={user}
+              isSelf={user.uid === currentUser?.uid}
+              onRoleChange={(role) => updateRole({ uid: user.uid, role })}
+            />
+          )}
           emptyMessage="Nenhum usuário encontrado."
         />
       )}
     </div>
+  )
+}
+
+function UserRoleBadge({ role }: { role: UserRole }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        role === 'admin'
+          ? 'bg-primary/10 text-primary'
+          : 'bg-muted text-muted-foreground'
+      }`}
+    >
+      {role === 'admin' ? <Shield size={10} /> : <Eye size={10} />}
+      {ROLE_LABELS[role]}
+    </span>
+  )
+}
+
+function UserMobileCard({
+  user,
+  isSelf,
+  onRoleChange,
+}: {
+  user: UserProfile
+  isSelf: boolean
+  onRoleChange: (role: UserRole) => void
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-foreground">{user.displayName}</p>
+          <p className="mt-1 break-words text-sm text-muted-foreground">{user.email}</p>
+        </div>
+
+        <UserRoleBadge role={user.role} />
+      </div>
+
+      <div className="mt-4 rounded-xl bg-muted/35 p-3">
+        <Select
+          options={ROLE_OPTIONS}
+          value={user.role}
+          disabled={isSelf}
+          onChange={(e) => onRoleChange(e.target.value as UserRole)}
+          className="h-11 rounded-xl text-sm"
+          aria-label={`Alterar papel de ${user.displayName}`}
+        />
+        {isSelf && (
+          <p className="mt-2 text-xs text-muted-foreground">Você mesmo</p>
+        )}
+      </div>
+    </Card>
   )
 }

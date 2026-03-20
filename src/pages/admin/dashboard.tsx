@@ -42,7 +42,7 @@ export function DashboardPage() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             label: 'Animais disponíveis',
@@ -93,15 +93,15 @@ export function DashboardPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="flex flex-wrap gap-3">
-        <Link to="/admin/animais/novo">
-          <Button className="gap-1.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Link to="/admin/animais/novo" className="w-full sm:w-auto">
+          <Button className="w-full gap-1.5 sm:w-auto">
             <Plus size={16} />
             Cadastrar animal
           </Button>
         </Link>
-        <Link to="/admin/candidaturas">
-          <Button variant="outline" className="gap-1.5">
+        <Link to="/admin/candidaturas" className="w-full sm:w-auto">
+          <Button variant="outline" className="w-full gap-1.5 sm:w-auto">
             <ClipboardList size={16} />
             Ver candidaturas
           </Button>
@@ -141,9 +141,9 @@ export function DashboardPage() {
               <Link
                 key={app.id}
                 to={`/admin/candidaturas/${app.id}`}
-                className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/40 transition-colors"
+                className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="min-w-0 flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-foreground truncate">
                     {app.fullName}
                   </span>
@@ -184,9 +184,9 @@ export function DashboardPage() {
               <Link
                 key={animal.id}
                 to={`/admin/animais/${animal.id}/editar`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+                className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
               >
-                <div className="h-9 w-9 rounded-md overflow-hidden bg-muted shrink-0">
+                <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md bg-muted">
                   {animal.photos[animal.coverPhotoIndex] ? (
                     <img
                       src={animal.photos[animal.coverPhotoIndex]}
@@ -199,7 +199,7 @@ export function DashboardPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium text-foreground truncate block">
                     {animal.name}
                   </span>

@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, Link } from 'react-router-dom'
-import { Menu, X, Sun, Moon, PawPrint, Heart } from 'lucide-react'
+import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
-import { Button } from '@/components/ui'
-import { useTheme } from '@/app/theme-provider'
+import { Button, ThemeToggleButton } from '@/components/ui'
 
 const navLinks = [
   { to: '/', label: 'Home', end: true },
@@ -16,7 +15,6 @@ const navLinks = [
 export function PublicLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { resolvedTheme, setTheme } = useTheme()
 
   useEffect(() => {
     function handleScroll() {
@@ -25,10 +23,6 @@ export function PublicLayout() {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  function toggleTheme() {
-    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
-  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -74,14 +68,7 @@ export function PublicLayout() {
             </nav>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                aria-label={resolvedTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-              >
-                {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              </Button>
+              <ThemeToggleButton />
 
               <Link to="/adotar" className="hidden md:block">
                 <Button size="sm" className="gap-1.5">
@@ -158,9 +145,18 @@ export function PublicLayout() {
       <footer className="border-t border-border bg-muted/50 mt-16">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div className="flex items-center gap-2 text-primary font-bold text-lg">
-              <PawPrint size={20} />
-              <span>Upeva</span>
+            <div className="flex items-center gap-3 text-primary font-bold text-lg">
+              <img
+                src="/upeva.jpg"
+                alt="Logo da Upeva"
+                className="h-11 w-11 rounded-full object-cover ring-2 ring-background shadow-sm"
+              />
+              <div className="flex flex-col">
+                <span>Upeva</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  União Pela Vida Animal
+                </span>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 text-sm text-muted-foreground">
               <Link to="/sobre" className="hover:text-foreground transition-colors">

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { useEffect, useEffectEvent, useState } from 'react'
+import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   PawPrint,
@@ -8,15 +8,12 @@ import {
   LogOut,
   Menu,
   X,
-  Sun,
-  Moon,
   ChevronLeft,
   Users,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
-import { Button } from '@/components/ui'
-import { useTheme } from '@/app/theme-provider'
+import { Button, ThemeToggleButton } from '@/components/ui'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
@@ -32,12 +29,20 @@ const navItems = [
 interface AdminSidebarProps {
   collapsed: boolean
   onCollapse: (value: boolean) => void
+  onNavigate?: () => void
   user: User | null
   userRole: UserRole | undefined
   onLogout: () => void
 }
 
-function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: AdminSidebarProps) {
+function AdminSidebar({
+  collapsed,
+  onCollapse,
+  onNavigate,
+  user,
+  userRole,
+  onLogout,
+}: AdminSidebarProps) {
   const visibleItems = navItems.filter((item) => !item.role || item.role === userRole)
 
   return (
@@ -57,6 +62,7 @@ function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: Admin
           <>
             <Link
               to="/admin"
+              onClick={onNavigate}
               className="flex items-center gap-2 font-bold text-primary"
               aria-label="Dashboard"
             >
@@ -82,6 +88,7 @@ function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: Admin
               <NavLink
                 to={to}
                 end={end}
+                onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150',
@@ -112,7 +119,10 @@ function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: Admin
           </div>
         )}
         <button
-          onClick={onLogout}
+          onClick={() => {
+            onNavigate?.()
+            onLogout()
+          }}
           className={cn(
             'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground',
             'hover:text-danger hover:bg-danger/10 transition-colors duration-150 w-full',
@@ -131,8 +141,13 @@ function AdminSidebar({ collapsed, onCollapse, user, userRole, onLogout }: Admin
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const { resolvedTheme, setTheme } = useTheme()
+  const location = useLocation()
   const { user, userProfile, logout } = useAuth()
+  const closeSidebar = useEffectEvent(() => setSidebarOpen(false))
+
+  useEffect(() => {
+    closeSidebar()
+  }, [location.pathname])
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -168,6 +183,7 @@ export function AdminLayout() {
               <AdminSidebar
                 collapsed={false}
                 onCollapse={() => setSidebarOpen(false)}
+                onNavigate={() => setSidebarOpen(false)}
                 user={user}
                 userRole={userProfile?.role}
                 onLogout={logout}
@@ -203,14 +219,7 @@ export function AdminLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-              aria-label={resolvedTheme === 'dark' ? 'Modo claro' : 'Modo escuro'}
-            >
-              {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </Button>
+            <ThemeToggleButton />
           </div>
         </header>
 

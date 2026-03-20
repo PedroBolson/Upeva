@@ -97,7 +97,7 @@ export function SettingsPage() {
               {nameMessage.text}
             </p>
           )}
-          <Button type="submit" disabled={nameLoading} className="gap-1.5 self-start">
+          <Button type="submit" disabled={nameLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
             {nameLoading && <Loader2 size={14} className="animate-spin" />}
             {nameLoading ? 'Salvando…' : 'Salvar nome'}
           </Button>
@@ -135,7 +135,7 @@ export function SettingsPage() {
               {passMessage.text}
             </p>
           )}
-          <Button type="submit" disabled={passLoading} className="gap-1.5 self-start">
+          <Button type="submit" disabled={passLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
             {passLoading && <Loader2 size={14} className="animate-spin" />}
             {passLoading ? 'Atualizando…' : 'Alterar senha'}
           </Button>

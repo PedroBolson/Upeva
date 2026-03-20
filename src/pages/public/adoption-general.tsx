@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Dog, Cat, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui'
@@ -31,7 +32,14 @@ function buildMockAnimal(species: Species): Animal {
 }
 
 export function AdoptionGeneralPage() {
-  const [species, setSpecies] = useState<Species | null>(null)
+  const [searchParams] = useSearchParams()
+  const [species, setSpecies] = useState<Species | null>(() => {
+    const initialSpecies = searchParams.get('especie')
+    if (initialSpecies === 'dog' || initialSpecies === 'cat') {
+      return initialSpecies
+    }
+    return null
+  })
 
   if (species) {
     return (

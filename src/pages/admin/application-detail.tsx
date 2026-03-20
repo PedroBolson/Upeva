@@ -39,7 +39,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         {label}
       </span>
-      <span className="text-sm text-foreground">{value || '—'}</span>
+      <span className="text-sm text-foreground break-words whitespace-pre-wrap">{value || '—'}</span>
     </div>
   )
 }
@@ -102,7 +102,7 @@ export function ApplicationDetailPage() {
           <ArrowLeft size={14} />
           Voltar para Candidaturas
         </Link>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{app.fullName}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -136,8 +136,8 @@ export function ApplicationDetailPage() {
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSave} disabled={isPending} className="gap-1.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Button onClick={handleSave} disabled={isPending} className="w-full gap-1.5 sm:w-auto">
             {isPending && <Loader2 size={14} className="animate-spin" />}
             {isPending ? 'Salvando…' : 'Salvar'}
           </Button>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DataTable, ApplicationStatusBadge } from '@/components/ui'
+import { ApplicationStatusBadge, Card, ResponsiveDataList } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
@@ -85,21 +85,21 @@ export function ApplicationsPage() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-1 border-b border-border overflow-x-auto">
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {STATUS_TABS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => setActiveTab(value)}
             className={cn(
-              'px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px',
+              'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors',
               activeTab === value
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground',
             )}
           >
             {label}
             {value !== 'all' && (
-              <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground">
+              <span className="ml-1.5 rounded-full bg-background/70 px-1.5 py-0.5 text-xs text-muted-foreground">
                 {applications.filter((a) => a.status === value).length}
               </span>
             )}
@@ -121,14 +121,80 @@ export function ApplicationsPage() {
       )}
 
       {!isLoading && !error && (
-        <DataTable
+        <ResponsiveDataList
           columns={columns}
           data={filtered}
           keyExtractor={(a) => a.id}
           onRowClick={(a) => navigate(`/admin/candidaturas/${a.id}`)}
+          renderMobileCard={(application) => (
+            <ApplicationMobileCard
+              application={application}
+              onOpen={() => navigate(`/admin/candidaturas/${application.id}`)}
+            />
+          )}
           emptyMessage="Nenhuma candidatura encontrada."
         />
       )}
+    </div>
+  )
+}
+
+function ApplicationMobileCard({
+  application,
+  onOpen,
+}: {
+  application: AdoptionApplication
+  onOpen: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      className="cursor-pointer"
+    >
+      <Card className="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-foreground">
+              {application.fullName}
+            </p>
+            <p className="mt-1 break-words text-sm text-muted-foreground">
+              {application.email}
+            </p>
+          </div>
+          <ApplicationStatusBadge status={application.status} />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-muted/35 p-3 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Animal
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              {application.animalName}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {SPECIES_LABELS[application.species]}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Recebida
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              {formatRelativeDate(tsToDate(application.createdAt))}
+            </p>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getAvailableAnimals, getFeaturedAnimals } from '../services/animals.service'
+import { getAvailableAnimals } from '../services/animals.service'
 import type { Animal, AnimalFilters } from '../types/animal.types'
 
 export function useAnimals(filters: AnimalFilters = {}) {
@@ -14,12 +14,22 @@ export function useAnimals(filters: AnimalFilters = {}) {
   return { animals: filtered, total: filtered.length, isLoading, error, refetch }
 }
 
-export function useFeaturedAnimals(count: number = 6) {
-  return useQuery({
-    queryKey: ['animals', 'featured', count],
-    queryFn: () => getFeaturedAnimals(count),
+export function useFeaturedAnimals(
+  count: number = 6,
+  strategy: 'latest' | 'random' = 'latest',
+) {
+  const query = useQuery({
+    queryKey: ['animals', 'list'],
+    queryFn: getAvailableAnimals,
     staleTime: 1000 * 60 * 10,
   })
+
+  const data = useMemo(
+    () => selectFeaturedAnimals(query.data ?? [], count, strategy),
+    [query.data, count, strategy],
+  )
+
+  return { ...query, data }
 }
 
 function applyFilters(animals: Animal[], filters: AnimalFilters): Animal[] {
@@ -33,4 +43,21 @@ function applyFilters(animals: Animal[], filters: AnimalFilters): Animal[] {
     }
     return true
   })
+}
+
+function selectFeaturedAnimals(
+  animals: Animal[],
+  count: number,
+  strategy: 'latest' | 'random',
+) {
+  const pool = [...animals]
+
+  if (strategy === 'random') {
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    }
+  }
+
+  return pool.slice(0, count)
 }

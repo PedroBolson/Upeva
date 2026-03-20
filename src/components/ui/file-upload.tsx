@@ -135,23 +135,25 @@ export function FileUpload({
       {previews.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
           {previews.map((src, i) => (
-            <div key={i} className="relative aspect-square rounded-md overflow-hidden group">
+            <div key={i} className="relative aspect-square overflow-hidden rounded-md border border-border bg-card">
               <img
                 src={src}
                 alt={`Preview ${i + 1}`}
                 className="h-full w-full object-cover"
               />
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); removeFile(i) }}
-                aria-label={`Remover foto ${i + 1}`}
-                className={cn(
-                  'absolute inset-0 flex items-center justify-center',
-                  'bg-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity',
-                )}
-              >
-                <X className="text-white" size={20} />
-              </button>
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-end bg-linear-to-t from-foreground/80 via-foreground/45 to-transparent p-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); removeFile(i) }}
+                  aria-label={`Remover foto ${i + 1}`}
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-full',
+                    'bg-background/90 text-danger transition-colors hover:bg-danger hover:text-danger-foreground',
+                  )}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
