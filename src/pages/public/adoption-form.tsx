@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { PawPrint, ArrowLeft } from 'lucide-react'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
@@ -8,6 +8,7 @@ import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 
 export function AdoptionFormPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
 
   if (isLoading) return <PageSpinner />
@@ -52,13 +53,14 @@ export function AdoptionFormPage() {
     <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10 w-full">
       {/* Header */}
       <div className="mb-8">
-        <Link
-          to={`/animais/${animal.id}`}
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft size={14} />
           Voltar para {animal.name}
-        </Link>
+        </button>
 
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-full overflow-hidden bg-muted shrink-0">
