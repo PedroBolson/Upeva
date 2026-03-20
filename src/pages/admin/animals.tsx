@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, PawPrint, Search } from 'lucide-react'
 import { Button, Card, Input, AnimalStatusBadge, ResponsiveDataList, Select } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
+import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
 import { useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
 import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS } from '@/features/animals/types/animal.types'
@@ -26,12 +29,103 @@ export function AdminAnimalsPage() {
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<AnimalStatus | ''>('')
+  const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const filtered = animals.filter((a) => {
     if (statusFilter && a.status !== statusFilter) return false
     if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
+
+  const headerActions = useMemo(
+    () => (
+      <div ref={containerRef} className="relative flex min-w-0 items-center gap-2">
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
+        >
+          <div className="w-[7.5rem] shrink-0">
+            <Input
+              placeholder="Buscar por nome…"
+              value={search}
+              onChange={() => undefined}
+              leftIcon={<Search size={14} />}
+              className="h-9 rounded-lg"
+            />
+          </div>
+          <div className="w-40 shrink-0">
+            <Select
+              options={STATUS_FILTER_OPTIONS}
+              value={statusFilter}
+              onChange={() => undefined}
+              className="h-9 rounded-lg"
+            />
+          </div>
+          <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+            <Plus size={16} />
+            <span>Cadastrar animal</span>
+          </Button>
+        </div>
+
+        <div className="min-w-[7.5rem] flex-1 max-w-[18rem]">
+          <Input
+            placeholder="Buscar por nome…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search size={14} />}
+            className="h-9 rounded-lg"
+          />
+        </div>
+
+        {!isCompact && (
+          <>
+            <div className="w-40 shrink-0">
+              <Select
+                options={STATUS_FILTER_OPTIONS}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as AnimalStatus | '')}
+                className="h-9 rounded-lg"
+              />
+            </div>
+
+            <Link to="/admin/animais/novo" className="shrink-0">
+              <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+                <Plus size={16} />
+                <span className="hidden min-[480px]:inline">Cadastrar animal</span>
+                <span className="min-[480px]:hidden">Novo</span>
+              </Button>
+            </Link>
+          </>
+        )}
+
+        {isCompact && (
+          <AdminHeaderOverflow
+            label={statusFilter ? 'Status' : 'Filtros'}
+            active={Boolean(statusFilter)}
+          >
+            <Select
+              label="Status"
+              options={STATUS_FILTER_OPTIONS}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as AnimalStatus | '')}
+              className="h-10 rounded-lg"
+            />
+          </AdminHeaderOverflow>
+        )}
+      </div>
+    ),
+    [containerRef, isCompact, measureRef, search, statusFilter],
+  )
+
+  const headerConfig = useMemo(
+    () => ({
+      actions: headerActions,
+    }),
+    [headerActions],
+  )
+
+  useAdminPageHeader(headerConfig)
 
   const columns: Column<Animal>[] = [
     {
@@ -109,41 +203,9 @@ export function AdminAnimalsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Animais</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <Link to="/admin/animais/novo" className="w-full sm:w-auto">
-          <Button className="w-full gap-1.5 sm:w-auto">
-            <Plus size={16} />
-            Cadastrar animal
-          </Button>
-        </Link>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <div className="flex-1 min-w-48">
-          <Input
-            placeholder="Buscar por nome…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            leftIcon={<Search size={14} />}
-            className="h-11 rounded-xl"
-          />
-        </div>
-        <div className="w-full sm:w-56">
-          <Select
-            options={STATUS_FILTER_OPTIONS}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as AnimalStatus | '')}
-            className="h-11 rounded-xl"
-          />
-        </div>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+      </p>
 
       {isLoading && (
         <div className="flex justify-center py-16">

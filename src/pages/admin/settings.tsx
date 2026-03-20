@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   updateProfile,
   updatePassword,
@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { Input, Button } from '@/components/ui'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { Loader2 } from 'lucide-react'
 
 export function SettingsPage() {
@@ -22,6 +23,13 @@ export function SettingsPage() {
   const [passLoading, setPassLoading] = useState(false)
   const [passMessage, setPassMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [passError, setPassError] = useState<string | null>(null)
+
+  const headerConfig = useMemo(
+    () => ({}),
+    [],
+  )
+
+  useAdminPageHeader(headerConfig)
 
   async function handleUpdateName(e: React.FormEvent) {
     e.preventDefault()
@@ -74,72 +82,71 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {user?.email}
-        </p>
-      </div>
+    <div className="flex flex-col gap-8">
+      <p className="text-sm text-muted-foreground">
+        {user?.email}
+      </p>
 
-      {/* Display name */}
-      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-        <h2 className="text-sm font-semibold text-foreground">Nome de exibição</h2>
-        <form onSubmit={handleUpdateName} className="flex flex-col gap-4">
-          <Input
-            label="Nome"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            required
-          />
-          {nameMessage && (
-            <p className={`text-sm ${nameMessage.ok ? 'text-success' : 'text-danger'}`}>
-              {nameMessage.text}
-            </p>
-          )}
-          <Button type="submit" disabled={nameLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
-            {nameLoading && <Loader2 size={14} className="animate-spin" />}
-            {nameLoading ? 'Salvando…' : 'Salvar nome'}
-          </Button>
-        </form>
-      </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Display name */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+          <h2 className="text-sm font-semibold text-foreground">Nome de exibição</h2>
+          <form onSubmit={handleUpdateName} className="flex flex-col gap-4">
+            <Input
+              label="Nome"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+            />
+            {nameMessage && (
+              <p className={`text-sm ${nameMessage.ok ? 'text-success' : 'text-danger'}`}>
+                {nameMessage.text}
+              </p>
+            )}
+            <Button type="submit" disabled={nameLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
+              {nameLoading && <Loader2 size={14} className="animate-spin" />}
+              {nameLoading ? 'Salvando…' : 'Salvar nome'}
+            </Button>
+          </form>
+        </div>
 
-      {/* Password */}
-      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-        <h2 className="text-sm font-semibold text-foreground">Alterar senha</h2>
-        <form onSubmit={handleUpdatePassword} className="flex flex-col gap-4">
-          <Input
-            label="Senha atual"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
-          <Input
-            label="Nova senha"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
-          <Input
-            label="Confirmar nova senha"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-          {passError && <p className="text-sm text-danger">{passError}</p>}
-          {passMessage && (
-            <p className={`text-sm ${passMessage.ok ? 'text-success' : 'text-danger'}`}>
-              {passMessage.text}
-            </p>
-          )}
-          <Button type="submit" disabled={passLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
-            {passLoading && <Loader2 size={14} className="animate-spin" />}
-            {passLoading ? 'Atualizando…' : 'Alterar senha'}
-          </Button>
-        </form>
+        {/* Password */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+          <h2 className="text-sm font-semibold text-foreground">Alterar senha</h2>
+          <form onSubmit={handleUpdatePassword} className="flex flex-col gap-4">
+            <Input
+              label="Senha atual"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+            <Input
+              label="Nova senha"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+            <Input
+              label="Confirmar nova senha"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+            {passError && <p className="text-sm text-danger">{passError}</p>}
+            {passMessage && (
+              <p className={`text-sm ${passMessage.ok ? 'text-success' : 'text-danger'}`}>
+                {passMessage.text}
+              </p>
+            )}
+            <Button type="submit" disabled={passLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
+              {passLoading && <Loader2 size={14} className="animate-spin" />}
+              {passLoading ? 'Atualizando…' : 'Alterar senha'}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   )

@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { PawPrint, ClipboardList, Plus, ArrowRight, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { PawPrint, ArrowRight, Clock, CheckCircle, XCircle, UserPlus, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { AnimalStatusBadge, ApplicationStatusBadge } from '@/components/ui'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
 import { useApplications } from '@/features/adoption/hooks/use-applications'
 import { formatRelativeDate } from '@/utils/format'
@@ -31,16 +32,37 @@ export function DashboardPage() {
   )
 
   const isLoading = animalsLoading || appsLoading
+  const headerActions = useMemo(
+    () => (
+      <div className="flex items-center gap-2 whitespace-nowrap">
+        <Link to="/admin/animais/novo" className="shrink-0">
+          <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+            <PawPrint size={16} />
+            Cadastrar animal
+          </Button>
+        </Link>
+        <Link to="/admin/usuarios" className="shrink-0">
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+            <UserPlus size={16} />
+            Novo usuário
+          </Button>
+        </Link>
+      </div>
+    ),
+    [],
+  )
+
+  const headerConfig = useMemo(
+    () => ({
+      actions: headerActions,
+    }),
+    [headerActions],
+  )
+
+  useAdminPageHeader(headerConfig)
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Visão geral da plataforma Upeva
-        </p>
-      </div>
-
       {/* Metric cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -90,22 +112,6 @@ export function DashboardPage() {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Quick actions */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Link to="/admin/animais/novo" className="w-full sm:w-auto">
-          <Button className="w-full gap-1.5 sm:w-auto">
-            <Plus size={16} />
-            Cadastrar animal
-          </Button>
-        </Link>
-        <Link to="/admin/candidaturas" className="w-full sm:w-auto">
-          <Button variant="outline" className="w-full gap-1.5 sm:w-auto">
-            <ClipboardList size={16} />
-            Ver candidaturas
-          </Button>
-        </Link>
       </div>
 
       {/* Recent applications */}

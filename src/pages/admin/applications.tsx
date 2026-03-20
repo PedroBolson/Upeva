@@ -1,9 +1,12 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApplicationStatusBadge, Card, ResponsiveDataList } from '@/components/ui'
+import { ApplicationStatusBadge, Button, Card, ResponsiveDataList } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
+import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useApplications } from '@/features/adoption/hooks/use-applications'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate } from '@/utils/format'
@@ -29,6 +32,7 @@ export function ApplicationsPage() {
   const navigate = useNavigate()
   const { data: applications = [], isLoading, error, refetch } = useApplications()
   const [activeTab, setActiveTab] = useState<ApplicationStatus | 'all'>('all')
+  const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const filtered = useMemo(
     () =>
@@ -37,6 +41,112 @@ export function ApplicationsPage() {
         : applications.filter((a) => a.status === activeTab),
     [applications, activeTab],
   )
+
+  const statusCounts = useMemo(
+    () =>
+      STATUS_TABS.reduce<Record<string, number>>((acc, { value }) => {
+        if (value === 'all') {
+          acc[value] = applications.length
+          return acc
+        }
+
+        acc[value] = applications.filter((application) => application.status === value).length
+        return acc
+      }, {}),
+    [applications],
+  )
+
+  const tabButtons = useMemo(
+    () =>
+      STATUS_TABS.map(({ value, label }) => (
+        <button
+          key={value}
+          onClick={() => setActiveTab(value)}
+          className={cn(
+            'shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === value
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground',
+          )}
+        >
+          {label}
+          {value !== 'all' && (
+            <span className="ml-1.5 rounded-full bg-background/70 px-1.5 py-0.5 text-xs text-muted-foreground">
+              {statusCounts[value]}
+            </span>
+          )}
+        </button>
+      )),
+    [activeTab, statusCounts],
+  )
+
+  const headerActions = useMemo(
+    () => (
+      <div ref={containerRef} className="relative flex min-w-0 items-center gap-2">
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
+        >
+          {tabButtons}
+        </div>
+
+        {!isCompact && (
+          <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+            {tabButtons}
+          </div>
+        )}
+
+        {isCompact && (
+          <AdminHeaderOverflow
+            label={activeTab === 'all' ? 'Filtros' : 'Status'}
+            active={activeTab !== 'all'}
+          >
+            {(close) => (
+              <div className="grid gap-2">
+                {STATUS_TABS.map(({ value, label }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={activeTab === value ? 'default' : 'outline'}
+                    className="w-full justify-between"
+                    onClick={() => {
+                      setActiveTab(value)
+                      close()
+                    }}
+                  >
+                    <span>{label}</span>
+                    {value !== 'all' && (
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-xs',
+                          activeTab === value
+                            ? 'bg-primary-foreground/15 text-primary-foreground'
+                            : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {statusCounts[value]}
+                      </span>
+                    )}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </AdminHeaderOverflow>
+        )}
+      </div>
+    ),
+    [activeTab, containerRef, isCompact, measureRef, statusCounts, tabButtons],
+  )
+
+  const headerConfig = useMemo(
+    () => ({
+      actions: headerActions,
+    }),
+    [headerActions],
+  )
+
+  useAdminPageHeader(headerConfig)
 
   const columns: Column<AdoptionApplication>[] = [
     {
@@ -77,35 +187,9 @@ export function ApplicationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Candidaturas</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {filtered.length} candidatura{filtered.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Status tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {STATUS_TABS.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => setActiveTab(value)}
-            className={cn(
-              'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors',
-              activeTab === value
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground',
-            )}
-          >
-            {label}
-            {value !== 'all' && (
-              <span className="ml-1.5 rounded-full bg-background/70 px-1.5 py-0.5 text-xs text-muted-foreground">
-                {applications.filter((a) => a.status === value).length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {filtered.length} candidatura{filtered.length !== 1 ? 's' : ''}
+      </p>
 
       {isLoading && (
         <div className="flex justify-center py-16">

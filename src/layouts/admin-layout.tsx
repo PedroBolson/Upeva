@@ -14,16 +14,18 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import { Button, ThemeToggleButton } from '@/components/ui'
+import { AdminHeaderProvider } from '@/features/admin/admin-header.provider'
+import { useAdminHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
 
 const navItems = [
-  { to: '/admin',               label: 'Dashboard',     icon: LayoutDashboard, end: true,  role: undefined as UserRole | undefined },
-  { to: '/admin/animais',       label: 'Animais',       icon: PawPrint,        end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/candidaturas',  label: 'Candidaturas',  icon: ClipboardList,   end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/usuarios',      label: 'Usuários',      icon: Users,           end: false, role: 'admin' as UserRole },
-  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings,        end: false, role: undefined as UserRole | undefined },
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, role: undefined as UserRole | undefined },
+  { to: '/admin/animais', label: 'Animais', icon: PawPrint, end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole },
+  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined },
 ]
 
 interface AdminSidebarProps {
@@ -49,7 +51,7 @@ function AdminSidebar({
     <div
       className={cn(
         'flex h-full flex-col border-r border-border bg-card transition-all duration-300',
-        collapsed ? 'w-16' : 'w-60',
+        collapsed ? 'w-16' : 'w-52',
       )}
     >
       {/* Logo */}
@@ -110,6 +112,20 @@ function AdminSidebar({
 
       {/* Footer */}
       <div className="border-t border-border p-3 flex flex-col gap-2">
+        {!collapsed && (
+          <div className="rounded-xl border border-border bg-background/80 px-3 py-2 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                com apoio
+              </span>
+              <img
+                src="/logo.png"
+                alt="Logo da universidade"
+                className="h-8 w-auto object-contain"
+              />
+            </div>
+          </div>
+        )}
         {!collapsed && user && (
           <div className="px-2 py-1">
             <p className="text-xs font-medium text-foreground truncate">
@@ -139,10 +155,19 @@ function AdminSidebar({
 }
 
 export function AdminLayout() {
+  return (
+    <AdminHeaderProvider>
+      <AdminLayoutContent />
+    </AdminHeaderProvider>
+  )
+}
+
+function AdminLayoutContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const location = useLocation()
   const { user, userProfile, logout } = useAuth()
+  const { header } = useAdminHeader()
   const closeSidebar = useEffectEvent(() => setSidebarOpen(false))
 
   useEffect(() => {
@@ -178,7 +203,7 @@ export function AdminLayout() {
               animate={{ x: 0 }}
               exit={{ x: -240 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="fixed left-0 top-0 z-50 h-full w-60 md:hidden"
+              className="fixed left-0 top-0 z-50 h-full w-52 md:hidden"
             >
               <AdminSidebar
                 collapsed={false}
@@ -196,37 +221,42 @@ export function AdminLayout() {
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-4 sm:px-6 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setSidebarOpen((o) => !o)}
-            aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </Button>
+        <header className="relative z-20 h-16 shrink-0 border-b border-border bg-card">
+          <div className="flex h-full items-center gap-2 px-4 lg:px-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 md:hidden"
+              onClick={() => setSidebarOpen((o) => !o)}
+              aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
+            >
+              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </Button>
 
-          <div className="hidden md:block">
             {collapsed && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden h-9 w-9 shrink-0 md:inline-flex"
                 onClick={() => setCollapsed(false)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Expandir menu"
               >
-                Expandir menu
-              </button>
+                <ChevronLeft size={16} className="rotate-180" />
+              </Button>
             )}
-          </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <ThemeToggleButton />
+            <div className="min-w-0 flex-1">
+              {header.actions}
+            </div>
+
+            <ThemeToggleButton className="h-9 w-9 shrink-0" />
           </div>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
-            <Outlet />
+          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+            <Outlet key={location.pathname} />
           </div>
         </main>
       </div>

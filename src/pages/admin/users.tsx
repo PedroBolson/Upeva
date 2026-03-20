@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { UserPlus, Shield, Eye } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +7,7 @@ import { Button, Card, Input, Select, ResponsiveDataList } from '@/components/ui
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useUsers, useCreateUser, useUpdateUserRole } from '@/features/users/hooks/use-users'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { UserProfile, UserRole } from '@/types/common'
@@ -105,20 +106,37 @@ export function UsersPage() {
     },
   ]
 
+  const headerActions = useMemo(
+    () => (
+      <Button
+        size="sm"
+        className="h-9 gap-1.5 whitespace-nowrap px-3"
+        onClick={() => {
+          setShowForm((v) => !v)
+          setCreateSuccess(false)
+        }}
+      >
+        <UserPlus size={16} />
+        Novo usuário
+      </Button>
+    ),
+    [],
+  )
+
+  const headerConfig = useMemo(
+    () => ({
+      actions: headerActions,
+    }),
+    [headerActions],
+  )
+
+  useAdminPageHeader(headerConfig)
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <Button className="w-full gap-1.5 sm:w-auto" onClick={() => { setShowForm((v) => !v); setCreateSuccess(false) }}>
-          <UserPlus size={16} />
-          Novo usuário
-        </Button>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+      </p>
 
       {/* Create user form */}
       {showForm && (
