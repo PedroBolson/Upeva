@@ -102,7 +102,7 @@ export function AboutPage() {
             </div>
 
             <motion.div variants={fadeUp} className="flex justify-center lg:justify-end">
-              <div className="group relative w-full max-w-[420px]">
+              <div className="group relative w-full max-w-105">
                 <div
                   aria-hidden="true"
                   className="absolute inset-6 rounded-full bg-primary/12 blur-3xl"
