@@ -1,9 +1,9 @@
-import {createHash} from "crypto";
-import {initializeApp} from "firebase-admin/app";
-import {getAuth} from "firebase-admin/auth";
-import {FieldValue, getFirestore} from "firebase-admin/firestore";
-import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import { createHash } from "crypto";
+import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as functionsV1 from "firebase-functions/v1";
 
 initializeApp();
@@ -36,7 +36,7 @@ function isValidEmail(email: string): boolean {
 async function markEventProcessed(eventId: string): Promise<boolean> {
   const ref = db.collection("_processedEvents").doc(eventId);
   try {
-    await ref.create({processedAt: FieldValue.serverTimestamp()});
+    await ref.create({ processedAt: FieldValue.serverTimestamp() });
     return true; // First time — safe to proceed
   } catch {
     return false; // Already processed — skip
@@ -83,13 +83,13 @@ export const onUserCreated = functionsV1
     });
 
     if (roleToSet) {
-      await adminAuth.setCustomUserClaims(user.uid, {role: roleToSet});
+      await adminAuth.setCustomUserClaims(user.uid, { role: roleToSet });
     }
   });
 
 // ── createUser: admin creates a new staff user ────────────────────────────────
 export const createUser = onCall(
-  {region: "southamerica-east1", maxInstances: 3},
+  { region: "southamerica-east1", maxInstances: 3 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
@@ -101,7 +101,7 @@ export const createUser = onCall(
       throw new HttpsError("permission-denied", "Only admins can create users.");
     }
 
-    const {email, password, displayName, role} = request.data as {
+    const { email, password, displayName, role } = request.data as {
       email: string;
       password: string;
       displayName: string;
@@ -124,10 +124,10 @@ export const createUser = onCall(
       );
     }
 
-    const newUser = await adminAuth.createUser({email, password, displayName});
+    const newUser = await adminAuth.createUser({ email, password, displayName });
 
     // Set Custom Claims before Firestore write so rules are consistent
-    await adminAuth.setCustomUserClaims(newUser.uid, {role});
+    await adminAuth.setCustomUserClaims(newUser.uid, { role });
 
     await db.collection("users").doc(newUser.uid).set({
       uid: newUser.uid,
@@ -138,19 +138,18 @@ export const createUser = onCall(
       createdBy: request.auth.uid,
     });
 
-    return {uid: newUser.uid};
+    return { uid: newUser.uid };
   }
 );
 
 // ── updateUserRole: admin promotes or demotes another user ────────────────────
 export const updateUserRole = onCall(
-  {region: "southamerica-east1", maxInstances: 3},
+  { region: "southamerica-east1", maxInstances: 3 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
     }
 
-    // Melhoria 3: use token claim instead of a Firestore read
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
       throw new HttpsError(
@@ -159,7 +158,7 @@ export const updateUserRole = onCall(
       );
     }
 
-    const {uid, role} = request.data as {uid: string; role: UserRole};
+    const { uid, role } = request.data as { uid: string; role: UserRole };
 
     if (!uid || !isUserRole(role)) {
       throw new HttpsError("invalid-argument", "Invalid arguments.");
@@ -172,14 +171,14 @@ export const updateUserRole = onCall(
     }
 
     // Update Custom Claims first so Auth rules are consistent immediately
-    await adminAuth.setCustomUserClaims(uid, {role});
+    await adminAuth.setCustomUserClaims(uid, { role });
 
     await db.collection("users").doc(uid).update({
       role,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    return {success: true};
+    return { success: true };
   }
 );
 
@@ -187,7 +186,7 @@ export const updateUserRole = onCall(
 // Rate limit: max 5 submissions per email per 24h.
 // Blocks direct client writes so all applications pass through validation.
 export const createApplication = onCall(
-  {region: "southamerica-east1", maxInstances: 10},
+  { region: "southamerica-east1", maxInstances: 10 },
   async (request) => {
     const data = request.data as Record<string, unknown>;
 
@@ -222,20 +221,20 @@ export const createApplication = onCall(
       const snap = await tx.get(rateLimitRef);
 
       if (!snap.exists) {
-        tx.set(rateLimitRef, {count: 1, windowStart: now});
+        tx.set(rateLimitRef, { count: 1, windowStart: now });
         return true;
       }
 
-      const {count, windowStart} = snap.data() as {count: number; windowStart: number};
+      const { count, windowStart } = snap.data() as { count: number; windowStart: number };
 
       if (now - windowStart > windowMs) {
-        tx.set(rateLimitRef, {count: 1, windowStart: now});
+        tx.set(rateLimitRef, { count: 1, windowStart: now });
         return true;
       }
 
       if (count >= 5) return false;
 
-      tx.update(rateLimitRef, {count: FieldValue.increment(1)});
+      tx.update(rateLimitRef, { count: FieldValue.increment(1) });
       return true;
     });
 
@@ -292,7 +291,7 @@ export const createApplication = onCall(
     }
 
     const ref = await db.collection("applications").add(applicationPayload);
-    return {id: ref.id};
+    return { id: ref.id };
   }
 );
 
@@ -300,7 +299,7 @@ export const createApplication = onCall(
 // Called automatically on login when the token has no role claim.
 // Covers existing users who were created before Custom Claims were deployed.
 export const refreshUserClaims = onCall(
-  {region: "southamerica-east1", maxInstances: 5},
+  { region: "southamerica-east1", maxInstances: 5 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
@@ -316,8 +315,8 @@ export const refreshUserClaims = onCall(
       throw new HttpsError("permission-denied", "Invalid user role.");
     }
 
-    await adminAuth.setCustomUserClaims(request.auth.uid, {role});
-    return {role};
+    await adminAuth.setCustomUserClaims(request.auth.uid, { role });
+    return { role };
   }
 );
 
@@ -325,7 +324,7 @@ export const refreshUserClaims = onCall(
 // Melhoria 6: uses count() aggregation queries instead of full collection scans,
 // preventing timeout and memory issues with large collections.
 export const recalibrateCounts = onCall(
-  {region: "southamerica-east1", maxInstances: 3},
+  { region: "southamerica-east1", maxInstances: 3 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
@@ -374,24 +373,24 @@ export const recalibrateCounts = onCall(
       applications: appCounts,
     });
 
-    return {animals: animalCounts, applications: appCounts};
+    return { animals: animalCounts, applications: appCounts };
   }
 );
 
 // ── onApplicationStatusChanged: sync animal status + maintain counts ───────────
 // Melhoria 10: deduplicates retried events using event ID.
 export const onApplicationStatusChanged = onDocumentWritten(
-  {document: "applications/{appId}", region: "southamerica-east1", maxInstances: 5},
+  { document: "applications/{appId}", region: "southamerica-east1", maxInstances: 5 },
   async (event) => {
     // Skip if this event was already processed (at-least-once delivery guard)
     const processed = await markEventProcessed(event.id);
     if (!processed) return;
 
     const before = event.data?.before.data() as
-      | {status: ApplicationStatus; animalId?: string}
+      | { status: ApplicationStatus; animalId?: string }
       | undefined;
     const after = event.data?.after.data() as
-      | {status: ApplicationStatus; animalId?: string}
+      | { status: ApplicationStatus; animalId?: string }
       | undefined;
 
     const countsRef = db.collection("metadata").doc("counts");
@@ -400,14 +399,14 @@ export const onApplicationStatusChanged = onDocumentWritten(
     if (!before && after) {
       // Created
       await countsRef.set(
-        {applications: {[after.status]: FieldValue.increment(1), total: FieldValue.increment(1)}},
-        {merge: true}
+        { applications: { [after.status]: FieldValue.increment(1), total: FieldValue.increment(1) } },
+        { merge: true }
       );
     } else if (before && !after) {
       // Deleted
       await countsRef.set(
-        {applications: {[before.status]: FieldValue.increment(-1), total: FieldValue.increment(-1)}},
-        {merge: true}
+        { applications: { [before.status]: FieldValue.increment(-1), total: FieldValue.increment(-1) } },
+        { merge: true }
       );
     } else if (before && after && before.status !== after.status) {
       // Status changed
@@ -418,7 +417,7 @@ export const onApplicationStatusChanged = onDocumentWritten(
             [after.status]: FieldValue.increment(1),
           },
         },
-        {merge: true}
+        { merge: true }
       );
     }
 
@@ -460,28 +459,28 @@ export const onApplicationStatusChanged = onDocumentWritten(
 // ── onAnimalChanged: maintain metadata/counts.animals ─────────────────────────
 // Melhoria 10: deduplicates retried events using event ID.
 export const onAnimalChanged = onDocumentWritten(
-  {document: "animals/{animalId}", region: "southamerica-east1", maxInstances: 5},
+  { document: "animals/{animalId}", region: "southamerica-east1", maxInstances: 5 },
   async (event) => {
     // Skip if this event was already processed (at-least-once delivery guard)
     const processed = await markEventProcessed(event.id);
     if (!processed) return;
 
-    const before = event.data?.before.data() as {status: AnimalStatus} | undefined;
-    const after = event.data?.after.data() as {status: AnimalStatus} | undefined;
+    const before = event.data?.before.data() as { status: AnimalStatus } | undefined;
+    const after = event.data?.after.data() as { status: AnimalStatus } | undefined;
 
     const countsRef = db.collection("metadata").doc("counts");
 
     if (!before && after) {
       // Created
       await countsRef.set(
-        {animals: {[after.status]: FieldValue.increment(1), total: FieldValue.increment(1)}},
-        {merge: true}
+        { animals: { [after.status]: FieldValue.increment(1), total: FieldValue.increment(1) } },
+        { merge: true }
       );
     } else if (before && !after) {
       // Deleted
       await countsRef.set(
-        {animals: {[before.status]: FieldValue.increment(-1), total: FieldValue.increment(-1)}},
-        {merge: true}
+        { animals: { [before.status]: FieldValue.increment(-1), total: FieldValue.increment(-1) } },
+        { merge: true }
       );
     } else if (before && after && before.status !== after.status) {
       // Status changed
@@ -492,7 +491,7 @@ export const onAnimalChanged = onDocumentWritten(
             [after.status]: FieldValue.increment(1),
           },
         },
-        {merge: true}
+        { merge: true }
       );
     }
   }
