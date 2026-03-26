@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
-import { Button, ThemeToggleButton } from '@/components/ui'
+import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
 import { AdminHeaderProvider } from '@/features/admin/admin-header.provider'
 import { useAdminHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAuth } from '@/features/auth/hooks/use-auth'
@@ -112,20 +112,7 @@ function AdminSidebar({
 
       {/* Footer */}
       <div className="border-t border-border p-3 flex flex-col gap-2">
-        {!collapsed && (
-          <div className="rounded-xl border border-border bg-background/80 px-3 py-2 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                com apoio
-              </span>
-              <img
-                src="/logo.png"
-                alt="Logo da universidade"
-                className="h-8 w-auto object-contain"
-              />
-            </div>
-          </div>
-        )}
+        {!collapsed && <UniversityBadge variant="sidebar" />}
         {!collapsed && user && (
           <div className="px-2 py-1">
             <p className="text-xs font-medium text-foreground truncate">

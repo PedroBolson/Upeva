@@ -3,7 +3,7 @@ import { Outlet, NavLink, Link } from 'react-router-dom'
 import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
-import { Button, ThemeToggleButton } from '@/components/ui'
+import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
 
 const navLinks = [
   { to: '/', label: 'Home', end: true },
@@ -179,14 +179,7 @@ export function PublicLayout() {
             <div className="mt-2 border-t border-border pt-6 grid grid-cols-1 gap-4 text-xs text-muted-foreground sm:grid-cols-[1fr_auto_1fr] sm:items-center">
               <span className="text-left">© {new Date().getFullYear()} Upeva — Feito com amor.</span>
 
-              <div className="flex items-center justify-center gap-3 rounded-full border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground shadow-sm sm:justify-self-center">
-                <span className="font-medium">com apoio de</span>
-                <img
-                  src="/logo.png"
-                  alt="Logo da universidade"
-                  className="h-10 w-auto object-contain"
-                />
-              </div>
+              <UniversityBadge variant="footer" className="sm:justify-self-center" />
 
               <div className="sm:justify-self-end">
                 <Link to="/admin/login" className="hover:text-foreground transition-colors">

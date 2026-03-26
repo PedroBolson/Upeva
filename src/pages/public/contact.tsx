@@ -22,7 +22,7 @@ export function ContactPage() {
           variants={stagger}
           initial="hidden"
           animate="show"
-          className="rounded-[2rem] border border-border bg-card/90 p-6 shadow-xl backdrop-blur sm:p-8"
+          className="rounded-4xl border border-border bg-card/90 p-6 shadow-xl backdrop-blur sm:p-8"
         >
           <motion.div variants={fadeUp} className="flex flex-col items-center text-center">
             <div className="flex h-32 w-32 items-center justify-center rounded-full bg-primary/10 ring-8 ring-background shadow-sm sm:h-36 sm:w-36">

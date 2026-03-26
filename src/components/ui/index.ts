@@ -30,3 +30,6 @@ export { FileUpload } from './file-upload'
 export { DataTable } from './data-table'
 export type { Column } from './data-table'
 export { ResponsiveDataList } from './responsive-data-list'
+
+export { UniversityBadge } from './university-badge'
+export type { UniversityBadgeProps } from './university-badge'
