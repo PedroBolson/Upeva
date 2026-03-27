@@ -56,7 +56,7 @@ export function getStepFields(
     case 2:
       return species === 'dog'
         ? ['preferredSex', 'preferredSize']
-        : ['jointAdoption']
+        : ['preferredSex', 'jointAdoption']
 
     case 3: {
       const fields = ['adultsCount', 'childrenCount']

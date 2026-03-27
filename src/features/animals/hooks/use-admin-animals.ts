@@ -18,7 +18,6 @@ export function useAdminAnimals(status: AnimalStatus | null = null) {
       getAdminAnimalsPaginated(status, (pageParam as DocumentSnapshot | null) ?? null),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
-    staleTime: 1000 * 60 * 2,
   })
 
   const animals = result.data?.pages.flatMap((p) => p.animals) ?? []

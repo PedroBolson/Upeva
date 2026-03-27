@@ -66,19 +66,16 @@ export function useAnimals(filters: AnimalFilters = {}) {
 
 // ── Featured animals for the home page ───────────────────────────────────────
 
-export function useFeaturedAnimals(
-  count: number = 6,
-  strategy: 'latest' | 'random' = 'latest',
-) {
+export function useFeaturedAnimals(count: number = 6) {
   const result = useQuery<Animal[]>({
-    queryKey: ['animals', 'featured', count],
-    queryFn: () => getFeaturedAnimals(count),
+    queryKey: ['animals', 'featured'],
+    queryFn: () => getFeaturedAnimals(50),
     staleTime: 1000 * 60 * 10,
   })
 
   const data = useMemo(
-    () => (strategy === 'random' ? shuffled(result.data ?? []) : (result.data ?? [])),
-    [result.data, strategy],
+    () => shuffled(result.data ?? []).slice(0, count),
+    [result.data, count],
   )
 
   return { ...result, data }

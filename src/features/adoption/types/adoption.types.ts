@@ -18,7 +18,7 @@ export interface AdoptionFormData {
   }
 
   // Step 2: Preferências (species-specific)
-  preferredSex?: 'male' | 'female' | 'any'        // dogs only
+  preferredSex?: 'male' | 'female' | 'any'
   preferredSize?: 'small' | 'medium' | 'large' | 'any'  // dogs only
   jointAdoption?: boolean                           // cats only
 
@@ -66,6 +66,8 @@ export interface AdoptionApplication extends AdoptionFormData {
   id: string
   animalId?: string
   animalName?: string
+  previousAnimalId?: string
+  previousAnimalName?: string
   waitlistEntry?: boolean
   queuePosition?: number
   species: Species

@@ -76,15 +76,15 @@ export async function getAvailableAnimalsPaginated(
 }
 
 /**
- * Fetches the most recent N available animals for the home page featured rail.
- * Uses a dedicated query so it never over-fetches.
+ * Fetches all available animals for the home page featured rail.
+ * No ordering or hard limit — caller shuffles and slices to the desired count.
+ * Capped at poolLimit to bound reads as the catalogue grows.
  */
-export async function getFeaturedAnimals(count: number = 6): Promise<Animal[]> {
+export async function getFeaturedAnimals(poolLimit: number = 50): Promise<Animal[]> {
   const q = query(
     collection(db, 'animals'),
     where('status', 'in', ['available', 'under_review']),
-    orderBy('createdAt', 'desc'),
-    limit(count),
+    limit(poolLimit),
   )
   const snap = await getDocs(q)
   return snap.docs.map((d) => docToAnimal(d.id, d.data()))
@@ -185,7 +185,7 @@ export async function getLinkableAnimalsForApplication(
     where('species', '==', filters.species),
   ]
 
-  if (filters.species === 'dog' && filters.preferredSex && filters.preferredSex !== 'any') {
+  if (filters.preferredSex && filters.preferredSex !== 'any') {
     constraints.push(where('sex', '==', filters.preferredSex))
   }
 

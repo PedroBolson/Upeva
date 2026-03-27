@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { InfiniteData } from '@tanstack/react-query'
-import { getUsersPaginated, createUser, updateUserRole } from '../services/users.service'
+import { getUsersPaginated, createUser, updateUserRole, deleteUser } from '../services/users.service'
 import type { UsersPage, CreateUserPayload } from '../services/users.service'
 import type { DocumentSnapshot } from 'firebase/firestore'
 import type { UserRole } from '@/types/common'
@@ -33,6 +33,14 @@ export function useUpdateUserRole() {
   return useMutation({
     mutationFn: ({ uid, role }: { uid: string; role: UserRole }) =>
       updateUserRole(uid, role),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  })
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (uid: string) => deleteUser(uid),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
   })
 }

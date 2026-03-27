@@ -89,7 +89,25 @@ export function StepPetPreferences({ species }: Props) {
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4">
+        <Controller
+          name="preferredSex"
+          control={control}
+          render={({ field }) => (
+            <RadioGroup
+              name="preferredSex"
+              label="Sexo preferido"
+              options={SEX_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.preferredSex?.message}
+              orientation="horizontal"
+            />
+          )}
+        />
+
+        <div className="border-t border-border" />
+
         <Controller
           name="jointAdoption"
           control={control}

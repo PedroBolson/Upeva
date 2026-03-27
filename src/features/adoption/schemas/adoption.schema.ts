@@ -108,13 +108,14 @@ export function createAdoptionSchema(species: Species, hasSpecificAnimal = false
 
       // Step 2: species-specific
       if (!hasSpecificAnimal) {
+        if (data.preferredSex === undefined)
+          addRequired('preferredSex', 'Selecione uma preferência de sexo')
         if (species === 'dog') {
-          if (data.preferredSex === undefined)
-            addRequired('preferredSex', 'Selecione uma preferência de sexo')
           if (data.preferredSize === undefined)
             addRequired('preferredSize', 'Selecione uma preferência de porte')
-        } else if (data.jointAdoption === undefined) {
-          addRequired('jointAdoption', 'Informe se é adoção conjunta')
+        } else {
+          if (data.jointAdoption === undefined)
+            addRequired('jointAdoption', 'Informe se é adoção conjunta')
         }
       }
 

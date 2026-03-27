@@ -15,7 +15,6 @@ export function useApplications(status: ApplicationStatus | null = null) {
       getApplicationsPaginated(status, (pageParam as DocumentSnapshot | null) ?? null),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
-    staleTime: 1000 * 60 * 2,
   })
 
   const applications = result.data?.pages.flatMap((p) => p.applications) ?? []

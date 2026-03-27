@@ -61,3 +61,8 @@ export async function updateUserRole(uid: string, role: UserRole): Promise<void>
   )
   await fn({ uid, role })
 }
+
+export async function deleteUser(uid: string): Promise<void> {
+  const fn = httpsCallable<{ uid: string }, { success: boolean }>(functions, 'deleteUser')
+  await fn({ uid })
+}

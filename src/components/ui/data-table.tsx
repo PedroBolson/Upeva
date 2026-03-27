@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -19,6 +20,7 @@ interface DataTableProps<T> {
   sortColumn?: string
   sortDir?: 'asc' | 'desc'
   onSort?: (key: string) => void
+  animated?: boolean
 }
 
 export function DataTable<T>({
@@ -31,6 +33,7 @@ export function DataTable<T>({
   sortColumn,
   sortDir,
   onSort,
+  animated = false,
 }: DataTableProps<T>) {
   return (
     <div className={cn('w-full overflow-x-auto rounded-lg border border-border', className)}>
@@ -78,6 +81,36 @@ export function DataTable<T>({
                 {emptyMessage}
               </td>
             </tr>
+          ) : animated ? (
+            <AnimatePresence initial={false}>
+              {data.map((row) => (
+                <motion.tr
+                  key={keyExtractor(row)}
+                  layout="position"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{
+                    opacity: { duration: 0.15 },
+                    layout: { duration: 0.2, ease: 'easeOut' },
+                  }}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={cn(
+                    'transition-colors duration-100',
+                    onRowClick && 'cursor-pointer hover:bg-muted/50',
+                  )}
+                >
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={cn('px-4 py-3 text-foreground', col.className)}
+                    >
+                      {col.cell(row)}
+                    </td>
+                  ))}
+                </motion.tr>
+              ))}
+            </AnimatePresence>
           ) : (
             data.map((row) => (
               <tr

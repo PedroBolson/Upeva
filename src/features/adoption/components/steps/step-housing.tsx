@@ -11,7 +11,6 @@ const HOUSING_OPTIONS_DOG = [
   { value: 'house_no_yard', label: 'Casa sem quintal' },
   { value: 'apartment_with_screens', label: 'Apartamento com telas de proteção' },
   { value: 'apartment_no_screens', label: 'Apartamento sem telas' },
-  { value: 'apartment', label: 'Apartamento' },
 ]
 
 const HOUSING_OPTIONS_CAT = [
@@ -20,7 +19,6 @@ const HOUSING_OPTIONS_CAT = [
   { value: 'house_open_yard', label: 'Casa com quintal aberto' },
   { value: 'house_no_yard', label: 'Casa sem quintal' },
   { value: 'apartment_no_screens', label: 'Apartamento sem telas', description: 'Atenção: risco de fuga' },
-  { value: 'apartment', label: 'Apartamento' },
 ]
 
 const slideDown = {

@@ -36,18 +36,21 @@ export function ApplicationsPage() {
 
   const { data: counts } = useCounts()
 
-  const serverStatus = activeTab === 'all' ? null : activeTab
   const {
-    applications,
+    applications: allApplications,
     hasMore,
     isLoading,
     isFetchingMore,
     error,
     fetchMore,
     refetch,
-  } = useApplications(serverStatus)
+  } = useApplications(null)
 
-  // Unique animal options from already-fetched applications — no extra reads
+  const applications = useMemo(
+    () => activeTab === 'all' ? allApplications : allApplications.filter((a) => a.status === activeTab),
+    [allApplications, activeTab],
+  )
+
   const animalOptions = useMemo(() => {
     const seen = new Set<string>()
     const options: { value: string; label: string }[] = []
@@ -61,7 +64,6 @@ export function ApplicationsPage() {
     return options.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
   }, [applications])
 
-  // Client-side filter by animal name — no extra reads
   const filteredApplications = useMemo(() => {
     if (!animalFilter) return applications
     return applications.filter((a) => a.animalName === animalFilter)
@@ -71,7 +73,10 @@ export function ApplicationsPage() {
     applicant: (a) => a.fullName.toLowerCase(),
     contact: (a) => a.email.toLowerCase(),
     animal: (a) => (a.animalName ?? '').toLowerCase(),
-    queue: (a) => a.queuePosition ?? Number.MAX_SAFE_INTEGER,
+    queue: (a) => {
+      const active = a.status === 'pending' || a.status === 'in_review'
+      return active ? (a.queuePosition ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+    },
     status: (a) => a.status,
     date: (a) => (a.createdAt as Timestamp | undefined)?.seconds ?? 0,
   }
@@ -240,7 +245,7 @@ export function ApplicationsPage() {
       key: 'queue',
       header: 'Posição',
       sortKey: sortKeys.queue,
-      cell: (a) => a.queuePosition
+      cell: (a) => (a.status === 'pending' || a.status === 'in_review') && a.queuePosition
         ? <Badge variant="warning">#{a.queuePosition}º na fila</Badge>
         : <span className="text-xs text-muted-foreground">—</span>,
     },
@@ -315,6 +320,7 @@ export function ApplicationsPage() {
             sortColumn={sortColumn}
             sortDir={sortDir}
             onSort={handleSort}
+            animated
           />
         </Card>
       )}

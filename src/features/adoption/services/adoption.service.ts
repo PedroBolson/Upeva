@@ -106,6 +106,31 @@ export async function getApplicationById(id: string): Promise<AdoptionApplicatio
   return docToApplication(snap.id, snap.data())
 }
 
+export async function getActiveApplicationsForAnimal(
+  animalId: string,
+  excludeId: string,
+): Promise<Pick<AdoptionApplication, 'id' | 'fullName' | 'status' | 'queuePosition'>[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'applications'),
+      where('animalId', '==', animalId),
+      where('status', 'in', ['pending', 'in_review']),
+    ),
+  )
+  return snap.docs
+    .filter((d) => d.id !== excludeId)
+    .map((d) => {
+      const data = d.data()
+      return {
+        id: d.id,
+        fullName: data.fullName as string,
+        status: data.status as ApplicationStatus,
+        queuePosition: data.queuePosition as number | undefined,
+      }
+    })
+    .sort((a, b) => (a.queuePosition ?? 9999) - (b.queuePosition ?? 9999))
+}
+
 export async function updateApplicationReview(
   input: UpdateApplicationReviewInput,
 ): Promise<void> {

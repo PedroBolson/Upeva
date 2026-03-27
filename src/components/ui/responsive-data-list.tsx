@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import { Card } from './card'
 import { DataTable, type Column } from './data-table'
@@ -14,6 +15,7 @@ interface ResponsiveDataListProps<T> {
   sortColumn?: string
   sortDir?: 'asc' | 'desc'
   onSort?: (key: string) => void
+  animated?: boolean
 }
 
 export function ResponsiveDataList<T>({
@@ -28,6 +30,7 @@ export function ResponsiveDataList<T>({
   sortColumn,
   sortDir,
   onSort,
+  animated = false,
 }: ResponsiveDataListProps<T>) {
   if (data.length === 0) {
     return (
@@ -49,15 +52,36 @@ export function ResponsiveDataList<T>({
           sortColumn={sortColumn}
           sortDir={sortDir}
           onSort={onSort}
+          animated={animated}
         />
       </div>
 
       <div className={cn('space-y-3 md:hidden', mobileClassName)}>
-        {data.map((row) => (
-          <div key={keyExtractor(row)}>
-            {renderMobileCard(row)}
-          </div>
-        ))}
+        {animated ? (
+          <AnimatePresence initial={false}>
+            {data.map((row) => (
+              <motion.div
+                key={keyExtractor(row)}
+                layout="position"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{
+                  opacity: { duration: 0.15 },
+                  layout: { duration: 0.2, ease: 'easeOut' },
+                }}
+              >
+                {renderMobileCard(row)}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        ) : (
+          data.map((row) => (
+            <div key={keyExtractor(row)}>
+              {renderMobileCard(row)}
+            </div>
+          ))
+        )}
       </div>
     </div>
   )

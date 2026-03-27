@@ -9,14 +9,14 @@ export function useUpdateApplicationReview() {
   return useMutation({
     mutationFn: (input: UpdateApplicationReviewInput) => updateApplicationReview(input),
     onSuccess: (_, { id }) => {
-      // Invalidate all application list variants (any status filter)
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-      queryClient.invalidateQueries({ queryKey: ['applications', 'recent'] })
       queryClient.invalidateQueries({ queryKey: ['applications', 'detail', id] })
-      // Counts will update via Cloud Function trigger; invalidate after short delay
+      // List and counts delayed to let Firestore triggers (queue recalibration,
+      // counts sync) finish before the frontend refetches
       setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['applications'] })
+        queryClient.invalidateQueries({ queryKey: ['applications', 'recent'] })
         queryClient.invalidateQueries({ queryKey: ['metadata', 'counts'] })
-      }, 2000)
+      }, 2500)
     },
   })
 }

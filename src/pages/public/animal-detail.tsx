@@ -232,10 +232,18 @@ export function AnimalDetailPage() {
           <h2 className="text-xl font-bold text-foreground">
             Animais parecidos com {animal.name}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {similar.map((a) => (
-              <AnimalCard key={a.id} animal={a} />
-            ))}
+          <div className="relative">
+            <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-4 md:overflow-visible md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {similar.map((a) => (
+                <div key={a.id} className="min-w-65 max-w-80 flex-none snap-start md:min-w-0 md:max-w-none">
+                  <AnimalCard animal={a} className="h-full" />
+                </div>
+              ))}
+            </div>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-linear-to-l from-background to-transparent md:hidden"
+            />
           </div>
         </motion.div>
       )}

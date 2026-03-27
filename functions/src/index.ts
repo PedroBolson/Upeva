@@ -71,13 +71,11 @@ function isGeneralInterestApplication(application: ApplicationRecord): boolean {
   if (application.species === "dog") {
     return application.preferredSex !== undefined || application.preferredSize !== undefined;
   }
-  return application.jointAdoption !== undefined;
+  return application.jointAdoption !== undefined || application.preferredSex !== undefined;
 }
 
 function animalMatchesGeneralApplication(application: ApplicationRecord, animal: AnimalRecord): boolean {
   if (application.species !== animal.species) return false;
-
-  if (application.species !== "dog") return true;
 
   if (
     application.preferredSex &&
@@ -88,6 +86,7 @@ function animalMatchesGeneralApplication(application: ApplicationRecord, animal:
   }
 
   if (
+    application.species === "dog" &&
     application.preferredSize &&
     application.preferredSize !== "any" &&
     animal.size !== application.preferredSize
@@ -170,6 +169,44 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
     adoptedApplicationId: FieldValue.delete(),
     adoptedAt: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+async function recalibrateAnimalQueue(animalId: string): Promise<void> {
+  const snap = await db
+    .collection("applications")
+    .where("animalId", "==", animalId)
+    .where("status", "in", ["pending", "in_review"])
+    .get();
+
+  if (snap.empty) return;
+
+  const sorted = snap.docs.slice().sort((a, b) => {
+    const ap = (a.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
+    const bp = (b.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
+    return ap - bp;
+  });
+
+  const batch = db.batch();
+  sorted.forEach((doc, i) => {
+    const queuePosition = i + 1;
+    batch.update(doc.ref, {queuePosition, waitlistEntry: queuePosition > 1});
+  });
+  await batch.commit();
+}
+
+async function appendToAnimalQueue(animalId: string, appId: string): Promise<void> {
+  const snap = await db
+    .collection("applications")
+    .where("animalId", "==", animalId)
+    .where("status", "in", ["pending", "in_review"])
+    .get();
+
+  const activeCount = snap.docs.filter((d) => d.id !== appId).length;
+  const queuePosition = activeCount + 1;
+  await db.collection("applications").doc(appId).update({
+    queuePosition,
+    waitlistEntry: queuePosition > 1,
   });
 }
 
@@ -261,10 +298,16 @@ export const createUser = onCall(
       throw new HttpsError("invalid-argument", "Invalid role.");
     }
     if (password.length < 8) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Password must be at least 8 characters."
-      );
+      throw new HttpsError("invalid-argument", "Senha deve ter ao menos 8 caracteres.");
+    }
+    if (!/[A-Z]/.test(password)) {
+      throw new HttpsError("invalid-argument", "Senha deve conter ao menos uma letra maiúscula.");
+    }
+    if (!/[a-z]/.test(password)) {
+      throw new HttpsError("invalid-argument", "Senha deve conter ao menos uma letra minúscula.");
+    }
+    if (!/[0-9]/.test(password)) {
+      throw new HttpsError("invalid-argument", "Senha deve conter ao menos um número.");
     }
 
     const newUser = await adminAuth.createUser({email, password, displayName});
@@ -586,6 +629,9 @@ export const updateApplicationReview = onCall(
       request.data.adminNotes.trim() : undefined;
     const appRef = db.collection("applications").doc(id.trim());
 
+    let resolvedAnimalId: string | undefined;
+    let resolvedAnimalName: string | undefined;
+
     await db.runTransaction(async (transaction) => {
       const appSnap = await transaction.get(appRef);
       if (!appSnap.exists) {
@@ -715,8 +761,76 @@ export const updateApplicationReview = onCall(
         payload.waitlistEntry = newQueuePosition > 1;
       }
 
+      resolvedAnimalId = nextAnimalId;
+      resolvedAnimalName = nextAnimalName;
       transaction.update(appRef, payload);
     });
+
+    // When approved, convert other active candidates for the same animal to general interest
+    if (status === "approved" && resolvedAnimalId) {
+      const [activeSnap, animalSnap] = await Promise.all([
+        db.collection("applications")
+          .where("animalId", "==", resolvedAnimalId)
+          .where("status", "in", ["pending", "in_review"])
+          .get(),
+        db.collection("animals").doc(resolvedAnimalId).get(),
+      ]);
+      const animal = animalSnap.data() as AnimalRecord | undefined;
+      const others = activeSnap.docs.filter((d) => d.id !== id.trim());
+      if (others.length > 0) {
+        const batch = db.batch();
+        for (const docSnap of others) {
+          const appData = docSnap.data() as ApplicationRecord;
+          const update: Record<string, unknown> = {
+            previousAnimalId: resolvedAnimalId,
+            previousAnimalName: resolvedAnimalName ?? null,
+            animalId: FieldValue.delete(),
+            animalName: FieldValue.delete(),
+            queuePosition: FieldValue.delete(),
+            waitlistEntry: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          if (animal && !appData.preferredSex) {
+            if (animal.sex) update.preferredSex = animal.sex;
+          }
+          if (animal && appData.species === "dog" && !appData.preferredSize) {
+            if (animal.size) update.preferredSize = animal.size;
+          }
+          batch.update(docSnap.ref, update);
+        }
+        await batch.commit();
+      }
+    }
+
+    return {success: true};
+  }
+);
+
+// ── deleteUser: admin removes a staff user from Auth and Firestore ────────────
+export const deleteUser = onCall(
+  {region: "southamerica-east1", maxInstances: 3},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin") {
+      throw new HttpsError("permission-denied", "Only admins can delete users.");
+    }
+
+    const {uid} = request.data as {uid: string};
+
+    if (!uid || typeof uid !== "string") {
+      throw new HttpsError("invalid-argument", "UID inválido.");
+    }
+
+    if (uid === request.auth.uid) {
+      throw new HttpsError("failed-precondition", "Você não pode excluir sua própria conta.");
+    }
+
+    await adminAuth.deleteUser(uid);
+    await db.collection("users").doc(uid).delete();
 
     return {success: true};
   }
@@ -939,6 +1053,28 @@ export const onApplicationStatusChanged = onDocumentWritten(
 
     for (const animalId of affectedAnimalIds) {
       await recomputeAnimalState(animalId);
+    }
+
+    // ── Recalibrate queue positions when the active pool changes ─────────────
+    // Candidate leaves: pending/in_review → rejected/withdrawn
+    // Candidate re-enters: rejected/withdrawn → pending/in_review
+    const activeStatuses: ApplicationStatus[] = ["pending", "in_review"];
+    const inactiveStatuses: ApplicationStatus[] = ["rejected", "withdrawn"];
+    const isLeaving =
+      before?.status !== undefined &&
+      after?.status !== undefined &&
+      activeStatuses.includes(before.status) &&
+      inactiveStatuses.includes(after.status);
+    const isReentering =
+      before?.status !== undefined &&
+      after?.status !== undefined &&
+      inactiveStatuses.includes(before.status) &&
+      activeStatuses.includes(after.status);
+
+    if (isLeaving && after.animalId) {
+      await recalibrateAnimalQueue(after.animalId);
+    } else if (isReentering && after.animalId) {
+      await appendToAnimalQueue(after.animalId, event.params.appId);
     }
   }
 );

@@ -10,7 +10,7 @@ const railItemClassName =
   'min-w-[260px] max-w-[320px] flex-none snap-start md:min-w-0 md:max-w-none'
 
 export function FeaturedAnimalRail() {
-  const { data: featured = [], isLoading, error, refetch } = useFeaturedAnimals(4, 'random')
+  const { data: featured = [], isLoading, error, refetch } = useFeaturedAnimals(4)
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8 w-full">

@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Button } from './button'
 import { Modal } from './modal'
 
@@ -11,6 +12,7 @@ export interface ConfirmModalProps {
   cancelLabel?: string
   variant?: 'danger' | 'warning'
   loading?: boolean
+  children?: React.ReactNode
 }
 
 export function ConfirmModal({
@@ -23,6 +25,7 @@ export function ConfirmModal({
   cancelLabel = 'Cancelar',
   variant = 'danger',
   loading = false,
+  children,
 }: ConfirmModalProps) {
   return (
     <Modal
@@ -41,13 +44,14 @@ export function ConfirmModal({
             variant={variant === 'danger' ? 'danger' : 'default'}
             onClick={onConfirm}
             loading={loading}
+            className="min-w-24"
           >
             {confirmLabel}
           </Button>
         </>
       }
     >
-      <span />
+      {children ?? <span />}
     </Modal>
   )
 }

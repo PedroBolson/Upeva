@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, HeartHandshake, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
+import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { DetailSection, DetailField } from '@/components/ui/detail-view'
 import { Textarea } from '@/components/ui/textarea'
@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { useApplication } from '@/features/adoption/hooks/use-application'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
+import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
@@ -44,7 +45,7 @@ function isGeneralInterestApplication(app: AdoptionApplication): boolean {
   if (app.species === 'dog') {
     return app.preferredSex !== undefined || app.preferredSize !== undefined
   }
-  return app.jointAdoption !== undefined
+  return app.jointAdoption !== undefined || app.preferredSex !== undefined
 }
 
 function buildLinkableAnimalLabel(animal: Animal): string {
@@ -100,7 +101,9 @@ export function ApplicationDetailPage() {
   const [adminNotesDraft, setAdminNotesDraft] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
+  const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false)
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -161,6 +164,15 @@ export function ApplicationDetailPage() {
     [animalOptions, app?.animalName, currentAnimalId],
   )
 
+  const approvalAnimalId = currentStatus === 'approved' ? (app?.animalId ?? currentAnimalId) : null
+
+  const { data: affectedCandidates = [] } = useQuery({
+    queryKey: ['applications', 'active-for-animal', approvalAnimalId, id],
+    queryFn: () => getActiveApplicationsForAnimal(approvalAnimalId!, id!),
+    enabled: Boolean(approvalAnimalId && id),
+    staleTime: 0,
+  })
+
   const needsRelinkConfirmation = Boolean(
     isGeneralInterest &&
     app?.animalId &&
@@ -188,7 +200,14 @@ export function ApplicationDetailPage() {
         onSuccess: () => {
           setSelectedAnimalId(null)
           setSaved(true)
-          setTimeout(() => setSaved(false), 3000)
+          setSavedMessage(
+            currentStatus === 'approved' && affectedCandidates.length > 0
+              ? `Adoção confirmada · ${affectedCandidates.length} candidato${affectedCandidates.length !== 1 ? 's' : ''} convertido${affectedCandidates.length !== 1 ? 's' : ''} para interesse geral`
+              : null,
+          )
+          if (currentStatus !== 'approved' || affectedCandidates.length === 0) {
+            setTimeout(() => setSaved(false), 3000)
+          }
         },
         onError: (mutationError) => {
           setSaveError(getReviewErrorMessage(mutationError))
@@ -200,6 +219,11 @@ export function ApplicationDetailPage() {
   function handleSave() {
     if (isGeneralInterest && currentStatus === 'approved' && !currentAnimalId) {
       setSaveError('Vincule um animal antes de aprovar esta candidatura.')
+      return
+    }
+
+    if (currentStatus === 'approved' && currentAnimalId) {
+      setIsApprovalConfirmOpen(true)
       return
     }
 
@@ -226,12 +250,45 @@ export function ApplicationDetailPage() {
     ? SPECIES_LABELS[app.species]
     : app.species === 'dog'
       ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)} · Porte: ${formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}`
-      : `Adoção conjunta: ${app.jointAdoption === undefined ? '—' : app.jointAdoption ? 'Sim' : 'Não'}`
+      : [
+          app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
+          app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
+        ].filter(Boolean).join(' · ') || '—'
   const whatsAppHref = getWhatsAppHref(app.phone)
   const hasLinkableOptions = animalOptions.length > 0
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <ConfirmModal
+        open={isApprovalConfirmOpen}
+        onClose={() => setIsApprovalConfirmOpen(false)}
+        onConfirm={() => {
+          setIsApprovalConfirmOpen(false)
+          saveReview()
+        }}
+        title="Confirmar adoção?"
+        description={
+          affectedCandidates.length > 0
+            ? `${affectedCandidates.length} candidato${affectedCandidates.length !== 1 ? 's' : ''} aguardando ${app.animalName ?? 'este animal'} ${affectedCandidates.length !== 1 ? 'serão convertidos' : 'será convertido'} para interesse geral:`
+            : `Nenhum outro candidato aguarda ${app.animalName ?? 'este animal'}.`
+        }
+        confirmLabel="Aprovar e converter"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isPending}
+      >
+        {affectedCandidates.length > 0 && (
+          <ul className="mt-1 flex flex-col gap-1.5">
+            {affectedCandidates.map((c) => (
+              <li key={c.id} className="flex items-center gap-2 text-sm text-foreground">
+                <span className="text-muted-foreground">#{c.queuePosition}</span>
+                {c.fullName}
+              </li>
+            ))}
+          </ul>
+        )}
+      </ConfirmModal>
+
       <ConfirmModal
         open={isRelinkConfirmOpen}
         onClose={() => setIsRelinkConfirmOpen(false)}
@@ -265,7 +322,7 @@ export function ApplicationDetailPage() {
                 icon={PawPrint}
                 label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
                 value={animalLabel}
-                helper={animalHelper}
+                helper={app.previousAnimalName ? `Inscreveu-se para ${app.previousAnimalName} · adotado` : animalHelper}
               />
               <SummaryCard
                 icon={Mail}
@@ -340,7 +397,10 @@ export function ApplicationDetailPage() {
                       />
                     </>
                   ) : (
-                    <DetailField label="Adoção conjunta" value={<Bool value={app.jointAdoption} />} />
+                    <>
+                      <DetailField label="Sexo preferido" value={formatPreferenceLabel(app.preferredSex, SEX_LABELS)} />
+                      <DetailField label="Adoção conjunta" value={<Bool value={app.jointAdoption} />} />
+                    </>
                   )}
                 </DetailSection>
               )}
@@ -492,7 +552,9 @@ export function ApplicationDetailPage() {
                 <span className="text-sm text-danger">{saveError}</span>
               )}
               {saved && (
-                <span className="text-sm text-success">Salvo com sucesso.</span>
+                <span className="text-sm text-success">
+                  {savedMessage ?? 'Salvo com sucesso.'}
+                </span>
               )}
             </div>
           </Card>
@@ -519,6 +581,17 @@ export function ApplicationDetailPage() {
                       : '—'
                 }
               />
+              {app.previousAnimalName && (
+                <SidebarField
+                  label="Animal original"
+                  value={
+                    <span className="inline-flex items-center gap-1.5">
+                      <Info size={12} className="shrink-0 text-muted-foreground" />
+                      {app.previousAnimalName} · adotado
+                    </span>
+                  }
+                />
+              )}
               <SidebarField label="Recebida em" value={formattedCreatedAt} />
               <SidebarField label="Última atualização" value={formattedUpdatedAt} />
               <SidebarField label="Contato" value={`${app.email} · ${app.phone}`} />

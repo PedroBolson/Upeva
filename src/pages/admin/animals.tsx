@@ -29,6 +29,8 @@ export function AdminAnimalsPage() {
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<AnimalStatus | ''>('')
   const [search, setSearch] = useState('')
+  const [sortColumn, setSortColumn] = useState<string>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [animalToDelete, setAnimalToDelete] = useState<Animal | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
@@ -39,7 +41,6 @@ export function AdminAnimalsPage() {
   const { mutate: updateStatus } = useUpdateAnimalStatus()
   const { mutate: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
 
-  // Client-side name search on the current (server-filtered) set
   const filtered = useMemo(
     () =>
       search
@@ -47,6 +48,35 @@ export function AdminAnimalsPage() {
         : allAnimals,
     [allAnimals, search],
   )
+
+  const sortKeys: Record<string, (a: Animal) => string | number> = {
+    name: (a) => a.name.toLowerCase(),
+    profile: (a) => `${a.species}${a.sex}${a.size ?? ''}`,
+    status: (a) => a.status,
+  }
+
+  function handleSort(key: string) {
+    if (sortColumn === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortColumn(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sorted = useMemo(() => {
+    const fn = sortKeys[sortColumn]
+    if (!fn) return filtered
+    return [...filtered].sort((a, b) => {
+      const av = fn(a)
+      const bv = fn(b)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sortColumn, sortDir])
+
   const activeStatusLabel = statusFilter ? STATUS_LABELS[statusFilter] : 'Todos os status'
   const searchTerm = search.trim()
 
@@ -156,9 +186,10 @@ export function AdminAnimalsPage() {
 
   const columns: Column<Animal>[] = [
     {
-      key: 'animal',
-      header: 'Animal',
+      key: 'name',
+      header: 'Nome',
       className: 'min-w-[16rem]',
+      sortKey: sortKeys.name,
       cell: (a) => (
         <div className="flex items-center gap-3">
           <AnimalPhotoThumbnail src={a.photos[a.coverPhotoIndex]} alt={a.name} size="sm" />
@@ -176,6 +207,7 @@ export function AdminAnimalsPage() {
       key: 'profile',
       header: 'Perfil',
       className: 'min-w-[11rem]',
+      sortKey: sortKeys.profile,
       cell: (a) => (
         <div>
           <p className="text-sm text-foreground">
@@ -194,6 +226,7 @@ export function AdminAnimalsPage() {
     {
       key: 'status',
       header: 'Status',
+      sortKey: sortKeys.status,
       cell: (a) => <AnimalStatusBadge status={a.status} />,
     },
     {
@@ -285,7 +318,7 @@ export function AdminAnimalsPage() {
 
           <ResponsiveDataList
             columns={columns}
-            data={filtered}
+            data={sorted}
             keyExtractor={(a) => a.id}
             onRowClick={(a) => navigate(`/admin/animais/${a.id}/editar`)}
             renderMobileCard={(animal) => (
@@ -300,6 +333,10 @@ export function AdminAnimalsPage() {
               />
             )}
             emptyMessage="Nenhum animal encontrado com esses filtros."
+            sortColumn={sortColumn}
+            sortDir={sortDir}
+            onSort={handleSort}
+            animated
           />
         </Card>
       )}
