@@ -3,6 +3,7 @@ import { queryClient } from '@/lib/query-client'
 import type { AnimalStatus } from '@/types/common'
 import {
   createAnimal,
+  deleteAnimal,
   updateAnimal,
   updateAnimalStatus,
   type AnimalPayload,
@@ -36,6 +37,14 @@ export function useUpdateAnimalStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: AnimalStatus }) =>
       updateAnimalStatus(id, status),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAnimal() {
+  return useMutation({
+    mutationFn: ({ id, photoUrls }: { id: string; photoUrls?: string[] }) =>
+      deleteAnimal(id, photoUrls),
     onSuccess: invalidate,
   })
 }

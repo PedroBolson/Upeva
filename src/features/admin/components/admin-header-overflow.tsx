@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { cn } from '@/utils/cn'
@@ -23,19 +23,21 @@ export function AdminHeaderOverflow({
   const close = () => setOpen(false)
   const content = typeof children === 'function' ? children(close) : children
 
-  // Após abrir, corrige posição se sair do viewport
-  useLayoutEffect(() => {
-    if (!open || !dropdownRef.current) {
+  const setDropdownRef = useCallback((node: HTMLDivElement | null) => {
+    dropdownRef.current = node
+
+    if (!node) {
       setOffset(0)
       return
     }
-    const rect = dropdownRef.current.getBoundingClientRect()
+
+    const rect = node.getBoundingClientRect()
     const overflowRight = rect.right - (window.innerWidth - 8)
     const overflowLeft = 8 - rect.left
     if (overflowRight > 0) setOffset(-overflowRight)
     else if (overflowLeft > 0) setOffset(overflowLeft)
     else setOffset(0)
-  }, [open])
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -85,7 +87,7 @@ export function AdminHeaderOverflow({
 
       {open && (
         <div
-          ref={dropdownRef}
+          ref={setDropdownRef}
           role="menu"
           style={offset !== 0 ? { transform: `translateX(${offset}px)` } : undefined}
           className="absolute left-0 top-[calc(100%+0.5rem)] z-30 w-[min(22rem,calc(100vw-1rem))] rounded-xl border border-border bg-card p-3 shadow-xl"

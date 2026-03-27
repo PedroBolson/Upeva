@@ -3,53 +3,32 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { Animal } from '@/features/animals/types/animal.types'
 import { createAdoptionSchema } from '../schemas/adoption.schema'
-import { getStepFields, TOTAL_STEPS } from '../config/form-config'
+import { getLogicalStep, getStepFields, getStepLabels } from '../config/form-config'
 import { createApplication } from '../services/adoption.service'
 import type { AdoptionFormData } from '../types/adoption.types'
-
-const DRAFT_KEY = (animalId: string) => `upeva-adoption-${animalId}`
-
-function loadDraft(animalId: string): Partial<AdoptionFormData> {
-  try {
-    const raw = sessionStorage.getItem(DRAFT_KEY(animalId))
-    return raw ? (JSON.parse(raw) as Partial<AdoptionFormData>) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveDraft(animalId: string, data: Partial<AdoptionFormData>) {
-  try {
-    sessionStorage.setItem(DRAFT_KEY(animalId), JSON.stringify(data))
-  } catch {
-    // sessionStorage not available
-  }
-}
-
-function clearDraft(animalId: string) {
-  try {
-    sessionStorage.removeItem(DRAFT_KEY(animalId))
-  } catch {
-    // noop
-  }
-}
 
 export function useAdoptionForm(animal: Animal) {
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
-
-  const draft = loadDraft(animal.id)
+  const hasSpecificAnimal = Boolean(animal.id)
+  const steps = getStepLabels(hasSpecificAnimal)
+  const totalSteps = steps.length
+  const logicalStep = getLogicalStep(currentStep, hasSpecificAnimal)
 
   const form = useForm<AdoptionFormData>({
-    // Cast needed: z.coerce.number() in Zod v4 infers output as `unknown` in the resolver type
-    resolver: zodResolver(createAdoptionSchema(animal.species)) as unknown as Resolver<AdoptionFormData>,
+    mode: 'onBlur',
+    resolver: zodResolver(
+      createAdoptionSchema(animal.species, hasSpecificAnimal),
+    ) as unknown as Resolver<AdoptionFormData>,
     defaultValues: {
       fullName: '',
+      cpf: '',
       email: '',
       birthDate: '',
       phone: '',
+      cep: '',
       address: {
         street: '',
         number: '',
@@ -65,37 +44,32 @@ export function useAdoptionForm(animal: Animal) {
       escapeResponse: '',
       cannotKeepResponse: '',
       comments: '',
-      ...draft,
     },
-    mode: 'onTouched',
   })
 
   const goNext = useCallback(async () => {
     const values = form.getValues()
-    const fields = getStepFields(currentStep, animal.species, values)
+    const currentLogicalStep = getLogicalStep(currentStep, hasSpecificAnimal)
+    const fields = getStepFields(currentLogicalStep, animal.species, values)
     const valid = await form.trigger(fields as Parameters<typeof form.trigger>[0])
     if (!valid) return
-
-    saveDraft(animal.id, form.getValues())
-    setCurrentStep((s) => Math.min(s + 1, TOTAL_STEPS))
-  }, [currentStep, animal.species, animal.id, form])
+    setCurrentStep((s) => Math.min(s + 1, totalSteps))
+  }, [currentStep, animal.species, form, hasSpecificAnimal, totalSteps])
 
   const goBack = useCallback(() => {
-    saveDraft(animal.id, form.getValues())
     setCurrentStep((s) => Math.max(s - 1, 1))
-  }, [animal.id, form])
+  }, [])
 
   const handleSubmit = form.handleSubmit(async (data) => {
     setIsSubmitting(true)
     setSubmitError(null)
     try {
       const id = await createApplication(
-        animal.id,
-        animal.name,
+        hasSpecificAnimal ? animal.id : undefined,
+        hasSpecificAnimal ? animal.name : undefined,
         animal.species,
         data,
       )
-      clearDraft(animal.id)
       setApplicationId(id)
     } catch {
       setSubmitError(
@@ -108,15 +82,18 @@ export function useAdoptionForm(animal: Animal) {
 
   return {
     form,
+    steps,
     currentStep,
-    totalSteps: TOTAL_STEPS,
-    isLastStep: currentStep === TOTAL_STEPS,
+    logicalStep,
+    totalSteps,
+    isLastStep: currentStep === totalSteps,
     goNext,
     goBack,
     handleSubmit,
     isSubmitting,
     submitError,
     applicationId,
+    hasSpecificAnimal,
     isSuccess: applicationId !== null,
   }
 }

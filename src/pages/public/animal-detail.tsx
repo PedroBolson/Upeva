@@ -16,20 +16,44 @@ import {
   ErrorState,
 } from '@/components/ui'
 import { AnimalPhotoGallery } from '@/features/animals/components/animal-photo-gallery'
+import { AnimalCard } from '@/features/animals/components/animal-card'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
+import { useSimilarAnimals } from '@/features/animals/hooks/use-animals'
 import {
   SPECIES_LABELS,
   SEX_LABELS,
   SIZE_LABELS,
 } from '@/features/animals/types/animal.types'
+import type { Animal } from '@/features/animals/types/animal.types'
+import type { Species } from '@/types/common'
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } }
+const SPECIES_PLURAL_LABELS: Record<Species, string> = {
+  dog: 'cachorros',
+  cat: 'gatos',
+}
+const SEX_PLURAL_LABELS = {
+  male: 'machos',
+  female: 'fêmeas',
+} as const
+
+function getSimilarAnimalsDescription(animal: Animal): string {
+  const speciesLabel = SPECIES_PLURAL_LABELS[animal.species]
+  const sexLabel = SEX_PLURAL_LABELS[animal.sex]
+
+  if (animal.species === 'dog' && animal.size) {
+    return `Priorizamos ${speciesLabel} ${sexLabel} de porte ${SIZE_LABELS[animal.size].toLowerCase()} para manter as sugestões mais próximas do perfil deste animal.`
+  }
+
+  return `Priorizamos ${speciesLabel} ${sexLabel} para manter as sugestões mais próximas do perfil deste animal.`
+}
 
 export function AnimalDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
+  const { data: similar = [] } = useSimilarAnimals(animal ?? undefined)
 
   if (isLoading) return <DetailSkeleton />
 
@@ -57,7 +81,8 @@ export function AnimalDetailPage() {
 
   if (!animal) return null
 
-  const canAdopt = animal.status === 'available'
+  const isWaitlistOpen = animal.status === 'under_review'
+  const canApply = animal.status === 'available' || isWaitlistOpen
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
@@ -166,7 +191,7 @@ export function AnimalDetailPage() {
 
           {/* CTA */}
           <motion.div variants={fadeUp} className="flex flex-col gap-3 pt-2">
-            {canAdopt ? (
+            {animal.status === 'available' ? (
               <>
                 <Link to={`/adotar/${animal.id}`}>
                   <Button size="lg" className="w-full gap-2">
@@ -178,6 +203,21 @@ export function AnimalDetailPage() {
                   Preencha o formulário e nossa equipe entrará em contato.
                 </p>
               </>
+            ) : isWaitlistOpen && canApply ? (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
+                <p className="text-sm text-foreground">
+                  {animal.name} já está em processo de adoção.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Você ainda pode enviar sua candidatura para entrar na fila de espera.
+                </p>
+                <Link to={`/adotar/${animal.id}`} className="mt-4 inline-block">
+                  <Button className="gap-2">
+                    <Heart size={16} />
+                    Entrar na fila de espera
+                  </Button>
+                </Link>
+              </div>
             ) : (
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <p className="text-sm text-muted-foreground">
@@ -194,6 +234,28 @@ export function AnimalDetailPage() {
           </motion.div>
         </motion.div>
       </motion.div>
+
+      {/* Similar animals */}
+      {similar.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className="mt-16 flex flex-col gap-6"
+        >
+          <h2 className="text-xl font-bold text-foreground">
+            Animais parecidos com {animal.name}
+          </h2>
+          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            {getSimilarAnimalsDescription(animal)}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {similar.map((a) => (
+              <AnimalCard key={a.id} animal={a} />
+            ))}
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }

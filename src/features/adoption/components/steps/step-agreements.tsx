@@ -84,7 +84,7 @@ export function StepAgreements() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/30 p-5">
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
         {TERMS.map(({ name, label }) => (
           <Controller
             key={name}
@@ -107,12 +107,14 @@ export function StepAgreements() {
         ))}
       </div>
 
-      <Textarea
-        label="Observações adicionais"
-        placeholder="Alguma informação extra que queira compartilhar? (opcional)"
-        rows={3}
-        {...register('comments')}
-      />
+      <div className="rounded-xl border border-border bg-card p-4">
+        <Textarea
+          label="Observações adicionais"
+          placeholder="Alguma informação extra que queira compartilhar? (opcional)"
+          rows={3}
+          {...register('comments')}
+        />
+      </div>
     </div>
   )
 }

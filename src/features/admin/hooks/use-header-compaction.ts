@@ -5,20 +5,24 @@ export function useHeaderCompaction() {
   const [measureEl, setMeasureEl] = useState<HTMLDivElement | null>(null)
   const [isCompact, setIsCompact] = useState(false)
 
-  const containerRef = useCallback((el: HTMLDivElement | null) => setContainerEl(el), [])
-  const measureRef = useCallback((el: HTMLDivElement | null) => setMeasureEl(el), [])
+  const containerRef = useCallback((el: HTMLDivElement | null) => {
+    setContainerEl(el)
+    if (!el) setIsCompact(false)
+  }, [])
+
+  const measureRef = useCallback((el: HTMLDivElement | null) => {
+    setMeasureEl(el)
+    if (!el) setIsCompact(false)
+  }, [])
 
   useLayoutEffect(() => {
-    if (!containerEl || !measureEl) {
-      setIsCompact(false)
-      return
-    }
+    if (!containerEl || !measureEl) return
 
     const update = () => {
       setIsCompact(measureEl.scrollWidth > containerEl.clientWidth + 1)
     }
 
-    update()
+    const frameId = requestAnimationFrame(update)
 
     const resizeObserver = new ResizeObserver(update)
     resizeObserver.observe(containerEl)
@@ -35,6 +39,7 @@ export function useHeaderCompaction() {
     window.addEventListener('resize', update)
 
     return () => {
+      cancelAnimationFrame(frameId)
       resizeObserver.disconnect()
       mutationObserver.disconnect()
       window.removeEventListener('resize', update)

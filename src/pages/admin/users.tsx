@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { UserPlus, Shield, Eye } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
 import { Button, Card, Input, Select, ResponsiveDataList } from '@/components/ui'
@@ -52,6 +52,7 @@ export function UsersPage() {
   const [createSuccess, setCreateSuccess] = useState(false)
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -103,7 +104,7 @@ export function UsersPage() {
               options={ROLE_OPTIONS}
               value={u.role}
               disabled={isSelf}
-              onChange={(e) => updateRole({ uid: u.uid, role: e.target.value as UserRole })}
+              onChange={(value) => updateRole({ uid: u.uid, role: value as UserRole })}
               className="text-xs py-1"
               aria-label="Alterar papel"
             />
@@ -143,55 +144,62 @@ export function UsersPage() {
   useAdminPageHeader(headerConfig)
 
   return (
-    <div className="flex flex-col gap-6">
-      <p className="text-sm text-muted-foreground">
-        {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
-      </p>
-
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       {/* Create user form */}
       {showForm && (
-        <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-foreground">Criar novo usuário</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Nome completo"
-              error={errors.displayName?.message}
-              required
-              {...register('displayName')}
-            />
-            <Input
-              label="Email"
-              type="email"
-              error={errors.email?.message}
-              required
-              {...register('email')}
-            />
-            <Input
-              label="Senha inicial"
-              type="password"
-              error={errors.password?.message}
-              required
-              {...register('password')}
-            />
-            <Select
-              label="Papel"
-              options={ROLE_OPTIONS}
-              required
-              {...register('role')}
-            />
-            {createError && (
-              <p className="sm:col-span-2 text-sm text-danger">{createError}</p>
-            )}
-            <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row">
-              <Button type="submit" loading={creating} className="w-full sm:w-auto">
-                Criar usuário
-              </Button>
-              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setShowForm(false)}>
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        </div>
+        <Card className="border-border/80 p-5">
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-semibold text-foreground">Criar novo usuário</h2>
+            <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Nome completo"
+                error={errors.displayName?.message}
+                required
+                {...register('displayName')}
+              />
+              <Input
+                label="Email"
+                type="email"
+                error={errors.email?.message}
+                required
+                {...register('email')}
+              />
+              <Input
+                label="Senha inicial"
+                type="password"
+                error={errors.password?.message}
+                required
+                {...register('password')}
+              />
+              <Controller
+                name="role"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="Papel"
+                    options={ROLE_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    required
+                    error={errors.role?.message}
+                  />
+                )}
+              />
+              {createError && (
+                <p role="alert" className="sm:col-span-2 text-sm text-danger">{createError}</p>
+              )}
+              <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row">
+                <Button type="submit" loading={creating} className="w-full sm:w-auto">
+                  Criar usuário
+                </Button>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setShowForm(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </Card>
       )}
 
       {createSuccess && (
@@ -210,24 +218,34 @@ export function UsersPage() {
 
       {!isLoading && !error && (
         <>
-          <ResponsiveDataList
-            columns={columns}
-            data={users}
-            keyExtractor={(u) => u.uid}
-            renderMobileCard={(user) => (
-              <UserMobileCard
-                user={user}
-                isSelf={user.uid === currentUser?.uid}
-                onRoleChange={(role) => updateRole({ uid: user.uid, role })}
-              />
-            )}
-            emptyMessage="Nenhum usuário encontrado."
-          />
+          <Card className="border-border/80 p-5">
+            <div className="mb-4 flex flex-col gap-1">
+              <p className="text-sm font-medium text-foreground">
+                {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            <ResponsiveDataList
+              columns={columns}
+              data={users}
+              keyExtractor={(u) => u.uid}
+              renderMobileCard={(user) => (
+                <UserMobileCard
+                  user={user}
+                  isSelf={user.uid === currentUser?.uid}
+                  onRoleChange={(role) => updateRole({ uid: user.uid, role })}
+                />
+              )}
+              emptyMessage="Nenhum usuário encontrado."
+            />
+          </Card>
+
           {hasNextPage && (
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"
                 size="sm"
+                className="min-w-40"
                 loading={isFetchingNextPage}
                 onClick={() => fetchNextPage()}
               >
@@ -280,7 +298,7 @@ function UserMobileCard({
           options={ROLE_OPTIONS}
           value={user.role}
           disabled={isSelf}
-          onChange={(e) => onRoleChange(e.target.value as UserRole)}
+          onChange={(value) => onRoleChange(value as UserRole)}
           className="h-11 rounded-xl text-sm"
           aria-label={`Alterar papel de ${user.displayName}`}
         />

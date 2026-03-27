@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Settings,
   LogOut,
+  ExternalLink,
   Menu,
   X,
   ChevronLeft,
@@ -121,21 +122,39 @@ function AdminSidebar({
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         )}
-        <button
-          onClick={() => {
-            onNavigate?.()
-            onLogout()
-          }}
-          className={cn(
-            'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground',
-            'hover:text-danger hover:bg-danger/10 transition-colors duration-150 w-full',
-            collapsed && 'justify-center px-2',
-          )}
-          title={collapsed ? 'Sair' : undefined}
-        >
-          <LogOut size={16} className="shrink-0" />
-          {!collapsed && <span>Sair</span>}
-        </button>
+        <div className={cn('flex gap-2', collapsed ? 'flex-col' : 'grid grid-cols-2')}>
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onNavigate?.()}
+            className={cn(
+              'flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground',
+              'transition-colors duration-150 hover:border-primary/30 hover:bg-accent/60 hover:text-foreground',
+              collapsed ? 'justify-center px-2' : 'justify-center',
+            )}
+            title={collapsed ? 'Abrir site' : undefined}
+            aria-label="Abrir site principal em nova aba"
+          >
+            <ExternalLink size={16} className="shrink-0" />
+            {!collapsed && <span>Abrir site</span>}
+          </a>
+          <button
+            onClick={() => {
+              onNavigate?.()
+              onLogout()
+            }}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground',
+              'hover:text-danger hover:bg-danger/10 transition-colors duration-150 w-full',
+              collapsed ? 'justify-center px-2' : 'justify-center',
+            )}
+            title={collapsed ? 'Sair' : undefined}
+          >
+            <LogOut size={16} className="shrink-0" />
+            {!collapsed && <span>Sair</span>}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -163,6 +182,12 @@ function AdminLayoutContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"
+      >
+        Ir para o conteúdo
+      </a>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex h-full shrink-0">
         <AdminSidebar
@@ -241,7 +266,7 @@ function AdminLayoutContent() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main id="main-content" className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
             <motion.div
               key={location.pathname}

@@ -26,6 +26,12 @@ export function PublicLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"
+      >
+        Ir para o conteúdo
+      </a>
       <header
         className={cn(
           'sticky top-0 z-40 w-full transition-all duration-200',
@@ -138,7 +144,7 @@ export function PublicLayout() {
         </AnimatePresence>
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         <Outlet />
       </main>
 

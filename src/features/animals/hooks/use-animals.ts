@@ -3,6 +3,7 @@ import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-qu
 import {
   getAvailableAnimalsPaginated,
   getFeaturedAnimals,
+  getSimilarAnimals,
   type AnimalPage,
 } from '../services/animals.service'
 import type { Animal, AnimalFilters } from '../types/animal.types'
@@ -81,6 +82,15 @@ export function useFeaturedAnimals(
   )
 
   return { ...result, data }
+}
+
+export function useSimilarAnimals(animal: Animal | undefined) {
+  return useQuery<Animal[]>({
+    queryKey: ['animals', 'similar', animal?.id, animal?.species, animal?.sex, animal?.size],
+    queryFn: () => getSimilarAnimals(animal!, 4),
+    enabled: Boolean(animal),
+    staleTime: 1000 * 60 * 5,
+  })
 }
 
 function shuffled<T>(arr: T[]): T[] {

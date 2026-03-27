@@ -28,42 +28,49 @@ export function StepLifestyle({ species }: Props) {
         </p>
       </div>
 
-      <Textarea
-        label="Por que você quer adotar?"
-        placeholder="Conte um pouco sobre sua motivação e o que espera da convivência com o animal..."
-        error={errors.adoptionReason?.message}
-        required
-        {...register('adoptionReason')}
-      />
-
-      <Input
-        label="Quantas horas por dia alguém fica em casa?"
-        type="number"
-        min={0}
-        max={24}
-        error={errors.hoursHomePeoplePerDay?.message}
-        hint="Considere a soma de todos os moradores."
-        required
-        {...register('hoursHomePeoplePerDay')}
-      />
-
-      {species === 'cat' && (
-        <Controller
-          name="isGift"
-          control={control}
-          render={({ field }) => (
-            <RadioGroup
-              name="isGift"
-              label="Esta adoção é um presente para outra pessoa?"
-              options={YES_NO_OPTIONS}
-              value={field.value === undefined ? '' : String(field.value)}
-              onChange={(v) => field.onChange(v === 'true')}
-              error={errors.isGift?.message}
-              hint="Adoções como presente não são recomendadas. Caso sim, entraremos em contato."
-            />
-          )}
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <Textarea
+          label="Por que você quer adotar?"
+          placeholder="Conte um pouco sobre sua motivação e o que espera da convivência com o animal..."
+          error={errors.adoptionReason?.message}
+          required
+          {...register('adoptionReason')}
         />
-      )}
+
+        <div className="border-t border-border" />
+
+        <Input
+          label="Horas por dia que alguém fica em casa"
+          type="number"
+          min={0}
+          max={24}
+          error={errors.hoursHomePeoplePerDay?.message}
+          hint="Considere a soma de todos os moradores."
+          required
+          {...register('hoursHomePeoplePerDay')}
+        />
+
+        {species === 'cat' && (
+          <>
+            <div className="border-t border-border" />
+            <Controller
+              name="isGift"
+              control={control}
+              render={({ field }) => (
+                <RadioGroup
+                  name="isGift"
+                  label="Esta adoção é um presente para outra pessoa?"
+                  options={YES_NO_OPTIONS}
+                  value={field.value === undefined ? '' : String(field.value)}
+                  onChange={(v) => field.onChange(v === 'true')}
+                  error={errors.isGift?.message}
+                  hint="Adoções como presente não são recomendadas. Caso sim, entraremos em contato."
+                />
+              )}
+            />
+          </>
+        )}
+      </div>
     </div>
   )
 }

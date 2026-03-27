@@ -8,18 +8,29 @@ export const YES_NO_OPTIONS: RadioOption[] = [
   { value: 'false', label: 'Não' },
 ]
 
-export const STEP_LABELS: Step[] = [
-  { id: 1, title: 'Identificação' },
-  { id: 2, title: 'Preferências' },
-  { id: 3, title: 'Família' },
-  { id: 4, title: 'Estilo de vida' },
-  { id: 5, title: 'Moradia' },
-  { id: 6, title: 'Histórico' },
-  { id: 7, title: 'Compromisso' },
-  { id: 8, title: 'Termos' },
+const ALL_STEP_TITLES = [
+  'Identificação',
+  'Preferências',
+  'Família',
+  'Estilo de vida',
+  'Moradia',
+  'Histórico',
+  'Compromisso',
+  'Termos',
 ]
 
-export const TOTAL_STEPS = STEP_LABELS.length
+export function getStepLabels(hasSpecificAnimal: boolean): Step[] {
+  const titles = hasSpecificAnimal
+    ? ALL_STEP_TITLES.filter((_, index) => index !== 1)
+    : ALL_STEP_TITLES
+
+  return titles.map((title, index) => ({ id: index + 1, title }))
+}
+
+export function getLogicalStep(step: number, hasSpecificAnimal: boolean): number {
+  if (!hasSpecificAnimal) return step
+  return step >= 2 ? step + 1 : step
+}
 
 export function getStepFields(
   step: number,
@@ -30,9 +41,11 @@ export function getStepFields(
     case 1:
       return [
         'fullName',
+        'cpf',
         'email',
         'birthDate',
         'phone',
+        'cep',
         'address.street',
         'address.number',
         'address.city',

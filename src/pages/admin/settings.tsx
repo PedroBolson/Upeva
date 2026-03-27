@@ -117,7 +117,7 @@ export function SettingsPage() {
               required
             />
             {nameMessage && (
-              <p className={`text-sm ${nameMessage.ok ? 'text-success' : 'text-danger'}`}>
+              <p role={nameMessage.ok ? 'status' : 'alert'} className={`text-sm ${nameMessage.ok ? 'text-success' : 'text-danger'}`}>
                 {nameMessage.text}
               </p>
             )}
@@ -153,9 +153,9 @@ export function SettingsPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
-            {passError && <p className="text-sm text-danger">{passError}</p>}
+            {passError && <p role="alert" className="text-sm text-danger">{passError}</p>}
             {passMessage && (
-              <p className={`text-sm ${passMessage.ok ? 'text-success' : 'text-danger'}`}>
+              <p role={passMessage.ok ? 'status' : 'alert'} className={`text-sm ${passMessage.ok ? 'text-success' : 'text-danger'}`}>
                 {passMessage.text}
               </p>
             )}
@@ -176,7 +176,7 @@ export function SettingsPage() {
               </p>
             </div>
             {recalibrateMessage && (
-              <p className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
+              <p role={recalibrateMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
                 {recalibrateMessage.text}
               </p>
             )}

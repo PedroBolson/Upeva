@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ImagePlus, X, AlertCircle } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { ConfirmModal } from './confirm-modal'
 
 interface FileUploadProps {
   label?: string
@@ -31,11 +32,22 @@ export function FileUpload({
 }: FileUploadProps) {
   const [dragOver, setDragOver] = useState(false)
   const [sizeError, setSizeError] = useState<string | null>(null)
+  const [removeIndex, setRemoveIndex] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const capacityReached = multiple && value.length >= maxFiles
+  const isDisabled = disabled || capacityReached
 
   const addFiles = useCallback(
     (incoming: File[]) => {
       setSizeError(null)
+      if (incoming.length === 0) {
+        setSizeError('Adicione apenas imagens PNG, JPG ou WEBP.')
+        return
+      }
+      if (multiple && value.length + incoming.length > maxFiles) {
+        setSizeError(`Você pode adicionar no máximo ${maxFiles} foto${maxFiles !== 1 ? 's' : ''}.`)
+        return
+      }
       const oversized = incoming.find((f) => f.size > maxSizeBytes)
       if (oversized) {
         setSizeError(`"${oversized.name}" excede o tamanho máximo de ${Math.round(maxSizeBytes / 1024 / 1024)}MB.`)
@@ -58,7 +70,7 @@ export function FileUpload({
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
-    if (disabled) return
+    if (isDisabled) return
     const files = Array.from(e.dataTransfer.files).filter((f) =>
       f.type.startsWith('image/'),
     )
@@ -68,6 +80,12 @@ export function FileUpload({
   function removeFile(index: number) {
     const updated = value.filter((_, i) => i !== index)
     onChange?.(updated)
+  }
+
+  function confirmRemoveFile() {
+    if (removeIndex === null) return
+    removeFile(removeIndex)
+    setRemoveIndex(null)
   }
 
   const previews = useMemo(() => value.map((f) => URL.createObjectURL(f)), [value])
@@ -80,37 +98,70 @@ export function FileUpload({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
+      <ConfirmModal
+        open={removeIndex !== null}
+        onClose={() => setRemoveIndex(null)}
+        onConfirm={confirmRemoveFile}
+        title="Remover foto?"
+        description="Essa imagem será removida da seleção atual."
+        confirmLabel="Remover foto"
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
+
       {label && (
         <span className="text-sm font-medium text-foreground">{label}</span>
       )}
 
       <div
         role="button"
-        tabIndex={disabled ? -1 : 0}
+        tabIndex={isDisabled ? -1 : 0}
         aria-label="Área de upload de imagens"
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (!isDisabled) setDragOver(true)
+        }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => !disabled && inputRef.current?.click()}
-        onKeyDown={(e) => e.key === 'Enter' && !disabled && inputRef.current?.click()}
+        onClick={() => !isDisabled && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) {
+            e.preventDefault()
+            inputRef.current?.click()
+          }
+        }}
         className={cn(
           'flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed',
           'cursor-pointer p-8 transition-colors duration-150 text-center',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          dragOver && !disabled
+          dragOver && !isDisabled
             ? 'border-primary bg-accent'
             : 'border-border hover:border-primary hover:bg-accent',
-          disabled && 'cursor-not-allowed opacity-50',
+          isDisabled && 'cursor-not-allowed opacity-50',
           activeError && 'border-danger',
         )}
       >
         <ImagePlus className="text-muted-foreground" size={28} strokeWidth={1.5} />
         <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-primary">Clique para selecionar</span> ou arraste aqui
+          {dragOver && !isDisabled ? (
+            <span className="font-medium text-primary">Solte as imagens aqui</span>
+          ) : capacityReached ? (
+            <span className="font-medium text-foreground">Limite de fotos atingido</span>
+          ) : (
+            <>
+              <span className="font-medium text-primary">Clique para selecionar</span> ou arraste aqui
+            </>
+          )}
         </p>
         <p className="text-xs text-muted-foreground">
-          PNG, JPG, WEBP até {Math.round(maxSizeBytes / 1024 / 1024)}MB
-          {multiple && maxFiles && ` · máximo ${maxFiles} fotos`}
+          {capacityReached ? (
+            `Remova uma foto para adicionar outra.`
+          ) : (
+            <>
+              PNG, JPG, WEBP até {Math.round(maxSizeBytes / 1024 / 1024)}MB
+              {multiple && maxFiles && ` · máximo ${maxFiles} fotos`}
+            </>
+          )}
         </p>
       </div>
 
@@ -119,7 +170,7 @@ export function FileUpload({
         type="file"
         accept={accept}
         multiple={multiple}
-        disabled={disabled}
+        disabled={isDisabled}
         onChange={handleInput}
         className="sr-only"
         aria-hidden="true"
@@ -144,7 +195,10 @@ export function FileUpload({
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-end bg-linear-to-t from-foreground/80 via-foreground/45 to-transparent p-2">
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); removeFile(i) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setRemoveIndex(i)
+                  }}
                   aria-label={`Remover foto ${i + 1}`}
                   className={cn(
                     'inline-flex h-9 w-9 items-center justify-center rounded-full',

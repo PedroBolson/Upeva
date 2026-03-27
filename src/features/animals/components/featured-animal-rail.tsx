@@ -68,12 +68,19 @@ export function FeaturedAnimalRail() {
         )}
 
         {!isLoading && !error && featured.length > 0 && (
-          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-4 md:overflow-visible md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {featured.map((animal) => (
-              <div key={animal.id} className={railItemClassName}>
-                <AnimalCard animal={animal} className="h-full" />
-              </div>
-            ))}
+          <div className="relative">
+            <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-4 md:overflow-visible md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {featured.map((animal) => (
+                <div key={animal.id} className={railItemClassName}>
+                  <AnimalCard animal={animal} className="h-full" />
+                </div>
+              ))}
+            </div>
+            {/* Scroll hint gradient — mobile only */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-linear-to-l from-background to-transparent md:hidden"
+            />
           </div>
         )}
       </motion.div>

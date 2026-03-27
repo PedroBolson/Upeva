@@ -11,7 +11,6 @@ export const animalSchema = z.object({
   neutered: z.boolean().default(false),
   specialNeeds: z.string().optional(),
   status: z.enum(['available', 'under_review', 'adopted', 'archived'] as const),
-  vaccinesText: z.string().optional(), // newline-separated, converted to array on submit
 })
 
 export type AnimalFormData = z.infer<typeof animalSchema>

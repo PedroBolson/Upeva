@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ImageOff, ArrowRight } from 'lucide-react'
@@ -20,13 +20,9 @@ export function AnimalCard({ animal, className }: AnimalCardProps) {
   // useLayoutEffect runs synchronously before paint, so if the image is complete
   // (cached), we set fromCache=true and the card skips its entry animation entirely
   // — no opacity-0 flash, no fake-reload feel.
-  const imgRef = useRef<HTMLImageElement>(null)
   const [fromCache, setFromCache] = useState(false)
-
-  useLayoutEffect(() => {
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
-      setFromCache(true)
-    }
+  const setImageRef = useCallback((node: HTMLImageElement | null) => {
+    setFromCache(Boolean(node?.complete && node.naturalWidth > 0))
   }, [])
 
   return (
@@ -51,7 +47,7 @@ export function AnimalCard({ animal, className }: AnimalCardProps) {
       >
         {coverPhoto ? (
           <img
-            ref={imgRef}
+            ref={setImageRef}
             src={coverPhoto}
             alt={animal.name}
             loading="lazy"

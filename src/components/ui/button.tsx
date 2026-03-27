@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { cn } from '@/utils/cn'
 
 type Variant = 'default' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'link' | 'inverted'
-type Size = 'sm' | 'md' | 'lg' | 'icon'
+type Size = 'xs' | 'sm' | 'md' | 'lg' | 'icon'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
@@ -28,6 +28,7 @@ const variantClasses: Record<Variant, string> = {
 }
 
 const sizeClasses: Record<Size, string> = {
+  xs:   'h-9 px-3 text-xs gap-1.5',
   sm:   'h-8 px-3 text-xs gap-1.5',
   md:   'h-10 px-4 text-sm gap-2',
   lg:   'h-12 px-6 text-base gap-2',

@@ -70,6 +70,15 @@ export function AnimalsPage() {
           />
         </motion.div>
 
+        {/* Anúncio acessível de resultados para leitores de tela */}
+        <span aria-live="polite" aria-atomic="true" className="sr-only">
+          {!isLoading && !error && !isFiltering
+            ? animals.length === 0
+              ? 'Nenhum animal encontrado para os filtros selecionados.'
+              : `${animals.length} animal${animals.length !== 1 ? 'is' : ''} encontrado${animals.length !== 1 ? 's' : ''}.`
+            : ''}
+        </span>
+
         {/* Grid — skeleton during initial load */}
         {isLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -126,28 +135,30 @@ export function AnimalsPage() {
         )}
 
         {/* Load more */}
-        {!isLoading && !error && (hasMore || isFetchingMore) && (
+        {!isLoading && !error && animals.length > 0 && (
           <div className="flex flex-col items-center gap-2">
-            {total > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Mostrando {total} animal{total !== 1 ? 'is' : ''}
-              </p>
+            <p className="text-sm text-muted-foreground">
+              {hasMore || isFetchingMore
+                ? `Exibindo ${total} animal${total !== 1 ? 'is' : ''} — há mais para carregar`
+                : `${total} animal${total !== 1 ? 'is' : ''} encontrado${total !== 1 ? 's' : ''}`}
+            </p>
+            {(hasMore || isFetchingMore) && (
+              <Button
+                variant="outline"
+                onClick={() => fetchMore()}
+                disabled={isFetchingMore}
+                className="min-w-40"
+              >
+                {isFetchingMore ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner size="sm" />
+                    Carregando…
+                  </span>
+                ) : (
+                  'Carregar mais'
+                )}
+              </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={() => fetchMore()}
-              disabled={isFetchingMore}
-              className="min-w-40"
-            >
-              {isFetchingMore ? (
-                <span className="flex items-center gap-2">
-                  <Spinner size="sm" />
-                  Carregando…
-                </span>
-              ) : (
-                'Carregar mais'
-              )}
-            </Button>
           </div>
         )}
       </div>

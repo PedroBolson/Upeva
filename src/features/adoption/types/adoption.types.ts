@@ -3,9 +3,11 @@ import type { Timestamp, Species, HousingType, ApplicationStatus } from '@/types
 export interface AdoptionFormData {
   // Step 1: Identificação
   fullName: string
+  cpf: string
   email: string
   birthDate: string
   phone: string
+  cep: string
   address: {
     street: string
     number: string
@@ -61,8 +63,8 @@ export interface AdoptionFormData {
 
 export interface AdoptionApplication extends AdoptionFormData {
   id: string
-  animalId: string
-  animalName: string
+  animalId?: string
+  animalName?: string
   species: Species
   status: ApplicationStatus
   adminNotes?: string

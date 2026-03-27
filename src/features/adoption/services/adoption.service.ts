@@ -41,8 +41,8 @@ function docToApplication(id: string, data: Record<string, unknown>): AdoptionAp
  * Direct client writes to the applications collection are blocked in rules.
  */
 export async function createApplication(
-  animalId: string,
-  animalName: string,
+  animalId: string | undefined,
+  animalName: string | undefined,
   species: Species,
   data: AdoptionFormData,
 ): Promise<string> {
@@ -50,7 +50,12 @@ export async function createApplication(
     functions,
     'createApplication',
   )
-  const result = await fn({ ...data, animalId, animalName, species })
+  const result = await fn({
+    ...data,
+    species,
+    ...(animalId ? { animalId } : {}),
+    ...(animalName ? { animalName } : {}),
+  })
   return result.data.id
 }
 

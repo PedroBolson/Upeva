@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -33,7 +34,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           className={cn(
             'w-full rounded-md border border-input bg-background text-foreground',
             'px-3 py-2 text-sm placeholder:text-muted-foreground',
-            'min-h-24 resize-y',
+            'min-h-24 resize-none',
             'transition-colors duration-150',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring',
             'disabled:cursor-not-allowed disabled:opacity-50',
@@ -43,16 +44,34 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
 
-        {error && (
-          <p id={`${inputId}-error`} role="alert" className="text-xs text-danger">
-            {error}
-          </p>
-        )}
-        {hint && !error && (
-          <p id={`${inputId}-hint`} className="text-xs text-muted-foreground">
-            {hint}
-          </p>
-        )}
+        <AnimatePresence initial={false}>
+          {error ? (
+            <motion.p
+              key="error"
+              id={`${inputId}-error`}
+              role="alert"
+              initial={{ opacity: 0, height: 0, marginTop: -4 }}
+              animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
+              exit={{ opacity: 0, height: 0, marginTop: -4 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="overflow-hidden text-xs text-danger"
+            >
+              {error}
+            </motion.p>
+          ) : hint ? (
+            <motion.p
+              key="hint"
+              id={`${inputId}-hint`}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="overflow-hidden text-xs text-muted-foreground"
+            >
+              {hint}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
       </div>
     )
   },

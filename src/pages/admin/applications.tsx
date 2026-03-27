@@ -9,20 +9,22 @@ import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useCounts } from '@/features/admin/hooks/use-counts'
 import { useApplications } from '@/features/adoption/hooks/use-applications'
+import { APPLICATION_STATUS_TABS } from '@/features/adoption/config/application-status-options'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
 import { cn } from '@/utils/cn'
 
-const STATUS_TABS: Array<{ value: ApplicationStatus | 'all'; label: string }> = [
-  { value: 'all', label: 'Todas' },
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'in_review', label: 'Em análise' },
-  { value: 'approved', label: 'Aprovadas' },
-  { value: 'rejected', label: 'Rejeitadas' },
-  { value: 'withdrawn', label: 'Retiradas' },
-]
+function getApplicationSubject(application: AdoptionApplication) {
+  return application.animalId ? application.animalName ?? 'Animal vinculado' : 'Interesse geral'
+}
+
+function getApplicationSubjectMeta(application: AdoptionApplication) {
+  return application.animalId
+    ? SPECIES_LABELS[application.species]
+    : `Adoção geral · ${SPECIES_LABELS[application.species]}`
+}
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
@@ -55,12 +57,18 @@ export function ApplicationsPage() {
     return base
   }, [counts])
 
+  const activeTabLabel = useMemo(
+    () => APPLICATION_STATUS_TABS.find((tab) => tab.value === activeTab)?.label ?? 'Todas',
+    [activeTab],
+  )
+
   const tabButtons = useMemo(
     () =>
-      STATUS_TABS.map(({ value, label }) => (
+      APPLICATION_STATUS_TABS.map(({ value, label }) => (
         <button
           key={value}
           onClick={() => setActiveTab(value)}
+          aria-current={activeTab === value ? 'true' : undefined}
           className={cn(
             'shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors',
             activeTab === value
@@ -103,7 +111,7 @@ export function ApplicationsPage() {
           >
             {(close) => (
               <div className="grid gap-2">
-                {STATUS_TABS.map(({ value, label }) => (
+                {APPLICATION_STATUS_TABS.map(({ value, label }) => (
                   <Button
                     key={value}
                     type="button"
@@ -147,7 +155,17 @@ export function ApplicationsPage() {
       cell: (a) => (
         <div>
           <p className="font-medium text-foreground">{a.fullName}</p>
-          <p className="text-xs text-muted-foreground">{a.email}</p>
+          <p className="text-xs text-muted-foreground">{a.cpf}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'contact',
+      header: 'Contato',
+      cell: (a) => (
+        <div>
+          <p className="text-sm text-foreground">{a.email}</p>
+          <p className="text-xs text-muted-foreground">{a.phone}</p>
         </div>
       ),
     },
@@ -156,8 +174,8 @@ export function ApplicationsPage() {
       header: 'Animal',
       cell: (a) => (
         <div>
-          <p className="text-foreground">{a.animalName}</p>
-          <p className="text-xs text-muted-foreground">{SPECIES_LABELS[a.species]}</p>
+          <p className="text-foreground">{getApplicationSubject(a)}</p>
+          <p className="text-xs text-muted-foreground">{getApplicationSubjectMeta(a)}</p>
         </div>
       ),
     },
@@ -178,11 +196,7 @@ export function ApplicationsPage() {
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <p className="text-sm text-muted-foreground">
-        {applications.length} candidatura{applications.length !== 1 ? 's' : ''} carregada{applications.length !== 1 ? 's' : ''}
-      </p>
-
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       {isLoading && (
         <div className="flex justify-center py-16">
           <Spinner />
@@ -197,19 +211,30 @@ export function ApplicationsPage() {
       )}
 
       {!isLoading && !error && (
-        <ResponsiveDataList
-          columns={columns}
-          data={applications}
-          keyExtractor={(a) => a.id}
-          onRowClick={(a) => navigate(`/admin/candidaturas/${a.id}`)}
-          renderMobileCard={(application) => (
-            <ApplicationMobileCard
-              application={application}
-              onOpen={() => navigate(`/admin/candidaturas/${application.id}`)}
-            />
-          )}
-          emptyMessage="Nenhuma candidatura encontrada."
-        />
+        <Card className="border-border/80 p-5">
+          <div className="mb-4 flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">
+              {applications.length} candidatura{applications.length !== 1 ? 's' : ''} carregada{applications.length !== 1 ? 's' : ''}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
+            </p>
+          </div>
+
+          <ResponsiveDataList
+            columns={columns}
+            data={applications}
+            keyExtractor={(a) => a.id}
+            onRowClick={(a) => navigate(`/admin/candidaturas/${a.id}`)}
+            renderMobileCard={(application) => (
+              <ApplicationMobileCard
+                application={application}
+                onOpen={() => navigate(`/admin/candidaturas/${application.id}`)}
+              />
+            )}
+            emptyMessage="Nenhuma candidatura encontrada."
+          />
+        </Card>
       )}
 
       {/* Load more */}
@@ -275,10 +300,10 @@ function ApplicationMobileCard({
               Animal
             </p>
             <p className="mt-1 text-sm text-foreground">
-              {application.animalName}
+              {getApplicationSubject(application)}
             </p>
             <p className="text-xs text-muted-foreground">
-              {SPECIES_LABELS[application.species]}
+              {getApplicationSubjectMeta(application)}
             </p>
           </div>
 

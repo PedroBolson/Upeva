@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import { Controller, useFormContext } from 'react-hook-form'
 import { RadioGroup } from '@/components/ui/radio-group'
 import type { Species } from '@/types/common'
@@ -22,6 +23,14 @@ const HOUSING_OPTIONS_CAT = [
   { value: 'apartment', label: 'Apartamento' },
 ]
 
+const slideDown = {
+  initial: { opacity: 0, height: 0 },
+  animate: { opacity: 1, height: 'auto' },
+  exit: { opacity: 0, height: 0 },
+}
+
+const slideTransition = { duration: 0.25, ease: 'easeInOut' as const }
+
 interface Props {
   species: Species
 }
@@ -44,55 +53,65 @@ export function StepHousing({ species }: Props) {
         </p>
       </div>
 
-      <Controller
-        name="housingType"
-        control={control}
-        render={({ field }) => (
-          <RadioGroup
-            name="housingType"
-            label="Qual é o tipo da sua moradia?"
-            options={species === 'cat' ? HOUSING_OPTIONS_CAT : HOUSING_OPTIONS_DOG}
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.housingType?.message}
-          />
-        )}
-      />
-
-      <Controller
-        name="isRented"
-        control={control}
-        render={({ field }) => (
-          <RadioGroup
-            name="isRented"
-            label="O imóvel é alugado?"
-            options={YES_NO_OPTIONS}
-            value={field.value === undefined ? '' : String(field.value)}
-            onChange={(v) => field.onChange(v === 'true')}
-            error={errors.isRented?.message}
-            orientation="horizontal"
-          />
-        )}
-      />
-
-      {isRented === true && (
+      <div className="rounded-xl border border-border bg-card p-4">
         <Controller
-          name="landlordAllowsPets"
+          name="housingType"
           control={control}
           render={({ field }) => (
             <RadioGroup
-              name="landlordAllowsPets"
-              label="O proprietário permite animais de estimação?"
+              name="housingType"
+              label="Tipo de moradia"
+              options={species === 'cat' ? HOUSING_OPTIONS_CAT : HOUSING_OPTIONS_DOG}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.housingType?.message}
+            />
+          )}
+        />
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <Controller
+          name="isRented"
+          control={control}
+          render={({ field }) => (
+            <RadioGroup
+              name="isRented"
+              label="O imóvel é alugado?"
               options={YES_NO_OPTIONS}
               value={field.value === undefined ? '' : String(field.value)}
               onChange={(v) => field.onChange(v === 'true')}
-              error={errors.landlordAllowsPets?.message}
-              hint="É necessário ter autorização para garantir que o animal não precise ser devolvido."
+              error={errors.isRented?.message}
               orientation="horizontal"
             />
           )}
         />
-      )}
+
+        <AnimatePresence initial={false}>
+          {isRented === true && (
+            <motion.div {...slideDown} transition={slideTransition} style={{ overflow: 'hidden' }}>
+              <div className="border-t border-border pt-4">
+                <Controller
+                  name="landlordAllowsPets"
+                  control={control}
+                  render={({ field }) => (
+                    <RadioGroup
+                      name="landlordAllowsPets"
+                      label="O proprietário permite animais de estimação?"
+                      options={YES_NO_OPTIONS}
+                      value={field.value === undefined ? '' : String(field.value)}
+                      onChange={(v) => field.onChange(v === 'true')}
+                      error={errors.landlordAllowsPets?.message}
+                      hint="É necessário ter autorização para garantir que o animal não precise ser devolvido."
+                      orientation="horizontal"
+                    />
+                  )}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

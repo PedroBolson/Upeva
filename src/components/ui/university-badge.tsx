@@ -113,7 +113,7 @@ export function UniversityBadge({ variant = 'footer', className }: UniversityBad
           >
             <div
               className={cn(
-                'absolute top-full h-3 w-3 -translate-y-[7px] rotate-45 border-b border-r border-border bg-card',
+                'absolute top-full h-3 w-3 -translate-y-1.75 rotate-45 border-b border-r border-border bg-card',
                 variant === 'footer' ? 'left-1/2 -translate-x-1/2' : 'left-6',
               )}
             />

@@ -1,12 +1,14 @@
+import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { FormProvider } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { Link, useBlocker } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CheckCircle, Loader2, Send } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Stepper } from '@/components/ui/stepper'
 import type { Animal } from '@/features/animals/types/animal.types'
+import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { useAdoptionForm } from '../hooks/use-adoption-form'
-import { STEP_LABELS } from '../config/form-config'
 import { StepIdentification } from './steps/step-identification'
 import { StepPetPreferences } from './steps/step-pet-preferences'
 import { StepHousehold } from './steps/step-household'
@@ -23,7 +25,9 @@ interface Props {
 export function AdoptionForm({ animal }: Props) {
   const {
     form,
+    steps,
     currentStep,
+    logicalStep,
     totalSteps,
     isLastStep,
     goNext,
@@ -31,8 +35,28 @@ export function AdoptionForm({ animal }: Props) {
     handleSubmit,
     isSubmitting,
     submitError,
+    hasSpecificAnimal,
     isSuccess,
   } = useAdoptionForm(animal)
+
+  const isDirty = form.formState.isDirty
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && !isSuccess && currentLocation.pathname !== nextLocation.pathname,
+  )
+
+  useEffect(() => {
+    if (!isDirty || isSuccess) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty, isSuccess])
 
   if (isSuccess) {
     return (
@@ -49,9 +73,22 @@ export function AdoptionForm({ animal }: Props) {
             Candidatura enviada!
           </h2>
           <p className="text-muted-foreground">
-            Recebemos sua candidatura para adotar{' '}
-            <strong className="text-foreground">{animal.name}</strong>. Nossa
-            equipe vai analisar e entrar em contato em até 5 dias úteis.
+            {hasSpecificAnimal ? (
+              <>
+                Recebemos sua candidatura para adotar{' '}
+                <strong className="text-foreground">{animal.name}</strong>. Nossa
+                equipe vai analisar e entrar em contato em até 5 dias úteis.
+              </>
+            ) : (
+              <>
+                Recebemos sua candidatura para adoção de{' '}
+                <strong className="text-foreground">
+                  {SPECIES_LABELS[animal.species].toLowerCase()}
+                </strong>
+                . Nossa equipe vai analisar seu perfil e entrar em contato em até
+                5 dias úteis.
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-3 justify-center">
@@ -67,10 +104,21 @@ export function AdoptionForm({ animal }: Props) {
   }
 
   return (
+    <>
+    <ConfirmModal
+      open={blocker.state === 'blocked'}
+      onClose={() => blocker.reset?.()}
+      onConfirm={() => blocker.proceed?.()}
+      title="Sair do formulário?"
+      description="Você tem informações preenchidas que serão perdidas se sair agora."
+      confirmLabel="Sair mesmo assim"
+      cancelLabel="Continuar preenchendo"
+      variant="warning"
+    />
     <FormProvider {...form}>
       <form onSubmit={handleSubmit} noValidate>
         <div className="flex flex-col gap-8">
-          <Stepper steps={STEP_LABELS} currentStep={currentStep} />
+          <Stepper steps={steps} currentStep={currentStep} />
 
           <AnimatePresence mode="wait">
             <motion.div
@@ -80,22 +128,22 @@ export function AdoptionForm({ animal }: Props) {
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2 }}
             >
-              {currentStep === 1 && <StepIdentification />}
-              {currentStep === 2 && (
+              {logicalStep === 1 && <StepIdentification />}
+              {logicalStep === 2 && (
                 <StepPetPreferences species={animal.species} />
               )}
-              {currentStep === 3 && <StepHousehold />}
-              {currentStep === 4 && (
+              {logicalStep === 3 && <StepHousehold />}
+              {logicalStep === 4 && (
                 <StepLifestyle species={animal.species} />
               )}
-              {currentStep === 5 && (
+              {logicalStep === 5 && (
                 <StepHousing species={animal.species} />
               )}
-              {currentStep === 6 && (
+              {logicalStep === 6 && (
                 <StepPetHistory species={animal.species} />
               )}
-              {currentStep === 7 && <StepResponsibility />}
-              {currentStep === 8 && <StepAgreements />}
+              {logicalStep === 7 && <StepResponsibility />}
+              {logicalStep === 8 && <StepAgreements />}
             </motion.div>
           </AnimatePresence>
 
@@ -154,5 +202,6 @@ export function AdoptionForm({ animal }: Props) {
         </div>
       </form>
     </FormProvider>
+    </>
   )
 }

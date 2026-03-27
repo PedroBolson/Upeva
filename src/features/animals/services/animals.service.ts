@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -15,6 +16,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { deleteAnimalPhoto } from './animal-storage.service'
 import type { AnimalStatus } from '@/types/common'
 import type { Animal, AnimalFilters } from '../types/animal.types'
 
@@ -87,6 +89,81 @@ export async function getFeaturedAnimals(count: number = 6): Promise<Animal[]> {
   return snap.docs.map((d) => docToAnimal(d.id, d.data()))
 }
 
+type SimilarAnimalSeed = Pick<Animal, 'id' | 'species' | 'sex' | 'size'>
+
+async function getAvailableAnimalsByFilters(
+  filters: Pick<AnimalFilters, 'species' | 'sex' | 'size'>,
+  count: number,
+): Promise<Animal[]> {
+  const constraints: QueryConstraint[] = [where('status', '==', 'available')]
+
+  if (filters.species) constraints.push(where('species', '==', filters.species))
+  if (filters.sex) constraints.push(where('sex', '==', filters.sex))
+  if (filters.size) constraints.push(where('size', '==', filters.size))
+
+  constraints.push(orderBy('createdAt', 'desc'))
+  constraints.push(limit(count))
+
+  const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
+  return snap.docs.map((d) => docToAnimal(d.id, d.data()))
+}
+
+function buildSimilarQueryPlan(
+  animal: SimilarAnimalSeed,
+): Array<Pick<AnimalFilters, 'species' | 'sex' | 'size'>> {
+  const plan: Array<Pick<AnimalFilters, 'species' | 'sex' | 'size'>> = []
+
+  if (animal.species === 'dog' && animal.size) {
+    plan.push({
+      species: animal.species,
+      sex: animal.sex,
+      size: animal.size,
+    })
+  }
+
+  plan.push({ species: animal.species, sex: animal.sex })
+  plan.push({ species: animal.species })
+
+  const seen = new Set<string>()
+  return plan.filter((filters) => {
+    const key = JSON.stringify(filters)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
+ * Fetches up to `count` similar available animals, prioritizing:
+ * 1. same species + same sex + same size (dogs only)
+ * 2. same species + same sex
+ * 3. same species
+ */
+export async function getSimilarAnimals(
+  animal: SimilarAnimalSeed,
+  count: number = 4,
+): Promise<Animal[]> {
+  const matches: Animal[] = []
+  const seenIds = new Set<string>([animal.id])
+  const fetchLimit = Math.max(count * 2, 8)
+
+  for (const filters of buildSimilarQueryPlan(animal)) {
+    if (matches.length >= count) break
+
+    const candidates = await getAvailableAnimalsByFilters(filters, fetchLimit)
+    for (const candidate of candidates) {
+      if (seenIds.has(candidate.id)) continue
+
+      seenIds.add(candidate.id)
+      matches.push(candidate)
+
+      if (matches.length >= count) break
+    }
+  }
+
+  return matches
+}
+
 export async function getAnimalById(id: string): Promise<Animal | null> {
   const snap = await getDoc(doc(db, 'animals', id))
   if (!snap.exists()) return null
@@ -142,3 +219,16 @@ export async function updateAnimalStatus(id: string, status: AnimalStatus): Prom
   await updateDoc(doc(db, 'animals', id), { status, updatedAt: serverTimestamp() })
 }
 
+export async function deleteAnimal(id: string, photoUrls: string[] = []): Promise<void> {
+  const linkedApplications = await getDocs(
+    query(collection(db, 'applications'), where('animalId', '==', id), limit(1)),
+  )
+
+  if (!linkedApplications.empty) {
+    throw new Error('linked-applications')
+  }
+
+  await Promise.all(photoUrls.map(deleteAnimalPhoto))
+
+  await deleteDoc(doc(db, 'animals', id))
+}

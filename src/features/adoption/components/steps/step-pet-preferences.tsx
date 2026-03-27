@@ -39,37 +39,41 @@ export function StepPetPreferences({ species }: Props) {
           </p>
         </div>
 
-        <Controller
-          name="preferredSex"
-          control={control}
-          render={({ field }) => (
-            <RadioGroup
-              name="preferredSex"
-              label="Sexo preferido"
-              options={SEX_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.preferredSex?.message}
-              orientation="horizontal"
-            />
-          )}
-        />
+        <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4">
+          <Controller
+            name="preferredSex"
+            control={control}
+            render={({ field }) => (
+              <RadioGroup
+                name="preferredSex"
+                label="Sexo preferido"
+                options={SEX_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.preferredSex?.message}
+                orientation="horizontal"
+              />
+            )}
+          />
 
-        <Controller
-          name="preferredSize"
-          control={control}
-          render={({ field }) => (
-            <RadioGroup
-              name="preferredSize"
-              label="Porte preferido"
-              options={SIZE_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.preferredSize?.message}
-              orientation="horizontal"
-            />
-          )}
-        />
+          <div className="border-t border-border" />
+
+          <Controller
+            name="preferredSize"
+            control={control}
+            render={({ field }) => (
+              <RadioGroup
+                name="preferredSize"
+                label="Porte preferido"
+                options={SIZE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.preferredSize?.message}
+                orientation="horizontal"
+              />
+            )}
+          />
+        </div>
       </div>
     )
   }
@@ -85,21 +89,23 @@ export function StepPetPreferences({ species }: Props) {
         </p>
       </div>
 
-      <Controller
-        name="jointAdoption"
-        control={control}
-        render={({ field }) => (
-          <RadioGroup
-            name="jointAdoption"
-            label="Você gostaria de adotar dois gatos juntos?"
-            options={YES_NO_OPTIONS}
-            value={field.value === undefined ? '' : String(field.value)}
-            onChange={(v) => field.onChange(v === 'true')}
-            error={errors.jointAdoption?.message}
-            hint="Gatos se adaptam melhor em duplas, especialmente filhotes."
-          />
-        )}
-      />
+      <div className="rounded-xl border border-border bg-card p-4">
+        <Controller
+          name="jointAdoption"
+          control={control}
+          render={({ field }) => (
+            <RadioGroup
+              name="jointAdoption"
+              label="Você gostaria de adotar dois gatos juntos?"
+              options={YES_NO_OPTIONS}
+              value={field.value === undefined ? '' : String(field.value)}
+              onChange={(v) => field.onChange(v === 'true')}
+              error={errors.jointAdoption?.message}
+              hint="Gatos se adaptam melhor em duplas, especialmente filhotes."
+            />
+          )}
+        />
+      </div>
     </div>
   )
 }

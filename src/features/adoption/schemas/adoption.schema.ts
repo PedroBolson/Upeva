@@ -10,14 +10,20 @@ const HOUSING_TYPES = [
   'apartment',
 ] as const
 
-export function createAdoptionSchema(species: Species) {
+export function createAdoptionSchema(species: Species, hasSpecificAnimal = false) {
   return z
     .object({
       // Step 1
       fullName: z.string().min(3, 'Nome deve ter ao menos 3 caracteres'),
+      cpf: z
+        .string()
+        .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, 'CPF inválido (ex: 000.000.000-00)'),
       email: z.string().email('E-mail inválido'),
       birthDate: z.string().min(1, 'Informe a data de nascimento'),
-      phone: z.string().min(10, 'Telefone inválido'),
+      phone: z
+        .string()
+        .regex(/^\(\d{2}\)\s\d{5}-\d{4}$/, 'Telefone inválido (ex: (11) 99999-9999)'),
+      cep: z.string().regex(/^\d{5}-\d{3}$/, 'CEP inválido (ex: 00000-000)'),
       address: z.object({
         street: z.string().min(1, 'Informe a rua'),
         number: z.string().min(1, 'Informe o número'),
@@ -100,14 +106,15 @@ export function createAdoptionSchema(species: Species) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [path] })
 
       // Step 2: species-specific
-      if (species === 'dog') {
-        if (data.preferredSex === undefined)
-          addRequired('preferredSex', 'Selecione uma preferência de sexo')
-        if (data.preferredSize === undefined)
-          addRequired('preferredSize', 'Selecione uma preferência de porte')
-      } else {
-        if (data.jointAdoption === undefined)
+      if (!hasSpecificAnimal) {
+        if (species === 'dog') {
+          if (data.preferredSex === undefined)
+            addRequired('preferredSex', 'Selecione uma preferência de sexo')
+          if (data.preferredSize === undefined)
+            addRequired('preferredSize', 'Selecione uma preferência de porte')
+        } else if (data.jointAdoption === undefined) {
           addRequired('jointAdoption', 'Informe se é adoção conjunta')
+        }
       }
 
       // Step 3: conditional

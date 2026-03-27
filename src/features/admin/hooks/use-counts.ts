@@ -8,7 +8,8 @@ export function useCounts() {
   const query = useQuery({
     queryKey: ['metadata', 'counts'],
     queryFn: getCounts,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   })
 
   // Auto-bootstrap: if the document doesn't exist yet, trigger recalibration once
