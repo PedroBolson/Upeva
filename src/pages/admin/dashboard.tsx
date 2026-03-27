@@ -25,7 +25,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Skeleton,
@@ -70,7 +69,6 @@ interface RecentListState<T> {
   error: unknown
 }
 
-// Lightweight query — only the latest 6 applications
 function useRecentApplications() {
   return useQuery<AdoptionApplication[]>({
     queryKey: ['applications', 'recent'],
@@ -88,7 +86,6 @@ function useRecentApplications() {
   })
 }
 
-// Lightweight query — only the latest 5 animals
 function useRecentAnimals() {
   return useQuery<Animal[]>({
     queryKey: ['animals', 'recent'],
@@ -380,9 +377,6 @@ export function DashboardPage() {
         <Card className="border-border/80">
           <CardHeader>
             <CardTitle>Status dos animais</CardTitle>
-            <CardDescription>
-              Distribuição atual do plantel entre disponibilidade, adoção em andamento e histórico.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {countsLoading ? (
@@ -443,9 +437,6 @@ export function DashboardPage() {
         <Card className="border-border/80">
           <CardHeader>
             <CardTitle>Status das candidaturas</CardTitle>
-            <CardDescription>
-              Snapshot do funil atual de triagem, aprovação, recusas e desistências.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {countsLoading ? (

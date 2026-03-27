@@ -69,107 +69,102 @@ const adoptionSteps = [
 export function AboutPage() {
   return (
     <div className="flex flex-col">
-      {/* Hero + Mission (shared background) */}
       <div className="bg-linear-to-br from-accent via-background to-background">
+        <section className="py-20">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <motion.div
+              variants={stagger}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-14"
+            >
+              <div className="flex max-w-2xl flex-col gap-5">
+                <motion.div variants={fadeUp}>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+                    <PawPrint size={14} />
+                    Nossa história
+                  </span>
+                </motion.div>
+                <motion.h1
+                  variants={fadeUp}
+                  className="text-4xl sm:text-5xl font-bold text-foreground leading-tight"
+                >
+                  Quem é a <span className="text-primary">Upeva</span>
+                </motion.h1>
+                <motion.p
+                  variants={fadeUp}
+                  className="text-lg text-muted-foreground leading-relaxed"
+                >
+                  Somos uma organização sem fins lucrativos dedicada ao resgate, cuidado
+                  e adoção responsável de cães e gatos. Acreditamos que todo animal
+                  merece viver com dignidade, saúde e amor.
+                </motion.p>
+              </div>
 
-      {/* Hero */}
-      <section className="py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <motion.div
-            variants={stagger}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-14"
-          >
-            <div className="flex max-w-2xl flex-col gap-5">
-              <motion.div variants={fadeUp}>
-                <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-                  <PawPrint size={14} />
-                  Nossa história
-                </span>
-              </motion.div>
-              <motion.h1
-                variants={fadeUp}
-                className="text-4xl sm:text-5xl font-bold text-foreground leading-tight"
-              >
-                Quem é a <span className="text-primary">Upeva</span>
-              </motion.h1>
-              <motion.p
-                variants={fadeUp}
-                className="text-lg text-muted-foreground leading-relaxed"
-              >
-                Somos uma organização sem fins lucrativos dedicada ao resgate, cuidado
-                e adoção responsável de cães e gatos. Acreditamos que todo animal
-                merece viver com dignidade, saúde e amor.
-              </motion.p>
-            </div>
-
-            <motion.div variants={fadeUp} className="flex justify-center lg:justify-end">
-              <div className="group relative w-full max-w-105">
-                <div
-                  aria-hidden="true"
-                  className="absolute inset-6 rounded-full bg-primary/12 blur-3xl"
-                />
-                <div className="relative overflow-hidden rounded-full border border-border/70 bg-card/85 p-4 shadow-[0_24px_60px_-24px_color-mix(in_oklab,var(--foreground)_22%,transparent)] backdrop-blur">
-                  <div className="relative overflow-hidden rounded-full">
-                    <img
-                      src="/upeva.jpg"
-                      alt="Logo da Upeva"
-                      className="aspect-square w-full rounded-full object-cover transition-transform duration-500 group-hover:scale-[1.045]"
-                    />
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 left-[-30%] w-[22%] rotate-12 bg-linear-to-r from-transparent via-background/80 to-transparent opacity-0 blur-sm transition-all duration-700 group-hover:left-[108%] group-hover:opacity-100"
-                    />
+              <motion.div variants={fadeUp} className="flex justify-center lg:justify-end">
+                <div className="group relative w-full max-w-105">
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-6 rounded-full bg-primary/12 blur-3xl"
+                  />
+                  <div className="relative overflow-hidden rounded-full border border-border/70 bg-card/85 p-4 shadow-[0_24px_60px_-24px_color-mix(in_oklab,var(--foreground)_22%,transparent)] backdrop-blur">
+                    <div className="relative overflow-hidden rounded-full">
+                      <img
+                        src="/upeva.jpg"
+                        alt="Logo da Upeva"
+                        className="aspect-square w-full rounded-full object-cover transition-transform duration-500 group-hover:scale-[1.045]"
+                      />
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 left-[-30%] w-[22%] rotate-12 bg-linear-to-r from-transparent via-background/80 to-transparent opacity-0 blur-sm transition-all duration-700 group-hover:left-[108%] group-hover:opacity-100"
+                      />
+                    </div>
                   </div>
                 </div>
+              </motion.div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-16 w-full">
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+            variants={stagger}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start"
+          >
+            <motion.div variants={fadeUp} className="flex min-h-24 flex-col gap-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
+                Nossa missão
+              </h2>
+            </motion.div>
+
+            <motion.div variants={fadeUp}>
+              <div className="grid grid-cols-2 gap-4">
+                {values.map((v) => (
+                  <div
+                    key={v.title}
+                    className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3"
+                  >
+                    <div className="rounded-lg bg-primary/10 w-10 h-10 flex items-center justify-center">
+                      <v.icon className="text-primary" size={20} strokeWidth={1.75} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground text-sm">{v.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        {v.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           </motion.div>
-        </div>
-      </section>
+        </section>
 
-      {/* Mission */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-16 w-full">
-        <motion.div
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.2 }}
-          variants={stagger}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start"
-        >
-          <motion.div variants={fadeUp} className="flex min-h-24 flex-col gap-4">
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-              Nossa missão
-            </h2>
-          </motion.div>
+      </div>
 
-          <motion.div variants={fadeUp}>
-            <div className="grid grid-cols-2 gap-4">
-              {values.map((v) => (
-                <div
-                  key={v.title}
-                  className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3"
-                >
-                  <div className="rounded-lg bg-primary/10 w-10 h-10 flex items-center justify-center">
-                    <v.icon className="text-primary" size={20} strokeWidth={1.75} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground text-sm">{v.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      {v.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      </div>{/* end shared background */}
-
-      {/* Process */}
       <section className="bg-muted/30 border-y border-border py-16">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -207,7 +202,6 @@ export function AboutPage() {
         </div>
       </section>
 
-      {/* Support */}
       <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-16 w-full">
         <motion.div
           initial="hidden"

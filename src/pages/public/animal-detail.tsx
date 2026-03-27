@@ -24,30 +24,9 @@ import {
   SEX_LABELS,
   SIZE_LABELS,
 } from '@/features/animals/types/animal.types'
-import type { Animal } from '@/features/animals/types/animal.types'
-import type { Species } from '@/types/common'
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } }
-const SPECIES_PLURAL_LABELS: Record<Species, string> = {
-  dog: 'cachorros',
-  cat: 'gatos',
-}
-const SEX_PLURAL_LABELS = {
-  male: 'machos',
-  female: 'fêmeas',
-} as const
-
-function getSimilarAnimalsDescription(animal: Animal): string {
-  const speciesLabel = SPECIES_PLURAL_LABELS[animal.species]
-  const sexLabel = SEX_PLURAL_LABELS[animal.sex]
-
-  if (animal.species === 'dog' && animal.size) {
-    return `Priorizamos ${speciesLabel} ${sexLabel} de porte ${SIZE_LABELS[animal.size].toLowerCase()} para manter as sugestões mais próximas do perfil deste animal.`
-  }
-
-  return `Priorizamos ${speciesLabel} ${sexLabel} para manter as sugestões mais próximas do perfil deste animal.`
-}
 
 export function AnimalDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -83,10 +62,27 @@ export function AnimalDetailPage() {
 
   const isWaitlistOpen = animal.status === 'under_review'
   const canApply = animal.status === 'available' || isWaitlistOpen
+  const detailChips = [
+    { label: 'Sexo', value: SEX_LABELS[animal.sex] },
+    ...(animal.species === 'dog' && animal.size
+      ? [{ label: 'Porte', value: SIZE_LABELS[animal.size] }]
+      : []),
+    ...(animal.breed
+      ? [{ label: 'Raça', value: animal.breed }]
+      : []),
+    ...(animal.estimatedAge
+      ? [{ label: 'Idade', value: animal.estimatedAge, breakOnComma: true }]
+      : []),
+  ]
+  const detailGridColsClass = {
+    1: 'lg:grid-cols-1',
+    2: 'lg:grid-cols-2',
+    3: 'lg:grid-cols-3',
+    4: 'lg:grid-cols-4',
+  }[detailChips.length] ?? 'lg:grid-cols-4'
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
-      {/* Breadcrumb */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -107,7 +103,6 @@ export function AnimalDetailPage() {
         animate="show"
         className="grid grid-cols-1 lg:grid-cols-2 gap-10"
       >
-        {/* Gallery */}
         <motion.div variants={fadeUp}>
           <AnimalPhotoGallery
             photos={animal.photos}
@@ -116,9 +111,7 @@ export function AnimalDetailPage() {
           />
         </motion.div>
 
-        {/* Info */}
         <motion.div variants={stagger} className="flex flex-col gap-6">
-          {/* Name + badges */}
           <motion.div variants={fadeUp} className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <AnimalStatusBadge status={animal.status} />
@@ -131,24 +124,20 @@ export function AnimalDetailPage() {
             </h1>
           </motion.div>
 
-          {/* Quick info */}
           <motion.div
             variants={fadeUp}
-            className="grid grid-cols-2 sm:grid-cols-3 gap-3"
+            className={`grid grid-cols-2 gap-3 ${detailGridColsClass}`}
           >
-            <InfoChip label="Sexo" value={SEX_LABELS[animal.sex]} />
-            {animal.estimatedAge && (
-              <InfoChip label="Idade" value={animal.estimatedAge} />
-            )}
-            {animal.size && (
-              <InfoChip label="Porte" value={SIZE_LABELS[animal.size]} />
-            )}
-            {animal.breed && (
-              <InfoChip label="Raça" value={animal.breed} />
-            )}
+            {detailChips.map((chip) => (
+              <InfoChip
+                key={chip.label}
+                label={chip.label}
+                value={chip.value}
+                breakOnComma={chip.breakOnComma}
+              />
+            ))}
           </motion.div>
 
-          {/* Description */}
           {animal.description && (
             <motion.div variants={fadeUp} className="flex flex-col gap-2">
               <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
@@ -160,7 +149,6 @@ export function AnimalDetailPage() {
             </motion.div>
           )}
 
-          {/* Health */}
           <motion.div variants={fadeUp} className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
               Saúde
@@ -189,7 +177,6 @@ export function AnimalDetailPage() {
             </div>
           </motion.div>
 
-          {/* CTA */}
           <motion.div variants={fadeUp} className="flex flex-col gap-3 pt-2">
             {animal.status === 'available' ? (
               <>
@@ -235,7 +222,6 @@ export function AnimalDetailPage() {
         </motion.div>
       </motion.div>
 
-      {/* Similar animals */}
       {similar.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -246,9 +232,6 @@ export function AnimalDetailPage() {
           <h2 className="text-xl font-bold text-foreground">
             Animais parecidos com {animal.name}
           </h2>
-          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-            {getSimilarAnimalsDescription(animal)}
-          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {similar.map((a) => (
               <AnimalCard key={a.id} animal={a} />
@@ -260,11 +243,23 @@ export function AnimalDetailPage() {
   )
 }
 
-function InfoChip({ label, value }: { label: string; value: string }) {
+function InfoChip({
+  label,
+  value,
+  breakOnComma = false,
+}: {
+  label: string
+  value: string
+  breakOnComma?: boolean
+}) {
+  const formattedValue = breakOnComma ? value.replace(/,\s+/g, ',\n') : value
+
   return (
     <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm font-semibold text-foreground">{value}</span>
+      <span className="whitespace-pre-line text-sm font-semibold leading-tight text-foreground">
+        {formattedValue}
+      </span>
     </div>
   )
 }

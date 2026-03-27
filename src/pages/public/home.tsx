@@ -26,9 +26,7 @@ const steps = [
 export function HomePage() {
   return (
     <div className="flex flex-col">
-      {/* ── Hero + Featured rail (shared background) ─────── */}
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
-        {/* Decorative blobs */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-primary/10 blur-3xl"
@@ -84,7 +82,6 @@ export function HomePage() {
         <FeaturedAnimalRail />
       </div>
 
-      {/* ── How it works ─────────────────────────────────── */}
       <section className="bg-muted/30 border-t border-border">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-16">
           <motion.div
@@ -129,7 +126,6 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ── CTA final ────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-16 w-full">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
