@@ -28,6 +28,7 @@ export function createAdoptionSchema(species: Species, hasSpecificAnimal = false
         street: z.string().min(1, 'Informe a rua'),
         number: z.string().min(1, 'Informe o número'),
         complement: z.string().optional(),
+        neighborhood: z.string().min(1, 'Informe o bairro'),
         city: z.string().min(1, 'Informe a cidade'),
         state: z
           .string()

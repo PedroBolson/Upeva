@@ -61,8 +61,7 @@ service cloud.firestore {
 
       allow read, delete: if isStaff();
 
-      allow update: if isStaff()
-        && request.resource.data.status in ['pending', 'in_review', 'approved', 'rejected', 'withdrawn'];
+      allow update: if false; // Cloud Function only
     }
 
     // ── User profiles ──────────────────────────────────────────────────────────

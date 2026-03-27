@@ -182,9 +182,6 @@ function RecentApplicationsPanel({ items, isLoading, error }: RecentListState<Ad
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
         <div className="space-y-1">
           <CardTitle className="text-base">Candidaturas recentes</CardTitle>
-          <CardDescription>
-            Últimos envios para a equipe acompanhar sem carregar a coleção inteira.
-          </CardDescription>
         </div>
         <Link to="/admin/candidaturas" className="shrink-0">
           <Button variant="ghost" size="sm" className="gap-1 text-primary hover:text-primary">
@@ -249,10 +246,7 @@ function RecentAnimalsPanel({ items, isLoading, error }: RecentListState<Animal>
     <Card className="border-border/80">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
         <div className="space-y-1">
-          <CardTitle className="text-base">Animais cadastrados</CardTitle>
-          <CardDescription>
-            Entradas mais recentes no sistema para revisão rápida da equipe.
-          </CardDescription>
+          <CardTitle className="text-base">Últimos animais cadastrados</CardTitle>
         </div>
         <Link to="/admin/animais" className="shrink-0">
           <Button variant="ghost" size="sm" className="gap-1 text-primary hover:text-primary">
@@ -398,34 +392,37 @@ export function DashboardPage() {
             ) : (
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
                 <div className="relative h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={animalDistribution}
-                        dataKey="value"
-                        nameKey="label"
-                        innerRadius={78}
-                        outerRadius={110}
-                        paddingAngle={3}
-                        stroke="var(--card)"
-                        strokeWidth={4}
-                      >
-                        {animalDistribution.map((entry) => (
-                          <Cell key={entry.key} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value, name) => [numberFormatter.format(Number(value)), name]}
-                        contentStyle={{
-                          backgroundColor: 'var(--card)',
-                          borderColor: 'var(--border)',
-                          borderRadius: '16px',
-                          color: 'var(--foreground)',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="relative z-10 h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={animalDistribution}
+                          dataKey="value"
+                          nameKey="label"
+                          innerRadius={78}
+                          outerRadius={110}
+                          paddingAngle={3}
+                          stroke="var(--card)"
+                          strokeWidth={4}
+                        >
+                          {animalDistribution.map((entry) => (
+                            <Cell key={entry.key} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name) => [numberFormatter.format(Number(value)), name]}
+                          wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
+                          contentStyle={{
+                            backgroundColor: 'var(--card)',
+                            borderColor: 'var(--border)',
+                            borderRadius: '16px',
+                            color: 'var(--foreground)',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="pointer-events-none absolute inset-0 z-0 flex flex-col items-center justify-center">
                     <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                       Total
                     </span>
@@ -457,46 +454,49 @@ export function DashboardPage() {
               <EmptyChartState message="Sem candidaturas registradas ainda para compor a distribuição." />
             ) : (
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={applicationDistribution}
-                      layout="vertical"
-                      margin={{ top: 8, right: 16, left: 12, bottom: 8 }}
-                    >
-                      <CartesianGrid stroke="var(--border)" horizontal={false} />
-                      <XAxis
-                        type="number"
-                        allowDecimals={false}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="label"
-                        width={92}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-                      />
-                      <Tooltip
-                        cursor={{ fill: 'var(--muted)', opacity: 0.35 }}
-                        formatter={(value, name) => [numberFormatter.format(Number(value)), name]}
-                        contentStyle={{
-                          backgroundColor: 'var(--card)',
-                          borderColor: 'var(--border)',
-                          borderRadius: '16px',
-                          color: 'var(--foreground)',
-                        }}
-                      />
-                      <Bar dataKey="value" radius={[0, 999, 999, 0]} maxBarSize={22}>
-                        {applicationDistribution.map((entry) => (
-                          <Cell key={entry.key} fill={entry.color} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="relative h-72">
+                  <div className="relative z-10 h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={applicationDistribution}
+                        layout="vertical"
+                        margin={{ top: 8, right: 16, left: 12, bottom: 8 }}
+                      >
+                        <CartesianGrid stroke="var(--border)" horizontal={false} />
+                        <XAxis
+                          type="number"
+                          allowDecimals={false}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={92}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: 'var(--muted)', opacity: 0.35 }}
+                          formatter={(value, name) => [numberFormatter.format(Number(value)), name]}
+                          wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
+                          contentStyle={{
+                            backgroundColor: 'var(--card)',
+                            borderColor: 'var(--border)',
+                            borderRadius: '16px',
+                            color: 'var(--foreground)',
+                          }}
+                        />
+                        <Bar dataKey="value" radius={[0, 999, 999, 0]} maxBarSize={22}>
+                          {applicationDistribution.map((entry) => (
+                            <Cell key={entry.key} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
                 <DistributionLegend

@@ -36,6 +36,8 @@ export function AdoptionForm({ animal }: Props) {
     isSubmitting,
     submitError,
     hasSpecificAnimal,
+    waitlistEntry,
+    queuePosition,
     isSuccess,
   } = useAdoptionForm(animal)
 
@@ -74,11 +76,24 @@ export function AdoptionForm({ animal }: Props) {
           </h2>
           <p className="text-muted-foreground">
             {hasSpecificAnimal ? (
-              <>
-                Recebemos sua candidatura para adotar{' '}
-                <strong className="text-foreground">{animal.name}</strong>. Nossa
-                equipe vai analisar e entrar em contato em até 5 dias úteis.
-              </>
+              waitlistEntry ? (
+                <>
+                  Você está na{' '}
+                  <strong className="text-foreground">posição {queuePosition} da fila</strong>{' '}
+                  para <strong className="text-foreground">{animal.name}</strong>.{' '}
+                  {queuePosition === 2
+                    ? 'Há uma candidatura em análise na sua frente — se não for aprovada, entraremos em contato com você.'
+                    : 'Caso as candidaturas à frente não sejam aprovadas, entraremos em contato.'
+                  }{' '}
+                  Obrigado pelo interesse!
+                </>
+              ) : (
+                <>
+                  Recebemos sua candidatura para adotar{' '}
+                  <strong className="text-foreground">{animal.name}</strong>. Nossa
+                  equipe vai analisar e entrar em contato em até 5 dias úteis.
+                </>
+              )
             ) : (
               <>
                 Recebemos sua candidatura para adoção de{' '}

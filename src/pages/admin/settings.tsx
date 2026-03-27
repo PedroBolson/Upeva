@@ -8,7 +8,7 @@ import {
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { Input, Button } from '@/components/ui'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
-import { recalibrateCounts } from '@/features/admin/services/metadata.service'
+import { recalibrateCounts, recalibrateQueuePositions } from '@/features/admin/services/metadata.service'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
@@ -29,6 +29,8 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const [recalibrating, setRecalibrating] = useState(false)
   const [recalibrateMessage, setRecalibrateMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [recalibratingQueue, setRecalibratingQueue] = useState(false)
+  const [recalibrateQueueMessage, setRecalibrateQueueMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
   const headerConfig = useMemo(
     () => ({}),
@@ -48,6 +50,19 @@ export function SettingsPage() {
       setRecalibrateMessage({ text: 'Não foi possível recalibrar os contadores.', ok: false })
     } finally {
       setRecalibrating(false)
+    }
+  }
+
+  async function handleRecalibrateQueue() {
+    setRecalibratingQueue(true)
+    setRecalibrateQueueMessage(null)
+    try {
+      const result = await recalibrateQueuePositions()
+      setRecalibrateQueueMessage({ text: `${result.updatedCount} candidatura(s) atualizadas.`, ok: true })
+    } catch {
+      setRecalibrateQueueMessage({ text: 'Não foi possível recalibrar as posições.', ok: false })
+    } finally {
+      setRecalibratingQueue(false)
     }
   }
 
@@ -170,25 +185,45 @@ export function SettingsPage() {
         {userProfile?.role === 'admin' && (
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4 xl:col-span-2">
             <div className="flex flex-col gap-1">
-              <h2 className="text-sm font-semibold text-foreground">Contadores do dashboard</h2>
+              <h2 className="text-sm font-semibold text-foreground">Manutenção de dados</h2>
               <p className="text-xs text-muted-foreground">
-                Recalcula os totais de animais e candidaturas a partir dos dados existentes. Use se os contadores estiverem incorretos.
+                Use se os contadores ou posições de fila estiverem incorretos. As operações são seguras e podem ser repetidas.
               </p>
             </div>
-            {recalibrateMessage && (
-              <p role={recalibrateMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
-                {recalibrateMessage.text}
-              </p>
-            )}
-            <Button
-              variant="outline"
-              onClick={handleRecalibrate}
-              disabled={recalibrating}
-              className="w-full gap-1.5 sm:w-auto sm:self-start"
-            >
-              {recalibrating && <Loader2 size={14} className="animate-spin" />}
-              {recalibrating ? 'Recalibrando…' : 'Recalibrar contadores'}
-            </Button>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex flex-col gap-2">
+                {recalibrateMessage && (
+                  <p role={recalibrateMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
+                    {recalibrateMessage.text}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleRecalibrate}
+                  disabled={recalibrating}
+                  className="gap-1.5"
+                >
+                  {recalibrating && <Loader2 size={14} className="animate-spin" />}
+                  {recalibrating ? 'Recalibrando…' : 'Recalibrar contadores do dashboard'}
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {recalibrateQueueMessage && (
+                  <p role={recalibrateQueueMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateQueueMessage.ok ? 'text-success' : 'text-danger'}`}>
+                    {recalibrateQueueMessage.text}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleRecalibrateQueue}
+                  disabled={recalibratingQueue}
+                  className="gap-1.5"
+                >
+                  {recalibratingQueue && <Loader2 size={14} className="animate-spin" />}
+                  {recalibratingQueue ? 'Recalibrando…' : 'Recalibrar posições de fila'}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
     </div>

@@ -69,8 +69,11 @@ const adoptionSteps = [
 export function AboutPage() {
   return (
     <div className="flex flex-col">
+      {/* Hero + Mission (shared background) */}
+      <div className="bg-linear-to-br from-accent via-background to-background">
+
       {/* Hero */}
-      <section className="bg-linear-to-br from-accent via-background to-background py-20">
+      <section className="py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <motion.div
             variants={stagger}
@@ -127,7 +130,7 @@ export function AboutPage() {
       </section>
 
       {/* Mission */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-16 w-full">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-16 w-full">
         <motion.div
           initial="hidden"
           whileInView="show"
@@ -163,6 +166,8 @@ export function AboutPage() {
           </motion.div>
         </motion.div>
       </section>
+
+      </div>{/* end shared background */}
 
       {/* Process */}
       <section className="bg-muted/30 border-y border-border py-16">

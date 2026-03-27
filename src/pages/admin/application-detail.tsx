@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, HeartHandshake, Loader2, Mail, PawPrint, UserRound } from 'lucide-react'
-import { Button, Card, Select, ApplicationStatusBadge } from '@/components/ui'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, CalendarClock, HeartHandshake, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
+import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { DetailSection, DetailField } from '@/components/ui/detail-view'
 import { Textarea } from '@/components/ui/textarea'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useApplication } from '@/features/adoption/hooks/use-application'
-import { useUpdateApplicationStatus } from '@/features/adoption/hooks/use-application-mutations'
-import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS } from '@/features/animals/types/animal.types'
+import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
+import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
+import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
+import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 
 const HOUSING_LABELS: Record<string, string> = {
   house_open_yard: 'Casa com quintal aberto',
@@ -36,6 +39,52 @@ function formatPreferenceLabel(
   return labels[value] ?? value
 }
 
+function isGeneralInterestApplication(app: AdoptionApplication): boolean {
+  if (!app.animalId) return true
+  if (app.species === 'dog') {
+    return app.preferredSex !== undefined || app.preferredSize !== undefined
+  }
+  return app.jointAdoption !== undefined
+}
+
+function buildLinkableAnimalLabel(animal: Animal): string {
+  const meta = [
+    SEX_LABELS[animal.sex],
+    animal.species === 'dog' && animal.size ? SIZE_LABELS[animal.size] : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return meta ? `${animal.name} · ${meta}` : animal.name
+}
+
+function normalizePhoneToE164(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '').replace(/^0+/, '')
+
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    return digits
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`
+  }
+
+  return null
+}
+
+function getWhatsAppHref(phone: string): string | null {
+  const normalized = normalizePhoneToE164(phone)
+  return normalized ? `https://wa.me/${normalized}` : null
+}
+
+function getReviewErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return 'Não foi possível salvar as alterações. Tente novamente.'
+}
+
 function Bool({ value }: { value: boolean | undefined }) {
   if (value === undefined) return <span>—</span>
   return <span>{value ? 'Sim' : 'Não'}</span>
@@ -44,28 +93,122 @@ function Bool({ value }: { value: boolean | undefined }) {
 export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: app, isLoading, error, refetch } = useApplication(id)
-  const { mutate: updateStatus, isPending } = useUpdateApplicationStatus()
+  const { mutate: updateReview, isPending } = useUpdateApplicationReview()
 
   const [selectedStatus, setSelectedStatus] = useState<ApplicationStatus | null>(null)
+  const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null)
   const [adminNotesDraft, setAdminNotesDraft] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
   const formattedUpdatedAt = useMemo(() => tsToDate(app?.updatedAt), [app?.updatedAt])
   const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
+  const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
+  const currentAnimalId = selectedAnimalId ?? app?.animalId ?? ''
 
-  function handleSave() {
+  const {
+    data: linkableAnimals = [],
+    isLoading: linkableAnimalsLoading,
+  } = useQuery({
+    queryKey: [
+      'animals',
+      'linkable-application',
+      app?.id,
+      app?.species,
+      app?.preferredSex,
+      app?.preferredSize,
+    ],
+    queryFn: () => getLinkableAnimalsForApplication({
+      species: app!.species,
+      preferredSex: app!.preferredSex,
+      preferredSize: app!.preferredSize,
+    }),
+    enabled: Boolean(app) && isGeneralInterest,
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const animalOptions = useMemo(() => {
+    if (!app || !isGeneralInterest) return []
+
+    const options = linkableAnimals.map((animal) => ({
+      value: animal.id,
+      label: buildLinkableAnimalLabel(animal),
+    }))
+
+    if (app.animalId) {
+      options.unshift({
+        value: app.animalId,
+        label: `${app.animalName ?? 'Animal vinculado'} · vínculo atual`,
+      })
+    }
+
+    const seen = new Set<string>()
+    return options.filter((option) => {
+      if (seen.has(option.value)) return false
+      seen.add(option.value)
+      return true
+    })
+  }, [app, isGeneralInterest, linkableAnimals])
+
+  const selectedAnimalName = useMemo(
+    () =>
+      animalOptions.find((option) => option.value === currentAnimalId)?.label
+      ?? app?.animalName
+      ?? 'Animal vinculado',
+    [animalOptions, app?.animalName, currentAnimalId],
+  )
+
+  const needsRelinkConfirmation = Boolean(
+    isGeneralInterest &&
+    app?.animalId &&
+    currentAnimalId &&
+    currentAnimalId !== app.animalId &&
+    app.status !== 'pending',
+  )
+
+  function saveReview() {
     if (!id) return
-    updateStatus(
-      { id, status: currentStatus, adminNotes },
+    setSaveError(null)
+    updateReview(
+      {
+        id,
+        status: currentStatus,
+        adminNotes,
+        ...(isGeneralInterest && currentAnimalId
+          ? {
+              animalId: currentAnimalId,
+              animalName: selectedAnimalName,
+            }
+          : {}),
+      },
       {
         onSuccess: () => {
+          setSelectedAnimalId(null)
           setSaved(true)
           setTimeout(() => setSaved(false), 3000)
         },
+        onError: (mutationError) => {
+          setSaveError(getReviewErrorMessage(mutationError))
+        },
       },
     )
+  }
+
+  function handleSave() {
+    if (isGeneralInterest && currentStatus === 'approved' && !currentAnimalId) {
+      setSaveError('Vincule um animal antes de aprovar esta candidatura.')
+      return
+    }
+
+    if (needsRelinkConfirmation) {
+      setIsRelinkConfirmOpen(true)
+      return
+    }
+
+    saveReview()
   }
 
   if (isLoading) return <PageSpinner />
@@ -79,14 +222,31 @@ export function ApplicationDetailPage() {
 
   const hasSpecificAnimal = Boolean(app.animalId)
   const animalLabel = hasSpecificAnimal ? app.animalName ?? 'Animal vinculado' : 'Interesse geral'
-  const animalHelper = hasSpecificAnimal
+  const animalHelper = !isGeneralInterest
     ? SPECIES_LABELS[app.species]
     : app.species === 'dog'
       ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)} · Porte: ${formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}`
       : `Adoção conjunta: ${app.jointAdoption === undefined ? '—' : app.jointAdoption ? 'Sim' : 'Não'}`
+  const whatsAppHref = getWhatsAppHref(app.phone)
+  const hasLinkableOptions = animalOptions.length > 0
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <ConfirmModal
+        open={isRelinkConfirmOpen}
+        onClose={() => setIsRelinkConfirmOpen(false)}
+        onConfirm={() => {
+          setIsRelinkConfirmOpen(false)
+          saveReview()
+        }}
+        title="Trocar o animal vinculado?"
+        description="Essa candidatura já saiu do estado pendente. Ao trocar o animal, o status do animal antigo e do novo será recalculado."
+        confirmLabel="Trocar animal"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isPending}
+      />
+
       <Card className="border-border/80 p-6">
         <Link
           to="/admin/candidaturas"
@@ -99,31 +259,11 @@ export function ApplicationDetailPage() {
         <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{app.fullName}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {hasSpecificAnimal ? (
-                <>
-                  Candidatura para <strong className="text-foreground">{app.animalName}</strong>
-                  {' '}({SPECIES_LABELS[app.species]})
-                </>
-              ) : (
-                <>
-                  Candidatura geral para adoção de{' '}
-                  <strong className="text-foreground">{SPECIES_LABELS[app.species].toLowerCase()}</strong>
-                </>
-              )}
-              {' '}· {formattedCreatedAt}
-            </p>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard
-                icon={UserRound}
-                label="Candidato"
-                value={app.fullName}
-                helper={app.cpf}
-              />
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <SummaryCard
                 icon={PawPrint}
-                label={hasSpecificAnimal ? 'Animal' : 'Busca'}
+                label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
                 value={animalLabel}
                 helper={animalHelper}
               />
@@ -148,107 +288,128 @@ export function ApplicationDetailPage() {
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="grid gap-6 2xl:grid-cols-2">
-          {/* Step 1: Identificação */}
-          <DetailSection title="Identificação">
-            <DetailField label="Nome completo" value={app.fullName} />
-            <DetailField label="CPF" value={app.cpf || undefined} />
-            <DetailField label="E-mail" value={app.email} />
-            <DetailField label="Telefone" value={app.phone} />
-            <DetailField label="Data de nascimento" value={app.birthDate} />
-            <DetailField label="CEP" value={app.cep || undefined} />
-            <div className="sm:col-span-2">
-              <DetailField
-                label="Endereço"
-                value={
-                  app.address
-                    ? `${app.address.street}, ${app.address.number}${app.address.complement ? ` ${app.address.complement}` : ''} — ${app.address.city}/${app.address.state}`
-                    : '—'
-                }
-              />
-            </div>
-          </DetailSection>
+        <div className="flex flex-col gap-6">
+          {/* Duas colunas com controle explícito */}
+          <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-start">
+            {/* Coluna esquerda */}
+            <div className="flex flex-col gap-6 min-w-0 flex-1">
+              {/* Step 1: Identificação */}
+              <DetailSection title="Identificação">
+                <DetailField label="Nome completo" value={app.fullName} />
+                <DetailField label="CPF" value={app.cpf || undefined} />
+                <ContactField
+                  label="E-mail"
+                  value={app.email}
+                  href={`mailto:${app.email}`}
+                  actionLabel="Enviar e-mail"
+                  icon={<Mail size={14} />}
+                />
+                <ContactField
+                  label="Telefone"
+                  value={app.phone}
+                  href={whatsAppHref}
+                  actionLabel="Abrir WhatsApp"
+                  icon={<MessageCircle size={14} />}
+                />
+                <DetailField label="Data de nascimento" value={app.birthDate} />
+                <DetailField label="CEP" value={app.cep || undefined} />
+                <div className="sm:col-span-2">
+                  <DetailField
+                    label="Endereço"
+                    value={
+                      app.address
+                        ? `${app.address.street}, ${app.address.number}${app.address.complement ? ` ${app.address.complement}` : ''} — ${app.address.neighborhood ? `${app.address.neighborhood}, ` : ''}${app.address.city}/${app.address.state}`
+                        : '—'
+                    }
+                  />
+                </div>
+              </DetailSection>
 
-          {/* Step 2: Preferências */}
-          {!hasSpecificAnimal && (
-            <DetailSection title="Preferências para o animal">
-              {app.species === 'dog' ? (
-                <>
-                  <DetailField
-                    label="Sexo preferido"
-                    value={formatPreferenceLabel(app.preferredSex, SEX_LABELS)}
-                  />
-                  <DetailField
-                    label="Porte preferido"
-                    value={formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}
-                  />
-                </>
-              ) : (
-                <DetailField label="Adoção conjunta" value={<Bool value={app.jointAdoption} />} />
+              {/* Step 2: Preferências */}
+              {isGeneralInterest && (
+                <DetailSection title="Preferências para o animal">
+                  {app.species === 'dog' ? (
+                    <>
+                      <DetailField
+                        label="Sexo preferido"
+                        value={formatPreferenceLabel(app.preferredSex, SEX_LABELS)}
+                      />
+                      <DetailField
+                        label="Porte preferido"
+                        value={formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}
+                      />
+                    </>
+                  ) : (
+                    <DetailField label="Adoção conjunta" value={<Bool value={app.jointAdoption} />} />
+                  )}
+                </DetailSection>
               )}
-            </DetailSection>
-          )}
 
-          {/* Step 3: Família */}
-          <DetailSection title="Família">
-            <DetailField label="Adultos na casa" value={app.adultsCount} />
-            <DetailField label="Crianças na casa" value={app.childrenCount} />
-            {Number(app.childrenCount) > 0 && (
-              <DetailField label="Idades das crianças" value={app.childrenAges} />
-            )}
-          </DetailSection>
-
-          {/* Step 4: Estilo de vida */}
-          <DetailSection title="Estilo de vida">
-            <div className="sm:col-span-2">
-              <DetailField label="Motivo da adoção" value={app.adoptionReason} />
+              {/* Step 3: Família */}
+              <DetailSection title="Família">
+                <DetailField label="Adultos na casa" value={app.adultsCount} />
+                <DetailField label="Crianças na casa" value={app.childrenCount} />
+                {Number(app.childrenCount) > 0 && (
+                  <DetailField label="Idades das crianças" value={app.childrenAges} />
+                )}
+              </DetailSection>
             </div>
-            <DetailField label="Horas em casa por dia" value={app.hoursHomePeoplePerDay} />
-            {app.species === 'cat' && (
-              <DetailField label="É um presente?" value={<Bool value={app.isGift} />} />
-            )}
-          </DetailSection>
 
-          {/* Step 5: Moradia */}
-          <DetailSection title="Moradia">
-            <DetailField
-              label="Tipo de moradia"
-              value={app.housingType ? HOUSING_LABELS[app.housingType] ?? app.housingType : '—'}
-            />
-            <DetailField label="Imóvel alugado?" value={<Bool value={app.isRented} />} />
-            {app.isRented && (
-              <DetailField label="Proprietário permite pets?" value={<Bool value={app.landlordAllowsPets} />} />
-            )}
-          </DetailSection>
-
-          {/* Step 6: Histórico */}
-          <DetailSection title="Histórico com animais">
-            <DetailField label="Já teve animais?" value={<Bool value={app.hadPetsBefore} />} />
-            {app.hadPetsBefore && (
-              <div className="sm:col-span-2">
-                <DetailField label="Animais anteriores" value={app.previousPets} />
-              </div>
-            )}
-            <DetailField label="Tem animais atualmente?" value={<Bool value={app.hasCurrentPets} />} />
-            {app.hasCurrentPets && (
-              <>
-                <DetailField label="Quantidade" value={app.currentPetsCount} />
+            {/* Coluna direita */}
+            <div className="flex flex-col gap-6 min-w-0 flex-1">
+              {/* Step 4: Estilo de vida */}
+              <DetailSection title="Estilo de vida">
+                <div className="sm:col-span-2">
+                  <DetailField label="Motivo da adoção" value={app.adoptionReason} />
+                </div>
+                <DetailField label="Horas em casa por dia" value={app.hoursHomePeoplePerDay} />
                 {app.species === 'cat' && (
+                  <DetailField label="É um presente?" value={<Bool value={app.isGift} />} />
+                )}
+              </DetailSection>
+
+              {/* Step 5: Moradia */}
+              <DetailSection title="Moradia">
+                <DetailField
+                  label="Tipo de moradia"
+                  value={app.housingType ? HOUSING_LABELS[app.housingType] ?? app.housingType : '—'}
+                />
+                <DetailField label="Imóvel alugado?" value={<Bool value={app.isRented} />} />
+                {app.isRented && (
+                  <DetailField label="Proprietário permite pets?" value={<Bool value={app.landlordAllowsPets} />} />
+                )}
+              </DetailSection>
+
+              {/* Step 6: Histórico */}
+              <DetailSection title="Histórico com animais">
+                <DetailField label="Já teve animais?" value={<Bool value={app.hadPetsBefore} />} />
+                {app.hadPetsBefore && (
+                  <div className="sm:col-span-2">
+                    <DetailField label="Animais anteriores" value={app.previousPets} />
+                  </div>
+                )}
+                <DetailField label="Tem animais atualmente?" value={<Bool value={app.hasCurrentPets} />} />
+                {app.hasCurrentPets && (
                   <>
-                    <DetailField label="Vacinados?" value={<Bool value={app.currentPetsVaccinated} />} />
-                    {app.currentPetsVaccinated === false && (
-                      <div className="sm:col-span-2">
-                        <DetailField label="Motivo sem vacinação" value={app.currentPetsVaccinationReason} />
-                      </div>
+                    <DetailField label="Quantidade" value={app.currentPetsCount} />
+                    {app.species === 'cat' && (
+                      <>
+                        <DetailField label="Vacinados?" value={<Bool value={app.currentPetsVaccinated} />} />
+                        {app.currentPetsVaccinated === false && (
+                          <div className="sm:col-span-2">
+                            <DetailField label="Motivo sem vacinação" value={app.currentPetsVaccinationReason} />
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}
-              </>
-            )}
-          </DetailSection>
+              </DetailSection>
+            </div>
+          </div>
 
-          {/* Step 7: Compromisso */}
-          <DetailSection title="Compromisso" className="2xl:col-span-2">
+          {/* Step 7: Compromisso — full width */}
+          <DetailSection title="Compromisso">
             <DetailField label="Pode arcar com os custos?" value={<Bool value={app.canAffordCosts} />} />
             <DetailField label="Compromisso de longo prazo?" value={<Bool value={app.longTermCommitment} />} />
             <div className="sm:col-span-2">
@@ -262,8 +423,8 @@ export function ApplicationDetailPage() {
             </div>
           </DetailSection>
 
-          {/* Step 8: Termos */}
-          <DetailSection title="Termos aceitos" className="2xl:col-span-2">
+          {/* Step 8: Termos — full width */}
+          <DetailSection title="Termos aceitos">
             <DetailField label="Política de devolução" value={<Bool value={app.acceptsReturnPolicy} />} />
             <DetailField label="Compromisso de castração" value={<Bool value={app.acceptsCastrationPolicy} />} />
             <DetailField label="Aceita acompanhamento" value={<Bool value={app.acceptsFollowUp} />} />
@@ -293,6 +454,26 @@ export function ApplicationDetailPage() {
                 onChange={(value) => setSelectedStatus(value as ApplicationStatus)}
               />
 
+              {isGeneralInterest && (
+                <Select
+                  label="Vincular animal"
+                  options={animalOptions}
+                  value={currentAnimalId || undefined}
+                  onChange={(value) => setSelectedAnimalId(value)}
+                  placeholder={
+                    linkableAnimalsLoading
+                      ? 'Carregando animais compatíveis…'
+                      : 'Selecione um animal compatível'
+                  }
+                  hint={
+                    hasLinkableOptions
+                      ? 'Só aparecem animais disponíveis que combinam com as preferências desta candidatura.'
+                      : 'Nenhum animal disponível corresponde a esta candidatura no momento.'
+                  }
+                  disabled={linkableAnimalsLoading || (!hasLinkableOptions && !currentAnimalId)}
+                />
+              )}
+
               <Textarea
                 label="Nota interna"
                 placeholder="Motivo, observações para a equipe…"
@@ -307,6 +488,9 @@ export function ApplicationDetailPage() {
                 {isPending && <Loader2 size={14} className="animate-spin" />}
                 {isPending ? 'Salvando…' : 'Salvar alterações'}
               </Button>
+              {saveError && (
+                <span className="text-sm text-danger">{saveError}</span>
+              )}
               {saved && (
                 <span className="text-sm text-success">Salvo com sucesso.</span>
               )}
@@ -318,8 +502,22 @@ export function ApplicationDetailPage() {
             <div className="mt-4 flex flex-col gap-4">
               <SidebarField label="Status atual do formulário" value={<ApplicationStatusBadge status={app.status} />} />
               <SidebarField
-                label={hasSpecificAnimal ? 'Animal' : 'Busca'}
-                value={hasSpecificAnimal ? `${animalLabel} (${SPECIES_LABELS[app.species]})` : `${animalLabel} · ${animalHelper}`}
+                label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
+                value={
+                  !isGeneralInterest
+                    ? `${animalLabel} (${SPECIES_LABELS[app.species]})`
+                    : `${animalLabel} · ${animalHelper}`
+                }
+              />
+              <SidebarField
+                label="Posição na fila"
+                value={
+                  app.queuePosition && app.queuePosition > 1
+                    ? `#${app.queuePosition}º`
+                    : app.waitlistEntry
+                      ? 'Na fila'
+                      : '—'
+                }
               />
               <SidebarField label="Recebida em" value={formattedCreatedAt} />
               <SidebarField label="Última atualização" value={formattedUpdatedAt} />
@@ -355,6 +553,43 @@ function SummaryCard({
   )
 }
 
+function ContactField({
+  label,
+  value,
+  href,
+  icon,
+}: {
+  label: string
+  value: string
+  href: string | null
+  actionLabel: string
+  icon: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      {href ? (
+        <a
+          href={href}
+          target={href.startsWith('https://') ? '_blank' : undefined}
+          rel={href.startsWith('https://') ? 'noopener noreferrer' : undefined}
+          className="inline-flex items-center gap-1.5 text-sm text-foreground transition-colors hover:text-primary wrap-break-words"
+        >
+          {icon}
+          {value}
+        </a>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm text-foreground wrap-break-words">
+          {icon}
+          {value}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function SidebarField({
   label,
   value,
@@ -371,3 +606,4 @@ function SidebarField({
     </div>
   )
 }
+

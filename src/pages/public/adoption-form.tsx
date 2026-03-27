@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { PawPrint, ArrowLeft } from 'lucide-react'
+import { PawPrint, ArrowLeft, AlertCircle } from 'lucide-react'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
@@ -24,7 +24,9 @@ export function AdoptionFormPage() {
     )
   }
 
-  if (animal.status !== 'available') {
+  const isWaitlistOpen = animal.status === 'under_review'
+
+  if (animal.status !== 'available' && !isWaitlistOpen) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center flex flex-col items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
@@ -78,13 +80,30 @@ export function AdoptionFormPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground">
-              Adotar {animal.name}
+              {isWaitlistOpen ? `Fila de espera para ${animal.name}` : `Adotar ${animal.name}`}
             </h1>
             <p className="text-sm text-muted-foreground">
               {SPECIES_LABELS[animal.species]} · Formulário de candidatura
             </p>
           </div>
         </div>
+
+        {isWaitlistOpen && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15">
+              <AlertCircle size={18} className="text-warning" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium text-foreground">
+                {animal.name} já está em processo de adoção.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Você pode preencher este formulário para entrar na fila de espera.
+                Se surgir uma possibilidade, nossa equipe entrará em contato.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <AdoptionForm animal={animal} />

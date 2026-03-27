@@ -60,10 +60,13 @@ export function AnimalCard({ animal, className }: AnimalCardProps) {
         )}
 
         {/* Species badge overlay */}
-        <div className="absolute top-3 left-3">
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
           <Badge variant={animal.species === 'dog' ? 'default' : 'secondary'}>
             {SPECIES_LABELS[animal.species]}
           </Badge>
+          {animal.status === 'under_review' && (
+            <Badge variant="warning">Em análise</Badge>
+          )}
         </div>
       </Link>
 

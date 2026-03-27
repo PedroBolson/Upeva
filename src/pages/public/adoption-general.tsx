@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Dog, Cat, ArrowLeft } from 'lucide-react'
+import { Dog, Cat, ArrowLeft, PawPrint } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { AdoptionForm } from '@/features/adoption/components/adoption-form'
 import type { Animal } from '@/features/animals/types/animal.types'
@@ -96,7 +96,15 @@ export function AdoptionGeneralPage() {
         </div>
 
         <p className="text-sm text-muted-foreground max-w-xs">
-          Não tem um animal específico em mente? Sem problema — nossa equipe vai ajudar a encontrar o companheiro ideal.
+          Caso prefira, confira nossa{' '}
+          <Link
+            to="/animais"
+            className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
+          >
+            <PawPrint size={13} />
+            vitrine virtual
+          </Link>
+          {' '}e encontre seu novo amigo!
         </p>
 
         <Button variant="ghost" size="sm" onClick={() => window.history.back()} className="text-muted-foreground">

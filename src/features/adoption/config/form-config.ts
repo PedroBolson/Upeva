@@ -48,6 +48,7 @@ export function getStepFields(
         'cep',
         'address.street',
         'address.number',
+        'address.neighborhood',
         'address.city',
         'address.state',
       ]

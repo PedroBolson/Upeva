@@ -4,6 +4,7 @@ import { Input } from './input'
 
 export interface ViaCepAddress {
   street: string
+  neighborhood: string
   city: string
   state: string
 }
@@ -55,6 +56,7 @@ export function CepInput({
       const data = (await res.json()) as {
         erro?: boolean
         logradouro?: string
+        bairro?: string
         localidade?: string
         uf?: string
       }
@@ -64,6 +66,7 @@ export function CepInput({
       }
       onAddressFound({
         street: data.logradouro ?? '',
+        neighborhood: data.bairro ?? '',
         city: data.localidade ?? '',
         state: data.uf ?? '',
       })

@@ -11,6 +11,9 @@ interface ResponsiveDataListProps<T> {
   emptyMessage?: string
   className?: string
   mobileClassName?: string
+  sortColumn?: string
+  sortDir?: 'asc' | 'desc'
+  onSort?: (key: string) => void
 }
 
 export function ResponsiveDataList<T>({
@@ -22,6 +25,9 @@ export function ResponsiveDataList<T>({
   emptyMessage = 'Nenhum resultado encontrado.',
   className,
   mobileClassName,
+  sortColumn,
+  sortDir,
+  onSort,
 }: ResponsiveDataListProps<T>) {
   if (data.length === 0) {
     return (
@@ -40,6 +46,9 @@ export function ResponsiveDataList<T>({
           keyExtractor={keyExtractor}
           onRowClick={onRowClick}
           emptyMessage={emptyMessage}
+          sortColumn={sortColumn}
+          sortDir={sortDir}
+          onSort={onSort}
         />
       </div>
 

@@ -15,6 +15,9 @@ export interface Animal {
   vaccines: string[]
   neutered: boolean
   specialNeeds?: string
+  adoptedApplicationId?: string
+  adoptedAt?: Timestamp
+  activeApplicationCount?: number
   createdAt: Timestamp
   updatedAt: Timestamp
 }

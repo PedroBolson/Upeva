@@ -7,8 +7,6 @@ import {
   orderBy,
   limit,
   startAfter,
-  serverTimestamp,
-  updateDoc,
   where,
   type DocumentSnapshot,
   type QueryConstraint,
@@ -25,6 +23,20 @@ export interface ApplicationPage {
   applications: AdoptionApplication[]
   lastDoc: DocumentSnapshot | null
   hasMore: boolean
+}
+
+interface CreateApplicationResponse {
+  id: string
+  waitlistEntry: boolean
+  queuePosition: number
+}
+
+export interface UpdateApplicationReviewInput {
+  id: string
+  status: ApplicationStatus
+  adminNotes?: string
+  animalId?: string
+  animalName?: string
 }
 
 const ADMIN_PAGE_SIZE = 25
@@ -45,8 +57,8 @@ export async function createApplication(
   animalName: string | undefined,
   species: Species,
   data: AdoptionFormData,
-): Promise<string> {
-  const fn = httpsCallable<Record<string, unknown>, { id: string }>(
+): Promise<CreateApplicationResponse> {
+  const fn = httpsCallable<Record<string, unknown>, CreateApplicationResponse>(
     functions,
     'createApplication',
   )
@@ -56,7 +68,7 @@ export async function createApplication(
     ...(animalId ? { animalId } : {}),
     ...(animalName ? { animalName } : {}),
   })
-  return result.data.id
+  return result.data
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
@@ -94,17 +106,14 @@ export async function getApplicationById(id: string): Promise<AdoptionApplicatio
   return docToApplication(snap.id, snap.data())
 }
 
-export async function updateApplicationStatus(
-  id: string,
-  status: ApplicationStatus,
-  adminNotes?: string,
+export async function updateApplicationReview(
+  input: UpdateApplicationReviewInput,
 ): Promise<void> {
-  const payload: Record<string, unknown> = {
-    status,
-    updatedAt: serverTimestamp(),
-  }
-  if (adminNotes !== undefined) payload.adminNotes = adminNotes
-  await updateDoc(doc(db, 'applications', id), payload)
+  const fn = httpsCallable<UpdateApplicationReviewInput, { success: true }>(
+    functions,
+    'updateApplicationReview',
+  )
+  await fn(input)
 }
 
 export const APPLICATION_ADMIN_PAGE_SIZE = ADMIN_PAGE_SIZE

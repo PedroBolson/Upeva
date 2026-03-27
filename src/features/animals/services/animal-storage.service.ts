@@ -14,10 +14,12 @@ export async function uploadAnimalPhoto(animalId: string, file: File): Promise<s
 }
 
 export async function deleteAnimalPhoto(url: string): Promise<void> {
-  try {
-    const path = decodeURIComponent(url.split('/o/')[1].split('?')[0])
-    await deleteObject(ref(storage, path))
-  } catch {
-    // Photo already deleted or URL is not a Storage URL — ignore
+  const encodedPath = url.split('/o/')[1]?.split('?')[0]
+
+  if (!encodedPath) {
+    throw new Error('invalid-storage-url')
   }
+
+  const path = decodeURIComponent(encodedPath)
+  await deleteObject(ref(storage, path))
 }

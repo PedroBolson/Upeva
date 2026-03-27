@@ -12,6 +12,7 @@ export interface AdoptionFormData {
     street: string
     number: string
     complement?: string
+    neighborhood: string
     city: string
     state: string
   }
@@ -65,6 +66,8 @@ export interface AdoptionApplication extends AdoptionFormData {
   id: string
   animalId?: string
   animalName?: string
+  waitlistEntry?: boolean
+  queuePosition?: number
   species: Species
   status: ApplicationStatus
   adminNotes?: string

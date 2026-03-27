@@ -137,7 +137,7 @@ function AdminSidebar({
             aria-label="Abrir site principal em nova aba"
           >
             <ExternalLink size={16} className="shrink-0" />
-            {!collapsed && <span>Abrir site</span>}
+            {!collapsed && <span className="text-xs whitespace-nowrap">Abrir site</span>}
           </a>
           <button
             onClick={() => {

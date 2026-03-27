@@ -7,7 +7,7 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { CepInput, type ViaCepAddress } from '@/components/ui/cep-input'
 import type { AdoptionFormData } from '../../types/adoption.types'
 
-type LockedFields = { street: boolean; city: boolean; state: boolean }
+type LockedFields = { street: boolean; neighborhood: boolean; city: boolean; state: boolean }
 
 export function StepIdentification() {
   const {
@@ -20,6 +20,7 @@ export function StepIdentification() {
 
   const [lockedFields, setLockedFields] = useState<LockedFields>({
     street: false,
+    neighborhood: false,
     city: false,
     state: false,
   })
@@ -31,6 +32,7 @@ export function StepIdentification() {
     if (cepDigits.length === 8) {
       setLockedFields({
         street: Boolean(values.address?.street?.trim()),
+        neighborhood: Boolean(values.address?.neighborhood?.trim()),
         city: Boolean(values.address?.city?.trim()),
         state: Boolean(values.address?.state?.trim()),
       })
@@ -38,11 +40,15 @@ export function StepIdentification() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function handleAddressFound({ street, city, state }: ViaCepAddress) {
-    const locks: LockedFields = { street: false, city: false, state: false }
+  function handleAddressFound({ street, neighborhood, city, state }: ViaCepAddress) {
+    const locks: LockedFields = { street: false, neighborhood: false, city: false, state: false }
     if (street) {
       setValue('address.street', street, { shouldDirty: true })
       locks.street = true
+    }
+    if (neighborhood) {
+      setValue('address.neighborhood', neighborhood, { shouldDirty: true })
+      locks.neighborhood = true
     }
     if (city) {
       setValue('address.city', city, { shouldDirty: true })
@@ -165,7 +171,7 @@ export function StepIdentification() {
                   onChange={(masked) => {
                     field.onChange(masked)
                     if (masked.replace(/\D/g, '').length < 8) {
-                      setLockedFields({ street: false, city: false, state: false })
+                      setLockedFields({ street: false, neighborhood: false, city: false, state: false })
                     }
                   }}
                   onBlur={field.onBlur}
@@ -202,6 +208,18 @@ export function StepIdentification() {
               label="Complemento"
               placeholder="Apto, bloco… (opcional)"
               {...register('address.complement')}
+            />
+          </div>
+
+          <div className="sm:col-span-6">
+            <Input
+              label="Bairro"
+              placeholder="Preenchido pelo CEP"
+              error={errors.address?.neighborhood?.message}
+              readOnly={lockedFields.neighborhood}
+              rightIcon={lockedFields.neighborhood ? lockIcon : undefined}
+              required
+              {...register('address.neighborhood')}
             />
           </div>
 

@@ -19,3 +19,9 @@ export async function recalibrateCounts(): Promise<CountsDoc> {
   const result = await fn()
   return result.data
 }
+
+export async function recalibrateQueuePositions(): Promise<{ updatedCount: number }> {
+  const fn = httpsCallable<void, { updatedCount: number }>(functions, 'recalibrateQueuePositions')
+  const result = await fn()
+  return result.data
+}

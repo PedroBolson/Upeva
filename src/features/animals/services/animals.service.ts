@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { deleteAnimalPhoto } from './animal-storage.service'
-import type { AnimalStatus } from '@/types/common'
+import type { AnimalStatus, Sex, Size, Species } from '@/types/common'
 import type { Animal, AnimalFilters } from '../types/animal.types'
 
 export type AnimalPayload = Omit<Animal, 'id' | 'createdAt' | 'updatedAt'>
@@ -30,6 +30,7 @@ export interface AnimalPage {
 
 const PUBLIC_PAGE_SIZE = 12
 const ADMIN_PAGE_SIZE = 25
+const LINKABLE_ANIMALS_LIMIT = 25
 
 function docToAnimal(id: string, data: Record<string, unknown>): Animal {
   return { id, ...(data as Omit<Animal, 'id'>) }
@@ -52,7 +53,7 @@ export async function getAvailableAnimalsPaginated(
   filters: Pick<AnimalFilters, 'species' | 'sex' | 'size'> = {},
   cursor: DocumentSnapshot | null = null,
 ): Promise<AnimalPage> {
-  const constraints: QueryConstraint[] = [where('status', '==', 'available')]
+  const constraints: QueryConstraint[] = [where('status', 'in', ['available', 'under_review'])]
 
   if (filters.species) constraints.push(where('species', '==', filters.species))
   if (filters.sex)     constraints.push(where('sex', '==', filters.sex))
@@ -81,7 +82,7 @@ export async function getAvailableAnimalsPaginated(
 export async function getFeaturedAnimals(count: number = 6): Promise<Animal[]> {
   const q = query(
     collection(db, 'animals'),
-    where('status', '==', 'available'),
+    where('status', 'in', ['available', 'under_review']),
     orderBy('createdAt', 'desc'),
     limit(count),
   )
@@ -168,6 +169,35 @@ export async function getAnimalById(id: string): Promise<Animal | null> {
   const snap = await getDoc(doc(db, 'animals', id))
   if (!snap.exists()) return null
   return docToAnimal(snap.id, snap.data())
+}
+
+export interface LinkableAnimalFilters {
+  species: Species
+  preferredSex?: Sex | 'any'
+  preferredSize?: Size | 'any'
+}
+
+export async function getLinkableAnimalsForApplication(
+  filters: LinkableAnimalFilters,
+): Promise<Animal[]> {
+  const constraints: QueryConstraint[] = [
+    where('status', 'in', ['available', 'under_review']),
+    where('species', '==', filters.species),
+  ]
+
+  if (filters.species === 'dog' && filters.preferredSex && filters.preferredSex !== 'any') {
+    constraints.push(where('sex', '==', filters.preferredSex))
+  }
+
+  if (filters.species === 'dog' && filters.preferredSize && filters.preferredSize !== 'any') {
+    constraints.push(where('size', '==', filters.preferredSize))
+  }
+
+  constraints.push(orderBy('createdAt', 'desc'))
+  constraints.push(limit(LINKABLE_ANIMALS_LIMIT))
+
+  const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
+  return snap.docs.map((d) => docToAnimal(d.id, d.data()))
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────

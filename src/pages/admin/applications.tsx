@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApplicationStatusBadge, Button, Card, ResponsiveDataList } from '@/components/ui'
+import { ApplicationStatusBadge, Badge, Button, Card, ResponsiveDataList, Select } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
@@ -29,6 +29,9 @@ function getApplicationSubjectMeta(application: AdoptionApplication) {
 export function ApplicationsPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<ApplicationStatus | 'all'>('all')
+  const [animalFilter, setAnimalFilter] = useState('')
+  const [sortColumn, setSortColumn] = useState<string>('queue')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const { data: counts } = useCounts()
@@ -43,6 +46,57 @@ export function ApplicationsPage() {
     fetchMore,
     refetch,
   } = useApplications(serverStatus)
+
+  // Unique animal options from already-fetched applications — no extra reads
+  const animalOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const options: { value: string; label: string }[] = []
+    for (const a of applications) {
+      const name = a.animalName
+      if (name && !seen.has(name)) {
+        seen.add(name)
+        options.push({ value: name, label: name })
+      }
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+  }, [applications])
+
+  // Client-side filter by animal name — no extra reads
+  const filteredApplications = useMemo(() => {
+    if (!animalFilter) return applications
+    return applications.filter((a) => a.animalName === animalFilter)
+  }, [applications, animalFilter])
+
+  const sortKeys: Record<string, (a: AdoptionApplication) => string | number> = {
+    applicant: (a) => a.fullName.toLowerCase(),
+    contact: (a) => a.email.toLowerCase(),
+    animal: (a) => (a.animalName ?? '').toLowerCase(),
+    queue: (a) => a.queuePosition ?? Number.MAX_SAFE_INTEGER,
+    status: (a) => a.status,
+    date: (a) => (a.createdAt as Timestamp | undefined)?.seconds ?? 0,
+  }
+
+  function handleSort(key: string) {
+    if (sortColumn === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortColumn(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedApplications = useMemo(() => {
+    const fn = sortKeys[sortColumn]
+    if (!fn) return filteredApplications
+    return [...filteredApplications].sort((a, b) => {
+      const av = fn(a)
+      const bv = fn(b)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredApplications, sortColumn, sortDir])
 
   // Counts for tab badges come from metadata (no extra reads)
   const statusCounts = useMemo(() => {
@@ -152,6 +206,7 @@ export function ApplicationsPage() {
     {
       key: 'applicant',
       header: 'Candidato',
+      sortKey: sortKeys.applicant,
       cell: (a) => (
         <div>
           <p className="font-medium text-foreground">{a.fullName}</p>
@@ -162,6 +217,7 @@ export function ApplicationsPage() {
     {
       key: 'contact',
       header: 'Contato',
+      sortKey: sortKeys.contact,
       cell: (a) => (
         <div>
           <p className="text-sm text-foreground">{a.email}</p>
@@ -172,6 +228,7 @@ export function ApplicationsPage() {
     {
       key: 'animal',
       header: 'Animal',
+      sortKey: sortKeys.animal,
       cell: (a) => (
         <div>
           <p className="text-foreground">{getApplicationSubject(a)}</p>
@@ -180,13 +237,23 @@ export function ApplicationsPage() {
       ),
     },
     {
+      key: 'queue',
+      header: 'Posição',
+      sortKey: sortKeys.queue,
+      cell: (a) => a.queuePosition
+        ? <Badge variant="warning">#{a.queuePosition}º na fila</Badge>
+        : <span className="text-xs text-muted-foreground">—</span>,
+    },
+    {
       key: 'status',
       header: 'Status',
+      sortKey: sortKeys.status,
       cell: (a) => <ApplicationStatusBadge status={a.status} />,
     },
     {
       key: 'date',
       header: 'Data',
+      sortKey: sortKeys.date,
       cell: (a) => (
         <span className="text-sm text-muted-foreground">
           {formatRelativeDate(tsToDate(a.createdAt as Timestamp | undefined))}
@@ -212,18 +279,30 @@ export function ApplicationsPage() {
 
       {!isLoading && !error && (
         <Card className="border-border/80 p-5">
-          <div className="mb-4 flex flex-col gap-1">
-            <p className="text-sm font-medium text-foreground">
-              {applications.length} candidatura{applications.length !== 1 ? 's' : ''} carregada{applications.length !== 1 ? 's' : ''}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
-            </p>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-foreground">
+                {sortedApplications.length} candidatura{sortedApplications.length !== 1 ? 's' : ''}{' '}
+                {animalFilter ? 'encontrada' : 'carregada'}{sortedApplications.length !== 1 ? 's' : ''}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
+              </p>
+            </div>
+            {animalOptions.length > 0 && (
+              <div className="w-full sm:w-56">
+                <Select
+                  options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
+                  value={animalFilter}
+                  onChange={(v) => setAnimalFilter(v)}
+                />
+              </div>
+            )}
           </div>
 
           <ResponsiveDataList
             columns={columns}
-            data={applications}
+            data={sortedApplications}
             keyExtractor={(a) => a.id}
             onRowClick={(a) => navigate(`/admin/candidaturas/${a.id}`)}
             renderMobileCard={(application) => (
@@ -233,6 +312,9 @@ export function ApplicationsPage() {
               />
             )}
             emptyMessage="Nenhuma candidatura encontrada."
+            sortColumn={sortColumn}
+            sortDir={sortDir}
+            onSort={handleSort}
           />
         </Card>
       )}

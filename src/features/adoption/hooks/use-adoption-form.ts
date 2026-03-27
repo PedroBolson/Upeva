@@ -12,6 +12,8 @@ export function useAdoptionForm(animal: Animal) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
+  const [waitlistEntry, setWaitlistEntry] = useState(false)
+  const [queuePosition, setQueuePosition] = useState(0)
   const hasSpecificAnimal = Boolean(animal.id)
   const steps = getStepLabels(hasSpecificAnimal)
   const totalSteps = steps.length
@@ -33,6 +35,7 @@ export function useAdoptionForm(animal: Animal) {
         street: '',
         number: '',
         complement: '',
+        neighborhood: '',
         city: '',
         state: '',
       },
@@ -64,13 +67,15 @@ export function useAdoptionForm(animal: Animal) {
     setIsSubmitting(true)
     setSubmitError(null)
     try {
-      const id = await createApplication(
+      const result = await createApplication(
         hasSpecificAnimal ? animal.id : undefined,
         hasSpecificAnimal ? animal.name : undefined,
         animal.species,
         data,
       )
-      setApplicationId(id)
+      setApplicationId(result.id)
+      setWaitlistEntry(result.waitlistEntry)
+      setQueuePosition(result.queuePosition)
     } catch {
       setSubmitError(
         'Não foi possível enviar sua candidatura. Verifique sua conexão e tente novamente.',
@@ -93,6 +98,8 @@ export function useAdoptionForm(animal: Animal) {
     isSubmitting,
     submitError,
     applicationId,
+    waitlistEntry,
+    queuePosition,
     hasSpecificAnimal,
     isSuccess: applicationId !== null,
   }
