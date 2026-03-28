@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { getApplicationsPaginated, type ApplicationPage } from '../services/adoption.service'
 import type { ApplicationStatus } from '@/types/common'
@@ -17,7 +18,10 @@ export function useApplications(status: ApplicationStatus | null = null) {
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
   })
 
-  const applications = result.data?.pages.flatMap((p) => p.applications) ?? []
+  const applications = useMemo(
+    () => result.data?.pages.flatMap((p) => p.applications) ?? [],
+    [result.data],
+  )
   const hasMore = result.data?.pages[result.data.pages.length - 1]?.hasMore ?? false
 
   return {

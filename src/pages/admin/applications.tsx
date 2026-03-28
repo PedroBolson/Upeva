@@ -159,15 +159,26 @@ export function ApplicationsPage() {
         </div>
 
         {!isCompact && (
-          <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
-            {tabButtons}
-          </div>
+          <>
+            <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+              {tabButtons}
+            </div>
+            {animalOptions.length > 0 && (
+              <div className="w-44 shrink-0">
+                <Select
+                  options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
+                  value={animalFilter}
+                  onChange={(v) => setAnimalFilter(v)}
+                />
+              </div>
+            )}
+          </>
         )}
 
         {isCompact && (
           <AdminHeaderOverflow
-            label={activeTab === 'all' ? 'Filtros' : 'Status'}
-            active={activeTab !== 'all'}
+            label="Filtros"
+            active={activeTab !== 'all' || !!animalFilter}
           >
             {(close) => (
               <div className="grid gap-2">
@@ -197,13 +208,26 @@ export function ApplicationsPage() {
                     )}
                   </Button>
                 ))}
+                {animalOptions.length > 0 && (
+                  <div className="flex flex-col gap-1.5 border-t border-border pt-2">
+                    <span className="text-xs font-medium text-muted-foreground">Animal</span>
+                    <Select
+                      options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
+                      value={animalFilter}
+                      onChange={(v) => {
+                        setAnimalFilter(v)
+                        close()
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </AdminHeaderOverflow>
         )}
       </div>
     ),
-    [activeTab, containerRef, isCompact, measureRef, statusCounts, tabButtons],
+    [activeTab, animalFilter, animalOptions, containerRef, isCompact, measureRef, statusCounts, tabButtons],
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
@@ -281,25 +305,14 @@ export function ApplicationsPage() {
 
       {!isLoading && !error && (
         <Card className="border-border/80 p-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-foreground">
-                {sortedApplications.length} candidatura{sortedApplications.length !== 1 ? 's' : ''}{' '}
-                {animalFilter ? 'encontrada' : 'carregada'}{sortedApplications.length !== 1 ? 's' : ''}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
-              </p>
-            </div>
-            {animalOptions.length > 0 && (
-              <div className="w-full sm:w-56">
-                <Select
-                  options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
-                  value={animalFilter}
-                  onChange={(v) => setAnimalFilter(v)}
-                />
-              </div>
-            )}
+          <div className="mb-4 flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">
+              {sortedApplications.length} candidatura{sortedApplications.length !== 1 ? 's' : ''}{' '}
+              {animalFilter ? 'encontrada' : 'carregada'}{sortedApplications.length !== 1 ? 's' : ''}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
+            </p>
           </div>
 
           <ResponsiveDataList
