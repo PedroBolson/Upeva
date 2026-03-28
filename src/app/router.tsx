@@ -12,6 +12,7 @@ import { AboutPage } from '@/pages/public/about'
 import { ContactPage } from '@/pages/public/contact'
 
 import { LoginPage } from '@/pages/admin/login'
+import { ResetPasswordPage } from '@/pages/admin/reset-password'
 import { DashboardPage } from '@/pages/admin/dashboard'
 import { AdminAnimalsPage } from '@/pages/admin/animals'
 import { AnimalFormPage } from '@/pages/admin/animal-form'
@@ -36,6 +37,10 @@ const router = createBrowserRouter([
   {
     path: '/admin/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/admin/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     element: (

@@ -2,6 +2,7 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  confirmPasswordReset,
   type User,
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -21,6 +22,10 @@ export async function signOut(): Promise<void> {
 
 export async function resetPassword(email: string): Promise<void> {
   await sendPasswordResetEmail(auth, email)
+}
+
+export async function confirmReset(oobCode: string, newPassword: string): Promise<void> {
+  await confirmPasswordReset(auth, oobCode, newPassword)
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
