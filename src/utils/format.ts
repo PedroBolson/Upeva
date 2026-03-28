@@ -28,12 +28,21 @@ export function formatCurrency(value: number): string {
 export function formatRelativeDate(value: Date): string {
   const now = new Date()
   const diffMs = now.getTime() - value.getTime()
+
+  if (diffMs < 0) return formatDate(value)
+
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (diffDays === 0) return 'hoje'
   if (diffDays === 1) return 'ontem'
   if (diffDays < 7) return `há ${diffDays} dias`
-  if (diffDays < 30) return `há ${Math.floor(diffDays / 7)} semanas`
-  if (diffDays < 365) return `há ${Math.floor(diffDays / 30)} meses`
-  return `há ${Math.floor(diffDays / 365)} anos`
+
+  const weeks = Math.floor(diffDays / 7)
+  if (diffDays < 30) return `há ${weeks} ${weeks === 1 ? 'semana' : 'semanas'}`
+
+  const months = Math.floor(diffDays / 30)
+  if (diffDays < 365) return `há ${months} ${months === 1 ? 'mês' : 'meses'}`
+
+  const years = Math.floor(diffDays / 365)
+  return `há ${years} ${years === 1 ? 'ano' : 'anos'}`
 }

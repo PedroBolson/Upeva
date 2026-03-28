@@ -43,11 +43,7 @@ const router = createBrowserRouter([
     element: <ResetPasswordPage />,
   },
   {
-    element: (
-      <ProtectedRoute>
-        <AdminLayout />
-      </ProtectedRoute>
-    ),
+    element: <AdminLayout />,
     children: [
       { path: '/admin',                         element: <DashboardPage /> },
       { path: '/admin/animais',                 element: <AdminAnimalsPage /> },

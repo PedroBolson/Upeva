@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApplicationStatusBadge, Badge, Button, Card, ResponsiveDataList, Select } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
+import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
 import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
@@ -269,11 +270,7 @@ export function ApplicationsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      {isLoading && (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      )}
+      {isLoading && <AdminListSkeleton rows={8} columns={6} />}
 
       {error && (
         <ErrorState

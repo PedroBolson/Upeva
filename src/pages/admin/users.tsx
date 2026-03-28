@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
 import { Button, Card, Input, Select, ResponsiveDataList, ConfirmModal } from '@/components/ui'
 import type { Column } from '@/components/ui'
-import { Spinner } from '@/components/ui/spinner'
+import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from '@/features/users/hooks/use-users'
@@ -285,11 +285,7 @@ export function UsersPage() {
         <p className="text-sm text-success">Usuário criado com sucesso.</p>
       )}
 
-      {isLoading && (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      )}
+      {isLoading && <AdminListSkeleton rows={8} columns={3} />}
 
       {error && (
         <ErrorState description="Não foi possível carregar os usuários." onRetry={refetch} />

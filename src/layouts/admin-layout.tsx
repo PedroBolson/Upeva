@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
-import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   PawPrint,
@@ -18,8 +18,18 @@ import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
 import { AdminHeaderProvider } from '@/features/admin/admin-header.provider'
 import { useAdminHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAuth } from '@/features/auth/hooks/use-auth'
+import { useAuthContext } from '@/features/auth/contexts/auth.context'
+import { AdminListSkeleton, DashboardSkeleton } from '@/components/ui/skeleton'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
+
+function getAuthLoadingSkeleton(pathname: string): React.ReactNode {
+  if (pathname === '/admin') return <DashboardSkeleton />
+  if (pathname === '/admin/animais') return <AdminListSkeleton columns={4} />
+  if (pathname === '/admin/candidaturas') return <AdminListSkeleton columns={6} />
+  if (pathname === '/admin/usuarios') return <AdminListSkeleton columns={3} />
+  return null
+}
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, role: undefined as UserRole | undefined },
@@ -161,14 +171,21 @@ function AdminSidebar({
 }
 
 export function AdminLayout() {
+  const { user, loading } = useAuthContext()
+  const location = useLocation()
+
+  if (!loading && !user) {
+    return <Navigate to="/admin/login" state={{ from: location }} replace />
+  }
+
   return (
     <AdminHeaderProvider>
-      <AdminLayoutContent />
+      <AdminLayoutContent authLoading={loading} />
     </AdminHeaderProvider>
   )
 }
 
-function AdminLayoutContent() {
+function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const location = useLocation()
@@ -274,7 +291,7 @@ function AdminLayoutContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
-              <Outlet />
+              {authLoading ? getAuthLoadingSkeleton(location.pathname) : <Outlet />}
             </motion.div>
           </div>
         </main>

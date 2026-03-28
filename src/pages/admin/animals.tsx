@@ -6,6 +6,7 @@ import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { AnimalPhotoThumbnail } from '@/features/animals/components/animal-photo-thumbnail'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
+import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
 import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
@@ -16,6 +17,7 @@ import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS, STATUS_LABELS } from '@/featur
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { AnimalStatus } from '@/types/common'
+import { cn } from '@/utils/cn'
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -35,7 +37,7 @@ export function AdminAnimalsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
-  const { animals: allAnimals, hasMore, isLoading, isFetchingMore, error, fetchMore, refetch } =
+  const { animals: allAnimals, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
     useAdminAnimals(statusFilter || null)
 
   const { mutate: updateStatus } = useUpdateAnimalStatus()
@@ -280,11 +282,7 @@ export function AdminAnimalsPage() {
         loading={isDeletingAnimal}
       />
 
-      {isLoading && (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      )}
+      {isLoading && <AdminListSkeleton rows={8} columns={4} />}
 
       {error && (
         <ErrorState
@@ -294,7 +292,7 @@ export function AdminAnimalsPage() {
       )}
 
       {!isLoading && !error && (
-        <Card className="border-border/80 p-5">
+        <Card className={cn('border-border/80 p-5 transition-opacity duration-150', isFiltering && 'opacity-50 pointer-events-none')}>
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
               {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} carregado{filtered.length !== 1 ? 's' : ''}
@@ -341,8 +339,7 @@ export function AdminAnimalsPage() {
         </Card>
       )}
 
-      {/* Load more */}
-      {!isLoading && !error && (hasMore || isFetchingMore) && (
+      {!isLoading && !isFiltering && !error && (hasMore || isFetchingMore) && (
         <div className="flex justify-center">
           <Button
             variant="outline"
