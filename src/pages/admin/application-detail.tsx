@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
+import { AnimalQuickViewModal } from '@/features/animals/components/animal-quick-view-modal'
+import { cn } from '@/utils/cn'
 import { DetailSection, DetailField } from '@/components/ui/detail-view'
 import { Textarea } from '@/components/ui/textarea'
 import { PageSpinner } from '@/components/ui/spinner'
@@ -104,6 +106,7 @@ export function ApplicationDetailPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
   const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false)
+  const [isAnimalModalOpen, setIsAnimalModalOpen] = useState(false)
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -259,6 +262,13 @@ export function ApplicationDetailPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <AnimalQuickViewModal
+        animalId={app.animalId}
+        animalName={app.animalName}
+        open={isAnimalModalOpen}
+        onClose={() => setIsAnimalModalOpen(false)}
+      />
+
       <ConfirmModal
         open={isApprovalConfirmOpen}
         onClose={() => setIsApprovalConfirmOpen(false)}
@@ -323,6 +333,7 @@ export function ApplicationDetailPage() {
                 label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
                 value={animalLabel}
                 helper={app.previousAnimalName ? `Inscreveu-se para ${app.previousAnimalName} · adotado` : animalHelper}
+                onClick={hasSpecificAnimal ? () => setIsAnimalModalOpen(true) : undefined}
               />
               <SummaryCard
                 icon={Mail}
@@ -608,21 +619,30 @@ function SummaryCard({
   label,
   value,
   helper,
+  onClick,
 }: {
   icon: React.ElementType
   label: string
   value: string
   helper?: string
+  onClick?: () => void
 }) {
+  const Comp = onClick ? 'button' : 'div'
   return (
-    <div className="rounded-xl border border-border bg-muted/25 p-4">
+    <Comp
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={cn(
+        'rounded-xl border border-border bg-muted/25 p-4 text-left',
+        onClick && 'cursor-pointer transition-colors hover:bg-muted/50 hover:border-border/60',
+      )}
+    >
       <div className="flex items-center gap-2 text-muted-foreground">
         <Icon size={14} />
         <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
       </div>
       <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
       {helper && <p className="mt-1 text-xs text-muted-foreground">{helper}</p>}
-    </div>
+    </Comp>
   )
 }
 
