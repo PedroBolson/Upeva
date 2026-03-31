@@ -3,7 +3,7 @@ import { PublicLayout } from '@/layouts/public-layout'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { ProtectedRoute } from '@/features/auth/components/protected-route'
 
-import { HomePage } from '@/pages/public/home'
+import { SmartEntry } from '@/features/auth/components/smart-entry'
 import { AnimalsPage } from '@/pages/public/animals'
 import { AnimalDetailPage } from '@/pages/public/animal-detail'
 import { AdoptionFormPage } from '@/pages/public/adoption-form'
@@ -25,7 +25,7 @@ const router = createBrowserRouter([
   {
     element: <PublicLayout />,
     children: [
-      { path: '/',             element: <HomePage /> },
+      { path: '/',             element: <SmartEntry /> },
       { path: '/animais',      element: <AnimalsPage /> },
       { path: '/animais/:id',  element: <AnimalDetailPage /> },
       { path: '/adotar',       element: <AdoptionGeneralPage /> },

@@ -145,25 +145,29 @@ export function AdminAnimalsPage() {
         </div>
 
         {!isCompact && (
-          <>
-            <div className="w-40 shrink-0">
-              <Select
-                options={STATUS_FILTER_OPTIONS}
-                value={statusFilter}
-                onChange={(value) => setStatusFilter(value as AnimalStatus | '')}
-                className="h-9 rounded-lg"
-              />
-            </div>
-
-            <Link to="/admin/animais/novo" className="shrink-0">
-              <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
-                <Plus size={16} />
-                <span className="hidden min-[480px]:inline">Cadastrar animal</span>
-                <span className="min-[480px]:hidden">Novo</span>
-              </Button>
-            </Link>
-          </>
+          <div className="w-40 shrink-0">
+            <Select
+              options={STATUS_FILTER_OPTIONS}
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as AnimalStatus | '')}
+              className="h-9 rounded-lg"
+            />
+          </div>
         )}
+
+        <Link to="/admin/animais/novo" className="shrink-0">
+          {isCompact ? (
+            <Button size="icon" className="h-9 w-9" aria-label="Cadastrar animal">
+              <Plus size={16} />
+            </Button>
+          ) : (
+            <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+              <Plus size={16} />
+              <span className="hidden min-[480px]:inline">Cadastrar animal</span>
+              <span className="min-[480px]:hidden">Novo</span>
+            </Button>
+          )}
+        </Link>
 
         {isCompact && (
           <AdminHeaderOverflow
