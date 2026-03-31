@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Heart } from 'lucide-react'
 import { contactHubLinks } from '@/features/contact/config/contact-links'
@@ -6,6 +7,7 @@ import { ContactSocialRow } from '@/features/contact/components/contact-social-r
 import { fadeUp, stagger } from '@/utils/animations'
 
 export function ContactPage() {
+  useEffect(() => { document.title = 'Contato — Upeva' }, [])
   return (
     <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
       <div
@@ -17,7 +19,7 @@ export function ContactPage() {
         className="pointer-events-none absolute bottom-8 right-0 h-60 w-60 rounded-full bg-secondary/12 blur-3xl"
       />
 
-      <section className="mx-auto max-w-4xl px-4 pt-28 pb-12 sm:px-6 sm:pt-32 sm:pb-16">
+      <section className="mx-auto max-w-4xl px-4 pt-20 pb-12 sm:px-6 sm:pt-28 sm:pb-16">
         <motion.div
           variants={stagger}
           initial="hidden"

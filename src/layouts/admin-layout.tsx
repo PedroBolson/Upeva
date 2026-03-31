@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
-import { Navigate, Outlet, NavLink, Link, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, Link, useLocation, ScrollRestoration } from 'react-router-dom'
 import {
   LayoutDashboard,
   PawPrint,
@@ -291,6 +291,7 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
+              <ScrollRestoration />
               {authLoading ? getAuthLoadingSkeleton(location.pathname) : <Outlet />}
             </motion.div>
           </div>

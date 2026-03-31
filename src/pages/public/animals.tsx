@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PawPrint } from 'lucide-react'
@@ -29,6 +30,7 @@ function paramsFromFilters(f: Filters): Record<string, string> {
 }
 
 export function AnimalsPage() {
+  useEffect(() => { document.title = 'Animais disponíveis — Upeva' }, [])
   const [searchParams, setSearchParams] = useSearchParams()
 
   const filters = filtersFromParams(searchParams)
@@ -41,7 +43,7 @@ export function AnimalsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 pb-10">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-16 pb-10 sm:pt-24">
       <div className="flex flex-col gap-8">
         {/* Filters */}
         <motion.div

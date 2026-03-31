@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { PawPrint, ArrowLeft, AlertCircle } from 'lucide-react'
 import { PageSpinner } from '@/components/ui/spinner'
@@ -10,6 +11,11 @@ export function AdoptionFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
+
+  useEffect(() => {
+    if (animal) document.title = `Adotar ${animal.name} — Upeva`
+    return () => { document.title = 'Upeva — Adoção responsável de animais' }
+  }, [animal])
 
   if (isLoading) return <PageSpinner />
 

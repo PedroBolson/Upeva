@@ -28,6 +28,8 @@ import {
   CardHeader,
   CardTitle,
   Skeleton,
+  ErrorState,
+  EmptyState,
 } from '@/components/ui'
 import { AnimalPhotoThumbnail } from '@/features/animals/components/animal-photo-thumbnail'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
@@ -67,6 +69,7 @@ interface RecentListState<T> {
   items: T[]
   isLoading: boolean
   error: unknown
+  onRetry: () => void
 }
 
 function useRecentApplications() {
@@ -173,7 +176,7 @@ function EmptyChartState({ message }: { message: string }) {
   )
 }
 
-function RecentApplicationsPanel({ items, isLoading, error }: RecentListState<AdoptionApplication>) {
+function RecentApplicationsPanel({ items, isLoading, error, onRetry }: RecentListState<AdoptionApplication>) {
   return (
     <Card className="border-border/80">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
@@ -205,14 +208,14 @@ function RecentApplicationsPanel({ items, isLoading, error }: RecentListState<Ad
         )}
 
         {!isLoading && Boolean(error) && (
-          <div className="px-6 pb-6 text-sm text-muted-foreground">
-            Não foi possível carregar as candidaturas.
+          <div className="px-6 pb-6">
+            <ErrorState description="Não foi possível carregar as candidaturas." onRetry={onRetry} />
           </div>
         )}
 
         {!isLoading && !error && items.length === 0 && (
-          <div className="px-6 pb-6 text-sm text-muted-foreground">
-            Nenhuma candidatura recebida ainda.
+          <div className="px-6 pb-6">
+            <EmptyState title="Sem candidaturas" description="Nenhuma candidatura recebida ainda." />
           </div>
         )}
 
@@ -238,7 +241,7 @@ function RecentApplicationsPanel({ items, isLoading, error }: RecentListState<Ad
   )
 }
 
-function RecentAnimalsPanel({ items, isLoading, error }: RecentListState<Animal>) {
+function RecentAnimalsPanel({ items, isLoading, error, onRetry }: RecentListState<Animal>) {
   return (
     <Card className="border-border/80">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
@@ -270,14 +273,14 @@ function RecentAnimalsPanel({ items, isLoading, error }: RecentListState<Animal>
         )}
 
         {!isLoading && Boolean(error) && (
-          <div className="px-6 pb-6 text-sm text-muted-foreground">
-            Não foi possível carregar os animais.
+          <div className="px-6 pb-6">
+            <ErrorState description="Não foi possível carregar os animais." onRetry={onRetry} />
           </div>
         )}
 
         {!isLoading && !error && items.length === 0 && (
-          <div className="px-6 pb-6 text-sm text-muted-foreground">
-            Nenhum animal cadastrado ainda.
+          <div className="px-6 pb-6">
+            <EmptyState title="Sem animais" description="Nenhum animal cadastrado ainda." />
           </div>
         )}
 
@@ -316,11 +319,13 @@ export function DashboardPage() {
     data: recentApplications = [],
     isLoading: appsLoading,
     error: appsError,
+    refetch: refetchApps,
   } = useRecentApplications()
   const {
     data: recentAnimals = [],
     isLoading: animalsLoading,
     error: animalsError,
+    refetch: refetchAnimals,
   } = useRecentAnimals()
 
   const animalDistribution = useMemo(
@@ -505,11 +510,13 @@ export function DashboardPage() {
           items={recentApplications}
           isLoading={appsLoading}
           error={appsError}
+          onRetry={refetchApps}
         />
         <RecentAnimalsPanel
           items={recentAnimals}
           isLoading={animalsLoading}
           error={animalsError}
+          onRetry={refetchAnimals}
         />
       </div>
     </div>

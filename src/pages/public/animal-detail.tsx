@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -33,6 +34,11 @@ export function AnimalDetailPage() {
   const navigate = useNavigate()
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
   const { data: similar = [] } = useSimilarAnimals(animal ?? undefined)
+
+  useEffect(() => {
+    if (animal) document.title = `${animal.name} — Upeva`
+    return () => { document.title = 'Upeva — Adoção responsável de animais' }
+  }, [animal])
 
   if (isLoading) return <DetailSkeleton />
 
@@ -82,7 +88,7 @@ export function AnimalDetailPage() {
   }[detailChips.length] ?? 'lg:grid-cols-4'
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-20 pb-8 sm:pt-24">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

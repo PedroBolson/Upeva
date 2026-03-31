@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ClipboardList, PawPrint, Shield, Users } from 'lucide-react'
@@ -24,6 +25,7 @@ const steps = [
 ]
 
 export function HomePage() {
+  useEffect(() => { document.title = 'Upeva — Adoção responsável de animais' }, [])
   return (
     <div className="flex flex-col">
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
@@ -37,7 +39,7 @@ export function HomePage() {
         />
 
         <section className="relative">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-36 pb-20 sm:pt-44 sm:pb-28">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 pb-20 sm:pt-36 sm:pb-28">
             <motion.div
               variants={stagger}
               initial="hidden"
@@ -87,7 +89,7 @@ export function HomePage() {
           <motion.div
             initial="hidden"
             whileInView="show"
-            viewport={{ once: true, amount: 0.2 }}
+            viewport={{ once: true, amount: 0.15 }}
             variants={stagger}
             className="flex flex-col gap-12"
           >
@@ -130,7 +132,7 @@ export function HomePage() {
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
+          viewport={{ once: true, amount: 0.15 }}
           transition={{ duration: 0.5 }}
           className="rounded-2xl bg-primary px-8 py-12 text-center flex flex-col items-center gap-6"
         >

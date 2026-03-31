@@ -17,7 +17,7 @@ export function FeaturedAnimalRail() {
       <motion.div
         initial="hidden"
         whileInView="show"
-        viewport={{ once: true, amount: 0.1 }}
+        viewport={{ once: true, amount: 0.15 }}
         variants={stagger}
         className="flex flex-col gap-8"
       >

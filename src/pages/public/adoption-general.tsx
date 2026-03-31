@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Dog, Cat, ArrowLeft, PawPrint } from 'lucide-react'
@@ -32,6 +32,7 @@ function buildMockAnimal(species: Species): Animal {
 }
 
 export function AdoptionGeneralPage() {
+  useEffect(() => { document.title = 'Quero adotar — Upeva' }, [])
   const [searchParams] = useSearchParams()
   const [species, setSpecies] = useState<Species | null>(() => {
     const initialSpecies = searchParams.get('especie')

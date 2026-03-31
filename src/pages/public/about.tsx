@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -67,10 +68,11 @@ const adoptionSteps = [
 ]
 
 export function AboutPage() {
+  useEffect(() => { document.title = 'Sobre a Upeva' }, [])
   return (
     <div className="flex flex-col">
       <div className="bg-linear-to-br from-accent via-background to-background">
-        <section className="pt-36 pb-20">
+        <section className="pt-24 pb-20 sm:pt-36">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <motion.div
               variants={stagger}
@@ -130,7 +132,7 @@ export function AboutPage() {
           <motion.div
             initial="hidden"
             whileInView="show"
-            viewport={{ once: true, amount: 0.2 }}
+            viewport={{ once: true, amount: 0.155 }}
             variants={stagger}
             className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start"
           >
@@ -170,7 +172,7 @@ export function AboutPage() {
           <motion.div
             initial="hidden"
             whileInView="show"
-            viewport={{ once: true, amount: 0.1 }}
+            viewport={{ once: true, amount: 0.15 }}
             variants={stagger}
             className="flex flex-col gap-12"
           >
@@ -206,7 +208,7 @@ export function AboutPage() {
         <motion.div
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0.155 }}
           variants={stagger}
           className="flex flex-col gap-8"
         >

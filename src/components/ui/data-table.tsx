@@ -38,7 +38,7 @@ export function DataTable<T>({
   return (
     <div className={cn('w-full overflow-x-auto rounded-lg border border-border', className)}>
       <table className="w-full text-sm">
-        <thead className="bg-muted/50 border-b border-border">
+        <thead className="sticky top-0 z-10 bg-muted/50 border-b border-border">
           <tr>
             {columns.map((col) => {
               const sortable = Boolean(col.sortKey && onSort)

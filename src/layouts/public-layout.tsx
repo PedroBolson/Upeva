@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { Outlet, NavLink, Link, ScrollRestoration } from 'react-router-dom'
 import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -144,6 +144,7 @@ export function PublicLayout() {
         </AnimatePresence>
       </header>
 
+      <ScrollRestoration />
       <main id="main-content" className="flex-1">
         <Outlet />
       </main>
