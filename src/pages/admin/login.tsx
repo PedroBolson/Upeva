@@ -6,7 +6,9 @@ import { z } from 'zod'
 import { PawPrint } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Input, Button } from '@/components/ui'
+import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { useAuth } from '@/features/auth/hooks/use-auth'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const loginSchema = z.object({
   email:    z.string().email('Email inválido'),
@@ -30,6 +32,8 @@ export function LoginPage() {
   const [resetSent, setResetSent] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
+
+  useDocumentTitle(buildAdminTitle(mode === 'login' ? 'Entrar' : 'Recuperar senha'))
 
   useEffect(() => {
     if (user) navigate(from, { replace: true })
@@ -57,6 +61,7 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <SystemBarTint tone="background" />
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

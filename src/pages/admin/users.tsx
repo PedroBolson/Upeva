@@ -13,6 +13,7 @@ import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compactio
 import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from '@/features/users/hooks/use-users'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { UserProfile, UserRole } from '@/types/common'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
@@ -38,6 +39,8 @@ const createUserSchema = z.object({
 type CreateUserForm = z.infer<typeof createUserSchema>
 
 export function UsersPage() {
+  useDocumentTitle(buildAdminTitle('Usuários'))
+
   const { userProfile: currentUser } = useAuth()
   const {
     data,

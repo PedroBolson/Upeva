@@ -1,13 +1,13 @@
-import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Heart } from 'lucide-react'
 import { contactHubLinks } from '@/features/contact/config/contact-links'
 import { ContactLinkCard } from '@/features/contact/components/contact-link-card'
 import { ContactSocialRow } from '@/features/contact/components/contact-social-row'
 import { fadeUp, stagger } from '@/utils/animations'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 export function ContactPage() {
-  useEffect(() => { document.title = 'Contato — Upeva' }, [])
+  useDocumentTitle(buildPublicTitle('Contato'))
   return (
     <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
       <div

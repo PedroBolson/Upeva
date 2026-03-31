@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
-import { Navigate, Outlet, NavLink, Link, useLocation, ScrollRestoration } from 'react-router-dom'
+import { Navigate, Outlet, NavLink, Link, useLocation, useNavigate, ScrollRestoration } from 'react-router-dom'
 import {
   LayoutDashboard,
   PawPrint,
@@ -15,11 +15,13 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
+import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { AdminHeaderProvider } from '@/features/admin/admin-header.provider'
 import { useAdminHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { useAuthContext } from '@/features/auth/contexts/auth.context'
 import { AdminListSkeleton, DashboardSkeleton } from '@/components/ui/skeleton'
+import { isStandalone } from '@/utils/pwa'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
 
@@ -57,6 +59,8 @@ function AdminSidebar({
   onLogout,
 }: AdminSidebarProps) {
   const visibleItems = navItems.filter((item) => !item.role || item.role === userRole)
+  const navigate = useNavigate()
+  const standalone = isStandalone()
 
   return (
     <div
@@ -135,16 +139,25 @@ function AdminSidebar({
         <div className={cn('flex gap-2', collapsed ? 'flex-col' : 'grid grid-cols-2')}>
           <a
             href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onNavigate?.()}
+            target={standalone ? undefined : '_blank'}
+            rel={standalone ? undefined : 'noopener noreferrer'}
+            onClick={(event) => {
+              onNavigate?.()
+
+              if (!standalone) {
+                return
+              }
+
+              event.preventDefault()
+              navigate('/')
+            }}
             className={cn(
               'flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground',
               'transition-colors duration-150 hover:border-primary/30 hover:bg-accent/60 hover:text-foreground',
               collapsed ? 'justify-center px-2' : 'justify-center',
             )}
             title={collapsed ? 'Abrir site' : undefined}
-            aria-label="Abrir site principal em nova aba"
+            aria-label={standalone ? 'Abrir site principal' : 'Abrir site principal em nova aba'}
           >
             <ExternalLink size={16} className="shrink-0" />
             {!collapsed && <span className="text-xs whitespace-nowrap">Abrir site</span>}
@@ -171,16 +184,16 @@ function AdminSidebar({
 }
 
 export function AdminLayout() {
-  const { user, loading } = useAuthContext()
+  const { user, authLoading } = useAuthContext()
   const location = useLocation()
 
-  if (!loading && !user) {
+  if (!authLoading && !user) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />
   }
 
   return (
     <AdminHeaderProvider>
-      <AdminLayoutContent authLoading={loading} />
+      <AdminLayoutContent authLoading={authLoading} />
     </AdminHeaderProvider>
   )
 }
@@ -199,6 +212,7 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      <SystemBarTint tone="surface" className="bg-card" />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"

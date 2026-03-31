@@ -36,6 +36,10 @@
   --danger:               oklch(0.57 0.20 25);
   --danger-foreground:    oklch(1 0 0);
 
+  --system-bar-background:#faf8f5;
+  --system-bar-surface:   #ffffff;
+  --system-bar-public-hero:#f3eadc;
+
   --radius:               0.5rem;
 }
 
@@ -71,6 +75,10 @@
 
   --danger:               oklch(0.62 0.20 25);
   --danger-foreground:    oklch(1 0 0);
+
+  --system-bar-background:#231d1a;
+  --system-bar-surface:   #2e2824;
+  --system-bar-public-hero:#352b22;
 }
 
 /* ─── Token map → Tailwind utilities ─────────────────────── */

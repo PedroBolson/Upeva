@@ -7,7 +7,8 @@ import type { UserProfile } from '@/types/common'
 interface AuthContextValue {
   user: User | null
   userProfile: UserProfile | null
-  loading: boolean
+  authLoading: boolean
+  profileLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -15,32 +16,70 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(false)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let active = true
+    let requestId = 0
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const currentRequestId = ++requestId
+
       setUser(firebaseUser)
-      if (firebaseUser) {
-        // Ensure the token has the latest Custom Claims (role).
-        // If absent (existing user before Custom Claims deployment), call
-        // the Cloud Function to set the claim, then force a token refresh.
-        const tokenResult = await firebaseUser.getIdTokenResult()
-        if (!tokenResult.claims['role']) {
-          await refreshUserClaims()
-          await firebaseUser.getIdToken(true)
-        }
-        const profile = await getUserProfile(firebaseUser.uid)
-        setUserProfile(profile)
-      } else {
+
+      if (!firebaseUser) {
         setUserProfile(null)
+        setProfileLoading(false)
+        setAuthLoading(false)
+        return
       }
-      setLoading(false)
+
+      setUserProfile(null)
+      setProfileLoading(true)
+      setAuthLoading(false)
+
+      void (async () => {
+        try {
+          const tokenResult = await firebaseUser.getIdTokenResult()
+          if (!tokenResult.claims['role']) {
+            await refreshUserClaims()
+            await firebaseUser.getIdToken(true)
+          }
+
+          const profile = await getUserProfile(firebaseUser.uid)
+
+          if (!active || currentRequestId !== requestId) {
+            return
+          }
+
+          setUserProfile(profile)
+        } catch (error) {
+          if (!active || currentRequestId !== requestId) {
+            return
+          }
+
+          console.error('Falha ao carregar o perfil do usuário.', error)
+          setUserProfile(null)
+        } finally {
+          if (!active || currentRequestId !== requestId) {
+            return
+          }
+
+          setProfileLoading(false)
+        }
+      })()
     })
-    return unsubscribe
+
+    return () => {
+      active = false
+      requestId += 1
+      unsubscribe()
+    }
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading }}>
+    <AuthContext.Provider value={{ user, userProfile, authLoading, profileLoading }}>
       {children}
     </AuthContext.Provider>
   )

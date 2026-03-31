@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Outlet, NavLink, Link, ScrollRestoration } from 'react-router-dom'
+import { Outlet, NavLink, Link, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
+import { SystemBarTint, type SystemBarTone } from '@/components/ui/system-bar-tint'
 
 const navLinks = [
   { to: '/', label: 'Home', end: true },
@@ -12,20 +13,36 @@ const navLinks = [
   { to: '/contato', label: 'Contato', end: false },
 ]
 
-export function PublicLayout() {
+interface PublicLayoutProps {
+  children?: React.ReactNode
+}
+
+const heroSystemBarPaths = new Set(['/', '/sobre', '/contato'])
+
+export function PublicLayout({ children }: PublicLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     function handleScroll() {
       setScrolled(window.scrollY > 12)
     }
+    handleScroll()
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  const systemBarTone: SystemBarTone =
+    !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
+  const systemBarClassName =
+    !scrolled && heroSystemBarPaths.has(location.pathname)
+      ? 'bg-linear-to-br from-accent via-background to-background'
+      : 'bg-background'
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <SystemBarTint tone={systemBarTone} className={systemBarClassName} />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"
@@ -146,7 +163,7 @@ export function PublicLayout() {
 
       <ScrollRestoration />
       <main id="main-content" className="flex-1">
-        <Outlet />
+        {children ?? <Outlet />}
       </main>
 
       <footer className="border-t border-border bg-muted/50 mt-16">

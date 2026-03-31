@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { fadeUp, stagger } from '@/utils/animations'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 const values = [
   {
@@ -68,7 +68,7 @@ const adoptionSteps = [
 ]
 
 export function AboutPage() {
-  useEffect(() => { document.title = 'Sobre a Upeva' }, [])
+  useDocumentTitle(buildPublicTitle('Sobre a Upeva'))
   return (
     <div className="flex flex-col">
       <div className="bg-linear-to-br from-accent via-background to-background">

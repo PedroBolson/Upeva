@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -25,6 +24,7 @@ import {
   SEX_LABELS,
   SIZE_LABELS,
 } from '@/features/animals/types/animal.types'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } }
@@ -35,10 +35,7 @@ export function AnimalDetailPage() {
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
   const { data: similar = [] } = useSimilarAnimals(animal ?? undefined)
 
-  useEffect(() => {
-    if (animal) document.title = `${animal.name} — Upeva`
-    return () => { document.title = 'Upeva — Adoção responsável de animais' }
-  }, [animal])
+  useDocumentTitle(buildPublicTitle(animal?.name ?? 'Animal'))
 
   if (isLoading) return <DetailSkeleton />
 

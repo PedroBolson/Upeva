@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ClipboardList, PawPrint, Shield, Users } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { FeaturedAnimalRail } from '@/features/animals/components/featured-animal-rail'
 import { fadeUp, stagger } from '@/utils/animations'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 const steps = [
   {
@@ -25,7 +25,7 @@ const steps = [
 ]
 
 export function HomePage() {
-  useEffect(() => { document.title = 'Upeva — Adoção responsável de animais' }, [])
+  useDocumentTitle(buildPublicTitle())
   return (
     <div className="flex flex-col">
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">

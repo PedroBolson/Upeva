@@ -6,7 +6,9 @@ import { z } from 'zod'
 import { PawPrint } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Input, Button } from '@/components/ui'
+import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { confirmReset } from '@/features/auth/services/auth.service'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const schema = z
   .object({
@@ -21,6 +23,8 @@ const schema = z
 type FormData = z.infer<typeof schema>
 
 export function ResetPasswordPage() {
+  useDocumentTitle(buildAdminTitle('Redefinir senha'))
+
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const oobCode = searchParams.get('oobCode') ?? ''
@@ -44,6 +48,7 @@ export function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <SystemBarTint tone="background" />
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

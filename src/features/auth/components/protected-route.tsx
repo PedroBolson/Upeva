@@ -9,13 +9,17 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, userProfile, loading } = useAuthContext()
+  const { user, userProfile, authLoading, profileLoading } = useAuthContext()
   const location = useLocation()
 
-  if (loading) return <PageSpinner />
+  if (authLoading) return <PageSpinner />
 
   if (!user) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />
+  }
+
+  if (requiredRole && profileLoading) {
+    return <PageSpinner />
   }
 
   if (requiredRole && userProfile?.role !== requiredRole) {

@@ -18,6 +18,7 @@ import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-o
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { AnimalStatus } from '@/types/common'
 import { cn } from '@/utils/cn'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -28,6 +29,8 @@ const STATUS_FILTER_OPTIONS = [
 ]
 
 export function AdminAnimalsPage() {
+  useDocumentTitle(buildAdminTitle('Animais'))
+
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<AnimalStatus | ''>('')
   const [search, setSearch] = useState('')

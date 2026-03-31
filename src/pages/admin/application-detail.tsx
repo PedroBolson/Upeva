@@ -15,6 +15,7 @@ import { getLinkableAnimalsForApplication } from '@/features/animals/services/an
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 
@@ -97,6 +98,8 @@ export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: app, isLoading, error, refetch } = useApplication(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
+
+  useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
 
   const [selectedStatus, setSelectedStatus] = useState<ApplicationStatus | null>(null)
   const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null)
@@ -699,4 +702,3 @@ function SidebarField({
     </div>
   )
 }
-

@@ -16,6 +16,7 @@ import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/an
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { cn } from '@/utils/cn'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const SPECIES_OPTIONS = [
   { value: 'dog', label: 'Cachorro' },
@@ -42,6 +43,16 @@ export function AnimalFormPage() {
   const { mutateAsync: createAnimal } = useCreateAnimal()
   const { mutateAsync: updateAnimal } = useUpdateAnimal()
   const { mutateAsync: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
+
+  useDocumentTitle(
+    buildAdminTitle(
+      isEditing
+        ? animal?.name
+          ? `Editar animal - ${animal.name}`
+          : 'Editar animal'
+        : 'Novo animal',
+    ),
+  )
 
   const [existingPhotos, setExistingPhotos] = useState<string[]>([])
   const [removedPhotos, setRemovedPhotos] = useState<string[]>([])

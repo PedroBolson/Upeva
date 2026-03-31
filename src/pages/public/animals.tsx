@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PawPrint } from 'lucide-react'
 import { AnimalCardSkeleton, EmptyState, ErrorState, Button } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/utils/cn'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 import { AnimalCard } from '@/features/animals/components/animal-card'
 import { AnimalFilters } from '@/features/animals/components/animal-filters'
 import { useAnimals } from '@/features/animals/hooks/use-animals'
@@ -30,7 +30,7 @@ function paramsFromFilters(f: Filters): Record<string, string> {
 }
 
 export function AnimalsPage() {
-  useEffect(() => { document.title = 'Animais disponíveis — Upeva' }, [])
+  useDocumentTitle(buildPublicTitle('Animais disponíveis'))
   const [searchParams, setSearchParams] = useSearchParams()
 
   const filters = filtersFromParams(searchParams)

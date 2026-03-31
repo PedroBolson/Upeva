@@ -13,6 +13,7 @@ import { useApplications } from '@/features/adoption/hooks/use-applications'
 import { APPLICATION_STATUS_TABS } from '@/features/adoption/config/application-status-options'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
 import { cn } from '@/utils/cn'
@@ -28,6 +29,8 @@ function getApplicationSubjectMeta(application: AdoptionApplication) {
 }
 
 export function ApplicationsPage() {
+  useDocumentTitle(buildAdminTitle('Candidaturas'))
+
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<ApplicationStatus | 'all'>('all')
   const [animalFilter, setAnimalFilter] = useState('')

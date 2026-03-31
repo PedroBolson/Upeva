@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Dog, Cat, ArrowLeft, PawPrint } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui'
 import { AdoptionForm } from '@/features/adoption/components/adoption-form'
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { Species } from '@/types/common'
+import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 const SPECIES_OPTIONS: { value: Species; label: string; icon: typeof Dog; description: string }[] = [
   { value: 'dog', label: 'Cachorro', icon: Dog, description: 'Quero adotar um cão' },
@@ -32,7 +33,7 @@ function buildMockAnimal(species: Species): Animal {
 }
 
 export function AdoptionGeneralPage() {
-  useEffect(() => { document.title = 'Quero adotar — Upeva' }, [])
+  useDocumentTitle(buildPublicTitle('Quero adotar'))
   const [searchParams] = useSearchParams()
   const [species, setSpecies] = useState<Species | null>(() => {
     const initialSpecies = searchParams.get('especie')

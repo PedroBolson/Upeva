@@ -23,9 +23,12 @@ import { UsersPage } from '@/pages/admin/users'
 
 const router = createBrowserRouter([
   {
+    path: '/',
+    element: <SmartEntry />,
+  },
+  {
     element: <PublicLayout />,
     children: [
-      { path: '/',             element: <SmartEntry /> },
       { path: '/animais',      element: <AnimalsPage /> },
       { path: '/animais/:id',  element: <AnimalDetailPage /> },
       { path: '/adotar',       element: <AdoptionGeneralPage /> },

@@ -11,8 +11,11 @@ import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { recalibrateCounts, recalibrateQueuePositions } from '@/features/admin/services/metadata.service'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, TriangleAlert } from 'lucide-react'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 export function SettingsPage() {
+  useDocumentTitle(buildAdminTitle('Configurações'))
+
   const { user, userProfile } = useAuth()
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')

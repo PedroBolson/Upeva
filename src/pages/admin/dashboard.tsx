@@ -37,6 +37,7 @@ import { useCounts } from '@/features/admin/hooks/use-counts'
 import { db } from '@/lib/firebase'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
+import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { AnimalStatus, ApplicationStatus, Timestamp } from '@/types/common'
@@ -314,6 +315,8 @@ function RecentAnimalsPanel({ items, isLoading, error, onRetry }: RecentListStat
 }
 
 export function DashboardPage() {
+  useDocumentTitle(buildAdminTitle('Dashboard'))
+
   const { data: counts, isLoading: countsLoading } = useCounts()
   const {
     data: recentApplications = [],
