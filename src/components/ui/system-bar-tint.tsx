@@ -44,7 +44,7 @@ export function SystemBarTint({ tone, className, style }: SystemBarTintProps) {
   return (
     <div
       aria-hidden="true"
-      className={cn('pointer-events-none fixed inset-x-0 top-0 z-[60]', className)}
+      className={cn('pointer-events-none fixed inset-x-0 top-0 z-60', className)}
       style={{
         height: 'env(safe-area-inset-top, 0px)',
         ...(className ? {} : { backgroundColor: `var(${toneToCssVar[tone]})` }),
