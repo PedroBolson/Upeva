@@ -10,7 +10,7 @@ import { Input, Button } from '@/components/ui'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { recalibrateCounts, recalibrateQueuePositions } from '@/features/admin/services/metadata.service'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, TriangleAlert } from 'lucide-react'
 
 export function SettingsPage() {
   const { user, userProfile } = useAuth()
@@ -24,7 +24,6 @@ export function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passLoading, setPassLoading] = useState(false)
   const [passMessage, setPassMessage] = useState<{ text: string; ok: boolean } | null>(null)
-  const [passError, setPassError] = useState<string | null>(null)
 
   const queryClient = useQueryClient()
   const [recalibrating, setRecalibrating] = useState(false)
@@ -32,11 +31,7 @@ export function SettingsPage() {
   const [recalibratingQueue, setRecalibratingQueue] = useState(false)
   const [recalibrateQueueMessage, setRecalibrateQueueMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
-  const headerConfig = useMemo(
-    () => ({}),
-    [],
-  )
-
+  const headerConfig = useMemo(() => ({}), [])
   useAdminPageHeader(headerConfig)
 
   async function handleRecalibrate() {
@@ -84,14 +79,13 @@ export function SettingsPage() {
   async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault()
     setPassMessage(null)
-    setPassError(null)
 
     if (newPassword.length < 6) {
-      setPassError('A nova senha deve ter ao menos 6 caracteres.')
+      setPassMessage({ text: 'A nova senha deve ter ao menos 6 caracteres.', ok: false })
       return
     }
     if (newPassword !== confirmPassword) {
-      setPassError('As senhas não coincidem.')
+      setPassMessage({ text: 'As senhas não coincidem.', ok: false })
       return
     }
     if (!user?.email) return
@@ -118,115 +112,129 @@ export function SettingsPage() {
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {/* Display name + email */}
-        <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-semibold text-foreground">Perfil</h2>
-            <p className="text-xs text-muted-foreground">{user?.email}</p>
-          </div>
-          <form onSubmit={handleUpdateName} className="flex flex-col gap-4">
-            <Input
-              label="Nome de exibição"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              required
-            />
+      {/* Perfil */}
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-sm font-semibold text-foreground">Perfil</h2>
+          <p className="text-xs text-muted-foreground">Informações da sua conta.</p>
+        </div>
+        <form onSubmit={handleUpdateName} className="flex flex-col gap-4">
+          <Input
+            label="E-mail"
+            value={user?.email ?? ''}
+            readOnly
+            className="cursor-default opacity-60"
+          />
+          <Input
+            label="Nome de exibição"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+          <div className="flex flex-col gap-2">
+            <Button type="submit" disabled={nameLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
+              {nameLoading && <Loader2 size={14} className="animate-spin" />}
+              {nameLoading ? 'Salvando…' : 'Salvar nome'}
+            </Button>
             {nameMessage && (
               <p role={nameMessage.ok ? 'status' : 'alert'} className={`text-sm ${nameMessage.ok ? 'text-success' : 'text-danger'}`}>
                 {nameMessage.text}
               </p>
             )}
-            <Button type="submit" disabled={nameLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
-              {nameLoading && <Loader2 size={14} className="animate-spin" />}
-              {nameLoading ? 'Salvando…' : 'Salvar nome'}
-            </Button>
-          </form>
-        </div>
+          </div>
+        </form>
+      </div>
 
-        {/* Password */}
-        <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+      {/* Senha */}
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
           <h2 className="text-sm font-semibold text-foreground">Alterar senha</h2>
-          <form onSubmit={handleUpdatePassword} className="flex flex-col gap-4">
-            <Input
-              label="Senha atual"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-            <Input
-              label="Nova senha"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-            <Input
-              label="Confirmar nova senha"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
-            {passError && <p role="alert" className="text-sm text-danger">{passError}</p>}
+          <p className="text-xs text-muted-foreground">Requer confirmação da senha atual.</p>
+        </div>
+        <form onSubmit={handleUpdatePassword} className="flex flex-col gap-4">
+          <Input
+            label="Senha atual"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+          <Input
+            label="Nova senha"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+          />
+          <Input
+            label="Confirmar nova senha"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
+          <div className="flex flex-col gap-2">
+            <Button type="submit" disabled={passLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
+              {passLoading && <Loader2 size={14} className="animate-spin" />}
+              {passLoading ? 'Atualizando…' : 'Alterar senha'}
+            </Button>
             {passMessage && (
               <p role={passMessage.ok ? 'status' : 'alert'} className={`text-sm ${passMessage.ok ? 'text-success' : 'text-danger'}`}>
                 {passMessage.text}
               </p>
             )}
-            <Button type="submit" disabled={passLoading} className="w-full gap-1.5 sm:w-auto sm:self-start">
-              {passLoading && <Loader2 size={14} className="animate-spin" />}
-              {passLoading ? 'Atualizando…' : 'Alterar senha'}
-            </Button>
-          </form>
-        </div>
+          </div>
+        </form>
+      </div>
 
-        {/* Admin-only: recalibrate counters */}
-        {userProfile?.role === 'admin' && (
-          <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4 xl:col-span-2">
+      {/* Manutenção — admin only */}
+      {userProfile?.role === 'admin' && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-5 flex flex-col gap-4 xl:col-span-2">
+          <div className="flex items-start gap-3">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
             <div className="flex flex-col gap-1">
               <h2 className="text-sm font-semibold text-foreground">Manutenção de dados</h2>
               <p className="text-xs text-muted-foreground">
                 Use se os contadores ou posições de fila estiverem incorretos. As operações são seguras e podem ser repetidas.
               </p>
             </div>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex flex-col gap-2">
-                {recalibrateMessage && (
-                  <p role={recalibrateMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
-                    {recalibrateMessage.text}
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={handleRecalibrate}
-                  disabled={recalibrating}
-                  className="gap-1.5"
-                >
-                  {recalibrating && <Loader2 size={14} className="animate-spin" />}
-                  {recalibrating ? 'Recalibrando…' : 'Recalibrar contadores do dashboard'}
-                </Button>
-              </div>
-              <div className="flex flex-col gap-2">
-                {recalibrateQueueMessage && (
-                  <p role={recalibrateQueueMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateQueueMessage.ok ? 'text-success' : 'text-danger'}`}>
-                    {recalibrateQueueMessage.text}
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={handleRecalibrateQueue}
-                  disabled={recalibratingQueue}
-                  className="gap-1.5"
-                >
-                  {recalibratingQueue && <Loader2 size={14} className="animate-spin" />}
-                  {recalibratingQueue ? 'Recalibrando…' : 'Recalibrar posições de fila'}
-                </Button>
-              </div>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRecalibrate}
+                disabled={recalibrating}
+                className="gap-1.5"
+              >
+                {recalibrating && <Loader2 size={14} className="animate-spin" />}
+                {recalibrating ? 'Recalibrando…' : 'Recalibrar contadores do dashboard'}
+              </Button>
+              {recalibrateMessage && (
+                <p role={recalibrateMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateMessage.ok ? 'text-success' : 'text-danger'}`}>
+                  {recalibrateMessage.text}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRecalibrateQueue}
+                disabled={recalibratingQueue}
+                className="gap-1.5"
+              >
+                {recalibratingQueue && <Loader2 size={14} className="animate-spin" />}
+                {recalibratingQueue ? 'Recalibrando…' : 'Recalibrar posições de fila'}
+              </Button>
+              {recalibrateQueueMessage && (
+                <p role={recalibrateQueueMessage.ok ? 'status' : 'alert'} className={`text-sm ${recalibrateQueueMessage.ok ? 'text-success' : 'text-danger'}`}>
+                  {recalibrateQueueMessage.text}
+                </p>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   )
 }
-

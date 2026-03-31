@@ -1,4 +1,3 @@
-import { SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { AnimalFilters } from '../types/animal.types'
 import type { Species, Sex, Size } from '@/types/common'
@@ -39,16 +38,9 @@ export function AnimalFilters({ filters, onChange, total, className }: AnimalFil
     <div className={cn('flex flex-col gap-5', className)}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            <SlidersHorizontal size={13} />
-            Busca inteligente
-          </div>
-          <h2 className="mt-3 text-lg font-semibold text-foreground">
+          <h2 className="text-lg font-semibold text-foreground">
             Encontre o companheiro com o perfil certo
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pesquise pelo nome e combine filtros de espécie, sexo e porte.
-          </p>
         </div>
 
         <div className="w-full lg:max-w-sm">

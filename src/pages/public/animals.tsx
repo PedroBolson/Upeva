@@ -42,19 +42,6 @@ export function AnimalsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 pb-10">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="mb-8"
-      >
-        <h1 className="text-3xl font-bold text-foreground">Animais disponíveis</h1>
-        <p className="text-muted-foreground mt-1">
-          Encontre seu novo companheiro entre os animais que aguardam um lar
-        </p>
-      </motion.div>
-
       <div className="flex flex-col gap-8">
         {/* Filters */}
         <motion.div

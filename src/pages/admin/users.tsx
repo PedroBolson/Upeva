@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { UserPlus, Shield, Eye, Trash2 } from 'lucide-react'
+import { UserPlus, Shield, Eye, Trash2, Search } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
@@ -9,6 +9,7 @@ import type { Column } from '@/components/ui'
 import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from '@/features/users/hooks/use-users'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { UserProfile, UserRole } from '@/types/common'
@@ -57,6 +58,10 @@ export function UsersPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null)
+  const [search, setSearch] = useState('')
+  const [sortColumn, setSortColumn] = useState<string>('displayName')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const {
     control,
@@ -102,10 +107,50 @@ export function UsersPage() {
 
   const isAdmin = currentUser?.role === 'admin'
 
+  const sortKeys: Record<string, (u: UserProfile) => string> = {
+    displayName: (u) => (u.displayName ?? '').toLowerCase(),
+    role: (u) => u.role,
+  }
+
+  function handleSort(key: string) {
+    if (sortColumn === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortColumn(key)
+      setSortDir('asc')
+    }
+  }
+
+  const filtered = useMemo(
+    () =>
+      search.trim()
+        ? users.filter(
+            (u) =>
+              u.displayName?.toLowerCase().includes(search.toLowerCase()) ||
+              u.email?.toLowerCase().includes(search.toLowerCase()),
+          )
+        : users,
+    [users, search],
+  )
+
+  const sorted = useMemo(() => {
+    const fn = sortKeys[sortColumn]
+    if (!fn) return filtered
+    return [...filtered].sort((a, b) => {
+      const av = fn(a)
+      const bv = fn(b)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sortColumn, sortDir])
+
   const columns: Column<UserProfile>[] = [
     {
       key: 'displayName',
       header: 'Nome',
+      sortKey: sortKeys.displayName,
       cell: (u) => (
         <div>
           <p className="font-medium text-foreground">{u.displayName}</p>
@@ -116,6 +161,7 @@ export function UsersPage() {
     {
       key: 'role',
       header: 'Papel',
+      sortKey: sortKeys.role,
       cell: (u) => <UserRoleBadge role={u.role} />,
     },
     {
@@ -159,27 +205,54 @@ export function UsersPage() {
 
   const headerActions = useMemo(
     () => (
-      <Button
-        size="sm"
-        className="h-9 gap-1.5 whitespace-nowrap px-3"
-        onClick={() => {
-          setShowForm((v) => !v)
-          setCreateSuccess(false)
-        }}
-      >
-        <UserPlus size={16} />
-        Novo usuário
-      </Button>
+      <div ref={containerRef} className="relative flex min-w-0 items-center gap-2">
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
+        >
+          <div className="w-48 shrink-0">
+            <Input
+              placeholder="Buscar por nome…"
+              value={search}
+              onChange={() => undefined}
+              leftIcon={<Search size={14} />}
+              className="h-9 rounded-lg"
+            />
+          </div>
+          <Button size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+            <UserPlus size={16} />
+            <span>Novo usuário</span>
+          </Button>
+        </div>
+
+        <div className="min-w-30 flex-1 max-w-[18rem]">
+          <Input
+            placeholder="Buscar por nome…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search size={14} />}
+            className="h-9 rounded-lg"
+          />
+        </div>
+
+        <Button
+          size="sm"
+          className="h-9 shrink-0 gap-1.5 whitespace-nowrap px-3"
+          onClick={() => {
+            setShowForm((v) => !v)
+            setCreateSuccess(false)
+          }}
+        >
+          <UserPlus size={16} />
+          {!isCompact && <span>Novo usuário</span>}
+        </Button>
+      </div>
     ),
-    [],
+    [containerRef, isCompact, measureRef, search],
   )
 
-  const headerConfig = useMemo(
-    () => ({ actions: headerActions }),
-    [headerActions],
-  )
-
-  useAdminPageHeader(headerConfig)
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -296,13 +369,15 @@ export function UsersPage() {
           <Card className="border-border/80 p-5">
             <div className="mb-4 flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">
-                {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+                {search.trim()
+                  ? `${filtered.length} de ${users.length} usuário${users.length !== 1 ? 's' : ''}`
+                  : `${users.length} usuário${users.length !== 1 ? 's' : ''} cadastrado${users.length !== 1 ? 's' : ''}`}
               </p>
             </div>
 
             <ResponsiveDataList
               columns={columns}
-              data={users}
+              data={sorted}
               keyExtractor={(u) => u.uid}
               renderMobileCard={(user) => (
                 <UserMobileCard
@@ -314,6 +389,10 @@ export function UsersPage() {
                 />
               )}
               emptyMessage="Nenhum usuário encontrado."
+              sortColumn={sortColumn}
+              sortDir={sortDir}
+              onSort={handleSort}
+              animated
             />
           </Card>
 
