@@ -21,7 +21,7 @@ export function AdoptionFormPage() {
 
   if (error || !animal) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16">
+      <div className="mx-auto max-w-2xl px-4 pt-20 pb-16 sm:pt-24">
         <ErrorState
           description="Não foi possível carregar os dados do animal."
           onRetry={refetch}
@@ -58,7 +58,7 @@ export function AdoptionFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10 w-full">
+    <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-10 sm:pt-24 w-full">
       {/* Header */}
       <div className="mb-8">
         <button

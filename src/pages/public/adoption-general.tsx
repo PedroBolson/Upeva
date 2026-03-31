@@ -44,7 +44,7 @@ export function AdoptionGeneralPage() {
 
   if (species) {
     return (
-      <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10">
+      <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-10 sm:pt-24">
         <button
           onClick={() => setSpecies(null)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -64,7 +64,7 @@ export function AdoptionGeneralPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-16">
+    <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-16 sm:pt-24">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
