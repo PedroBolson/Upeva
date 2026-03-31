@@ -264,8 +264,8 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="relative z-20 h-16 shrink-0 border-b border-border bg-card">
-          <div className="flex h-full items-center gap-2 px-4 lg:px-6">
+        <header className="relative z-20 shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top,0px)]">
+          <div className="flex h-16 items-center gap-2 px-4 lg:px-6">
             <Button
               variant="ghost"
               size="icon"
@@ -298,7 +298,7 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
 
         {/* Page content */}
         <main id="main-content" className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-7xl px-4 pt-4 pb-[max(4rem,calc(2.5rem+env(safe-area-inset-bottom,0px)))] sm:px-6 sm:py-6 lg:px-8 lg:py-8">
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 6 }}

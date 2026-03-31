@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
+type ResolvedTheme = 'light' | 'dark'
 
 interface ThemeContextValue {
   theme: Theme
@@ -12,36 +13,53 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 const STORAGE_KEY = 'upeva-theme'
 
-function getSystemTheme(): 'light' | 'dark' {
+function getSystemTheme(): ResolvedTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function isTheme(value: string | null): value is Theme {
+  return value === 'light' || value === 'dark' || value === 'system'
+}
+
+function applyResolvedTheme(theme: ResolvedTheme) {
+  const root = document.documentElement
+  root.classList.toggle('dark', theme === 'dark')
+  root.style.colorScheme = theme
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return (stored as Theme) ?? 'system'
+    return isTheme(stored) ? stored : 'system'
   })
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => getSystemTheme())
 
-  const resolvedTheme: 'light' | 'dark' =
-    theme === 'system' ? getSystemTheme() : theme
+  const resolvedTheme: ResolvedTheme =
+    theme === 'system' ? systemTheme : theme
 
-  useEffect(() => {
-    const root = document.documentElement
-    root.classList.toggle('dark', resolvedTheme === 'dark')
+  useLayoutEffect(() => {
+    applyResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
 
   useEffect(() => {
-    if (theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => {
-      document.documentElement.classList.toggle('dark', mq.matches)
+      const nextSystemTheme = mq.matches ? 'dark' : 'light'
+      setSystemTheme(nextSystemTheme)
+
+      if (theme === 'system') {
+        applyResolvedTheme(nextSystemTheme)
+      }
     }
+
+    handler()
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
   function setTheme(next: Theme) {
     localStorage.setItem(STORAGE_KEY, next)
+    applyResolvedTheme(next === 'system' ? getSystemTheme() : next)
     setThemeState(next)
   }
 

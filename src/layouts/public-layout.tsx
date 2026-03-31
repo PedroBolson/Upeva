@@ -33,6 +33,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => {
+    setScrolled(window.scrollY > 12)
+  }, [location.pathname])
+
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
   const systemBarClassName =

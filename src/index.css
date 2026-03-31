@@ -39,6 +39,7 @@
   --system-bar-background:#faf8f5;
   --system-bar-surface:   #ffffff;
   --system-bar-public-hero:#f3eadc;
+  --system-bar-launch:    #f3eadc;
 
   --radius:               0.5rem;
 }
@@ -79,6 +80,7 @@
   --system-bar-background:#231d1a;
   --system-bar-surface:   #2e2824;
   --system-bar-public-hero:#352b22;
+  --system-bar-launch:    #352b22;
 }
 
 /* ─── Token map → Tailwind utilities ─────────────────────── */

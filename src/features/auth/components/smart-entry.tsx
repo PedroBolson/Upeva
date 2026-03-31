@@ -29,7 +29,7 @@ function PwaEntryScreen() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-linear-to-br from-accent via-background to-background">
       <SystemBarTint
-        tone="publicHero"
+        tone="launch"
         className="bg-linear-to-br from-accent via-background to-background"
       />
       <div
