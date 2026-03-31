@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Prevent elastic scroll bleed on iOS PWA */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 /* Class-based dark mode */
 @custom-variant dark (&:where(.dark, .dark *));
 
