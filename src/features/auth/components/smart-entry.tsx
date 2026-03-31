@@ -1,5 +1,4 @@
 import { Navigate, useLocation } from 'react-router-dom'
-import { PawPrint } from 'lucide-react'
 import { isInitialStandaloneEntry } from '@/utils/pwa'
 import { useAuthContext } from '../contexts/auth.context'
 import { SystemBarTint } from '@/components/ui/system-bar-tint'
@@ -44,8 +43,12 @@ function PwaEntryScreen() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6">
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="rounded-[1.75rem] border border-primary/15 bg-background/80 p-5 shadow-lg backdrop-blur-sm">
-            <PawPrint size={34} className="text-primary" strokeWidth={2} />
+          <div className="rounded-[1.75rem] border border-primary/15 bg-background/80 p-3 shadow-lg backdrop-blur-sm">
+            <img
+              src="/upeva.jpg"
+              alt="Logo da Upeva"
+              className="h-16 w-16 rounded-2xl object-cover ring-1 ring-primary/10"
+            />
           </div>
           <div className="space-y-1">
             <p className="text-2xl font-bold text-foreground">Upeva</p>
