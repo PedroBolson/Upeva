@@ -41,7 +41,7 @@ export function AnimalsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 pb-10">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}

@@ -17,7 +17,7 @@ export function ContactPage() {
         className="pointer-events-none absolute bottom-8 right-0 h-60 w-60 rounded-full bg-secondary/12 blur-3xl"
       />
 
-      <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
+      <section className="mx-auto max-w-4xl px-4 pt-28 pb-12 sm:px-6 sm:pt-32 sm:pb-16">
         <motion.div
           variants={stagger}
           initial="hidden"

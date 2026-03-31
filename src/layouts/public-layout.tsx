@@ -34,10 +34,10 @@ export function PublicLayout() {
       </a>
       <header
         className={cn(
-          'sticky top-0 z-40 w-full transition-all duration-200',
+          'fixed top-0 z-40 w-full transition-all duration-300',
           scrolled
             ? 'border-b border-border bg-background/80 backdrop-blur-md shadow-sm'
-            : 'bg-background',
+            : 'bg-transparent',
         )}
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">

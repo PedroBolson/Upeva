@@ -70,7 +70,7 @@ export function AboutPage() {
   return (
     <div className="flex flex-col">
       <div className="bg-linear-to-br from-accent via-background to-background">
-        <section className="py-20">
+        <section className="pt-36 pb-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <motion.div
               variants={stagger}
