@@ -302,7 +302,7 @@ export function AdminAnimalsPage() {
         <Card className={cn('border-border/80 p-5 transition-opacity duration-150', isFiltering && 'opacity-50 pointer-events-none')}>
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
-              {filtered.length} animal{filtered.length !== 1 ? 'is' : ''} carregado{filtered.length !== 1 ? 's' : ''}
+              {filtered.length} {filtered.length !== 1 ? 'animais' : 'animal'} carregado{filtered.length !== 1 ? 's' : ''}
             </p>
             <p className="text-sm text-muted-foreground">
               Mostrando o status <strong className="text-foreground">{activeStatusLabel}</strong>

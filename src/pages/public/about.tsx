@@ -63,7 +63,7 @@ const adoptionSteps = [
     step: '04',
     title: 'Vistoria e entrega',
     description:
-      'Realizamos uma visita para verificar o ambiente. Aprovado, assina-se o contrato e o animal é entregue com todo amor.',
+      'Realizamos uma análise do formulário enviado. Aprovado, o animal é entregue com todo amor.',
   },
 ]
 
@@ -97,9 +97,9 @@ export function AboutPage() {
                   variants={fadeUp}
                   className="text-lg text-muted-foreground leading-relaxed"
                 >
-                  Somos uma organização sem fins lucrativos dedicada ao resgate, cuidado
-                  e adoção responsável de cães e gatos. Acreditamos que todo animal
-                  merece viver com dignidade, saúde e amor.
+                  Fundada em 2008 em Flores da Cunha (RS), somos uma ONG movida por
+                  voluntários dedicados a resgatar, castrar e cuidar de cães e gatos —
+                  até que encontrem um lar definitivo.
                 </motion.p>
               </div>
 
@@ -140,6 +140,13 @@ export function AboutPage() {
               <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
                 Nossa missão
               </h2>
+              <p className="text-muted-foreground leading-relaxed">
+                Nossos animais vivem na chácara da entidade na Capela Medianeira, ou
+                nas casas de voluntários. A superlotação é um desafio
+                constante — cada adoção faz uma diferença real. Além dos resgates,
+                trabalhamos pela conscientização para que as pessoas não maltratem e
+                não abandonem os animais.
+              </p>
             </motion.div>
 
             <motion.div variants={fadeUp}>

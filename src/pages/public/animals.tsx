@@ -64,7 +64,7 @@ export function AnimalsPage() {
           {!isLoading && !error && !isFiltering
             ? animals.length === 0
               ? 'Nenhum animal encontrado para os filtros selecionados.'
-              : `${animals.length} animal${animals.length !== 1 ? 'is' : ''} encontrado${animals.length !== 1 ? 's' : ''}.`
+              : `${animals.length} ${animals.length !== 1 ? 'animais' : 'animal'} encontrado${animals.length !== 1 ? 's' : ''}.`
             : ''}
         </span>
 
@@ -126,11 +126,11 @@ export function AnimalsPage() {
         {/* Load more */}
         {!isLoading && !error && animals.length > 0 && (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-muted-foreground">
-              {hasMore || isFetchingMore
-                ? `Exibindo ${total} animal${total !== 1 ? 'is' : ''} — há mais para carregar`
-                : `${total} animal${total !== 1 ? 'is' : ''} encontrado${total !== 1 ? 's' : ''}`}
-            </p>
+            {!hasMore && !isFetchingMore && (
+              <p className="text-sm text-muted-foreground">
+                Mostrando todos os {total} {total !== 1 ? 'animais' : 'animal'}
+              </p>
+            )}
             {(hasMore || isFetchingMore) && (
               <Button
                 variant="outline"
@@ -144,7 +144,7 @@ export function AnimalsPage() {
                     Carregando…
                   </span>
                 ) : (
-                  'Carregar mais'
+                  'Ver mais animais'
                 )}
               </Button>
             )}
