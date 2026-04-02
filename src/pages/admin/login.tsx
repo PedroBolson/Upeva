@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const loginSchema = z.object({
-  email:    z.string().email('Email inválido'),
+  email: z.string().email('Email inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
 })
 
@@ -121,7 +121,10 @@ export function LoginPage() {
           <form onSubmit={resetForm.handleSubmit(onReset)} noValidate className="flex flex-col gap-4">
             {resetSent ? (
               <div className="rounded-lg bg-success/10 border border-success/20 p-4 text-sm text-success text-center">
-                Email enviado! Verifique sua caixa de entrada.
+                <p>Email enviado! Verifique sua caixa de entrada.</p>
+                <p className="mt-1">
+                  Caso não encontre, confira a pasta de spam ou tente novamente. O link para redefinir sua senha é válido por 1 hora.
+                </p>
               </div>
             ) : (
               <>

@@ -14,7 +14,15 @@ export function formatPhone(value: string): string {
 }
 
 export function formatDate(value: string | Date): string {
-  const date = typeof value === 'string' ? new Date(value) : value
+  // Strings no formato YYYY-MM-DD vêm do input date e são ISO sem fuso.
+  // new Date("YYYY-MM-DD") parseia como UTC midnight, causando offset de -1 dia no Brasil (UTC-3).
+  // Adicionar T00:00:00 força interpretação no horário local, evitando o shift.
+  const date =
+    typeof value === 'string'
+      ? /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? new Date(`${value}T00:00:00`)
+        : new Date(value)
+      : value
   return new Intl.DateTimeFormat('pt-BR').format(date)
 }
 

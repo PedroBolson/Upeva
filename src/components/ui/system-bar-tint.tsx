@@ -9,34 +9,28 @@ const META_THEME_SELECTOR = 'meta[name="theme-color"]'
 
 const toneToCssVar: Record<SystemBarTone, string> = {
   background: '--system-bar-background',
-  surface: '--system-bar-surface',
+  surface:    '--system-bar-surface',
   publicHero: '--system-bar-public-hero',
-  launch: '--system-bar-launch',
+  launch:     '--system-bar-launch',
 }
 
-const fallbackThemeColors = {
+// Espelham exatamente as CSS vars de index.css.
+// Usamos os valores hardcoded para evitar race condition: useLayoutEffect roda
+// bottom-up (filhos antes dos pais), então getComputedStyle poderia ser chamado
+// antes de ThemeProvider adicionar a classe .dark no <html>.
+const toneColors: Record<'light' | 'dark', Record<SystemBarTone, string>> = {
   light: {
-    background: 'rgb(249, 248, 245)',
-    surface: 'rgb(255, 255, 255)',
+    background: '#faf8f5',
+    surface:    '#ffffff',
     publicHero: '#f3eadc',
-    launch: '#f3eadc',
+    launch:     '#f3eadc',
   },
   dark: {
-    background: 'rgb(27, 22, 20)',
-    surface: 'rgb(45, 40, 36)',
+    background: '#231d1a',
+    surface:    '#2e2824',
     publicHero: '#352b22',
-    launch: '#352b22',
+    launch:     '#352b22',
   },
-} as const
-
-function getSystemBarColor(
-  tone: SystemBarTone,
-  resolvedTheme: 'light' | 'dark',
-) {
-  const styles = getComputedStyle(document.documentElement)
-  const cssVarColor = styles.getPropertyValue(toneToCssVar[tone]).trim()
-
-  return cssVarColor || fallbackThemeColors[resolvedTheme][tone]
 }
 
 interface SystemBarTintProps {
@@ -50,26 +44,9 @@ export function SystemBarTint({ tone, className, style }: SystemBarTintProps) {
 
   useLayoutEffect(() => {
     const metaTheme = document.querySelector<HTMLMetaElement>(META_THEME_SELECTOR)
-    if (!metaTheme) {
-      return
-    }
+    if (!metaTheme) return
 
-    const color = getSystemBarColor(tone, resolvedTheme)
-    if (!color) {
-      return
-    }
-
-    const nextMetaTheme = metaTheme.cloneNode() as HTMLMetaElement
-    nextMetaTheme.setAttribute('name', 'theme-color')
-    nextMetaTheme.setAttribute('content', color)
-    metaTheme.replaceWith(nextMetaTheme)
-
-    const rafId = window.requestAnimationFrame(() => {
-      const latestMetaTheme = document.querySelector<HTMLMetaElement>(META_THEME_SELECTOR)
-      latestMetaTheme?.setAttribute('content', color)
-    })
-
-    return () => window.cancelAnimationFrame(rafId)
+    metaTheme.setAttribute('content', toneColors[resolvedTheme][tone])
   }, [tone, resolvedTheme])
 
   return (

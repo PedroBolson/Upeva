@@ -15,6 +15,7 @@ import { getLinkableAnimalsForApplication } from '@/features/animals/services/an
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
+import { formatDate } from '@/utils/format'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { ApplicationStatus, Timestamp } from '@/types/common'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
@@ -382,7 +383,7 @@ export function ApplicationDetailPage() {
                   actionLabel="Abrir WhatsApp"
                   icon={<MessageCircle size={14} />}
                 />
-                <DetailField label="Data de nascimento" value={app.birthDate} />
+                <DetailField label="Data de nascimento" value={formatDate(app.birthDate)} />
                 <DetailField label="CEP" value={app.cep || undefined} />
                 <div className="sm:col-span-2">
                   <DetailField
