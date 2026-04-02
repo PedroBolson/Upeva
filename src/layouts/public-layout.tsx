@@ -39,14 +39,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
-  const systemBarClassName =
-    !scrolled && heroSystemBarPaths.has(location.pathname)
-      ? 'bg-linear-to-br from-accent via-background to-background'
-      : 'bg-background'
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
-      <SystemBarTint tone={systemBarTone} className={systemBarClassName} />
+      <SystemBarTint tone={systemBarTone} />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"

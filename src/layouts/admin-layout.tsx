@@ -212,7 +212,7 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <SystemBarTint tone="surface" className="bg-card" />
+      <SystemBarTint tone="surface" />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-4 focus:top-4 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:ring-2 focus:ring-ring"

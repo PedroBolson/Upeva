@@ -45,10 +45,12 @@
           root.classList.toggle('dark', resolvedTheme === 'dark')
           root.style.colorScheme = resolvedTheme
 
+          const color = getInitialThemeColor(resolvedTheme, window.location.pathname)
           const themeMeta = document.querySelector('meta[name="theme-color"]')
           if (themeMeta) {
-            themeMeta.setAttribute('content', getInitialThemeColor(resolvedTheme, window.location.pathname))
+            themeMeta.setAttribute('content', color)
           }
+          document.body.style.backgroundColor = color
         } catch {}
       })()
     </script>

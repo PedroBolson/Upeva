@@ -42,8 +42,8 @@ body {
   --danger:               oklch(0.57 0.20 25);
   --danger-foreground:    oklch(1 0 0);
 
-  --system-bar-background:#faf8f5;
-  --system-bar-surface:   #ffffff;
+  --system-bar-background: var(--background);
+  --system-bar-surface:    var(--card);
   --system-bar-public-hero:#f3eadc;
   --system-bar-launch:    #f3eadc;
 
@@ -83,8 +83,8 @@ body {
   --danger:               oklch(0.62 0.20 25);
   --danger-foreground:    oklch(1 0 0);
 
-  --system-bar-background:#231d1a;
-  --system-bar-surface:   #2e2824;
+  --system-bar-background: var(--background);
+  --system-bar-surface:    var(--card);
   --system-bar-public-hero:#352b22;
   --system-bar-launch:    #352b22;
 }
