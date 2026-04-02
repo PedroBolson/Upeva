@@ -326,7 +326,7 @@ export function AnimalFormPage() {
 
       <form
         onSubmit={onSubmit}
-        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]"
+        className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]"
       >
         <div className="flex flex-col gap-6">
           <Card className="border-border/80 p-6">
@@ -570,7 +570,7 @@ export function AnimalFormPage() {
           </Card>
         </div>
 
-        <div className="flex flex-col gap-6 xl:sticky xl:top-24 xl:self-start">
+        <div className="flex flex-col gap-6 xl:sticky xl:top-[5.5rem] xl:self-start">
           <Card className="border-border/80 p-5">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-primary" />
