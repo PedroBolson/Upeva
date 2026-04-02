@@ -570,7 +570,7 @@ export function AnimalFormPage() {
           </Card>
         </div>
 
-        <div className="flex flex-col gap-6 xl:sticky xl:top-[5.5rem] xl:self-start">
+        <div className="flex flex-col gap-6 xl:sticky xl:top-22 xl:self-start">
           <Card className="border-border/80 p-5">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-primary" />
