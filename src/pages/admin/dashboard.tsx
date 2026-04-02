@@ -148,6 +148,15 @@ function DistributionLegend({
   )
 }
 
+function BarTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)', borderWidth: 1, borderStyle: 'solid', borderRadius: 16, padding: '8px 12px', fontSize: 13 }}>
+      <p style={{ margin: 0 }}><span style={{ fontWeight: 500 }}>{label}</span> : {numberFormatter.format(payload[0].value)}</p>
+    </div>
+  )
+}
+
 function ChartPlaceholder({ title }: { title: string }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
@@ -366,7 +375,7 @@ export function DashboardPage() {
             Cadastrar animal
           </Button>
         </Link>
-        <Link to="/admin/usuarios" className="shrink-0">
+        <Link to="/admin/usuarios?novo=true" className="shrink-0">
           <Button variant="outline" size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
             <UserPlus size={16} />
             Novo usuário
@@ -479,14 +488,8 @@ export function DashboardPage() {
                         />
                         <Tooltip
                           cursor={{ fill: 'var(--muted)', opacity: 0.35 }}
-                          formatter={(value, name) => [numberFormatter.format(Number(value)), name]}
                           wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
-                          contentStyle={{
-                            backgroundColor: 'var(--card)',
-                            borderColor: 'var(--border)',
-                            borderRadius: '16px',
-                            color: 'var(--foreground)',
-                          }}
+                          content={<BarTooltip />}
                         />
                         <Bar dataKey="value" radius={[0, 999, 999, 0]} maxBarSize={22}>
                           {applicationDistribution.map((entry) => (

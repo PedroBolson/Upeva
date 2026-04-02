@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { UserPlus, Shield, Eye, Trash2, Search } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
@@ -57,9 +58,16 @@ export function UsersPage() {
   const { mutate: updateRole } = useUpdateUserRole()
   const { mutateAsync: deleteUser, isPending: deleting } = useDeleteUser()
 
-  const [showForm, setShowForm] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [showForm, setShowForm] = useState(() => searchParams.get('novo') === 'true')
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('novo') === 'true') {
+      setSearchParams({}, { replace: true })
+    }
+  }, [])
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null)
   const [search, setSearch] = useState('')
   const [sortColumn, setSortColumn] = useState<string>('displayName')
