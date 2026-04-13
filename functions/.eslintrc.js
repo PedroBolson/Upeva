@@ -31,5 +31,7 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": "off",
     "require-jsdoc": "off",
+    "object-curly-spacing": ["error", "always"],
+    "eol-last": "off",
   },
 };
