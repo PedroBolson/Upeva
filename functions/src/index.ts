@@ -1119,5 +1119,3 @@ export const onAnimalChanged = onDocumentWritten(
     }
   }
 );
-
-
