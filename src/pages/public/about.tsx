@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -8,10 +9,18 @@ import {
   ClipboardCheck,
   HomeIcon,
   ArrowRight,
+  Banknote,
+  Copy,
+  Check,
+  MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+
+// TODO: confirmar número do WhatsApp para contato
+const WHATSAPP_NUMBER = 'XXXXXXXXXXX'
+const PIX_KEY = '54984030187'
 
 const values = [
   {
@@ -69,6 +78,13 @@ const adoptionSteps = [
 
 export function AboutPage() {
   useDocumentTitle(buildPublicTitle('Sobre a Upeva'))
+  const [pixCopied, setPixCopied] = useState(false)
+
+  function copyPix() {
+    navigator.clipboard.writeText(PIX_KEY)
+    setPixCopied(true)
+    setTimeout(() => setPixCopied(false), 2000)
+  }
   return (
     <div className="flex flex-col">
       <div className="bg-linear-to-br from-accent via-background to-background">
@@ -232,51 +248,94 @@ export function AboutPage() {
             variants={stagger}
             className="grid grid-cols-1 sm:grid-cols-3 gap-6"
           >
-            {[
-              {
-                icon: Heart,
-                title: 'Adote',
-                description:
-                  'A melhor forma de apoiar é adotar responsavelmente. Abra seu coração e seu lar para um animal.',
-                cta: { label: 'Ver animais', to: '/animais' },
-              },
-              {
-                icon: Users,
-                title: 'Voluntarie-se',
-                description:
-                  'Precisamos de mãos voluntárias para cuidados, transporte, eventos e divulgação nas redes.',
-                cta: { label: 'Entrar em contato', to: '/contato' },
-              },
-              {
-                icon: Shield,
-                title: 'Lar temporário',
-                description:
-                  'Ofereça abrigo temporário a um animal enquanto ele aguarda sua família definitiva.',
-                cta: { label: 'Saber mais', to: '/contato' },
-              },
-            ].map((item) => (
-              <motion.div
-                key={item.title}
-                variants={fadeUp}
-                className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4"
+            {/* Card: Adote */}
+            <motion.div
+              variants={fadeUp}
+              className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4"
+            >
+              <div className="rounded-full bg-primary/10 w-12 h-12 flex items-center justify-center">
+                <Heart className="text-primary" size={22} strokeWidth={1.75} />
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <h3 className="font-semibold text-foreground">Adote</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  A melhor forma de apoiar é adotar responsavelmente. Abra seu coração e seu lar para um animal.
+                </p>
+              </div>
+              <Link to="/animais">
+                <Button variant="outline" size="sm" className="gap-1.5 w-full">
+                  Ver animais
+                  <ArrowRight size={14} />
+                </Button>
+              </Link>
+            </motion.div>
+
+            {/* Card: Doe via PIX */}
+            <motion.div
+              variants={fadeUp}
+              className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4"
+            >
+              <div className="rounded-full bg-primary/10 w-12 h-12 flex items-center justify-center">
+                <Banknote className="text-primary" size={22} strokeWidth={1.75} />
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <h3 className="font-semibold text-foreground">Doe</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Sua doação cobre vacinas, castrações e cuidados veterinários. Qualquer valor faz diferença.
+                </p>
+                <div
+                  onClick={copyPix}
+                  className="mt-2 rounded-lg border border-border bg-muted/40 px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-muted/70 transition-colors"
+                >
+                  <span className="text-xs font-mono text-foreground select-all">{PIX_KEY}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">Chave PIX</span>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 w-full"
+                onClick={copyPix}
               >
-                <div className="rounded-full bg-primary/10 w-12 h-12 flex items-center justify-center">
-                  <item.icon className="text-primary" size={22} strokeWidth={1.75} />
-                </div>
-                <div className="flex flex-col gap-1.5 flex-1">
-                  <h3 className="font-semibold text-foreground">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {item.description}
-                  </p>
-                </div>
-                <Link to={item.cta.to}>
-                  <Button variant="outline" size="sm" className="gap-1.5 w-full">
-                    {item.cta.label}
-                    <ArrowRight size={14} />
-                  </Button>
-                </Link>
-              </motion.div>
-            ))}
+                {pixCopied ? (
+                  <>
+                    <Check size={14} className="text-green-500" />
+                    Chave copiada!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} />
+                    Copiar chave PIX
+                  </>
+                )}
+              </Button>
+            </motion.div>
+
+            {/* Card: Voluntarie-se + Lar temporário */}
+            <motion.div
+              variants={fadeUp}
+              className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4"
+            >
+              <div className="rounded-full bg-primary/10 w-12 h-12 flex items-center justify-center">
+                <Users className="text-primary" size={22} strokeWidth={1.75} />
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <h3 className="font-semibold text-foreground">Voluntarie-se</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Ajude com cuidados, transporte ou divulgação — ou ofereça um lar temporário enquanto o animal aguarda sua família definitiva.
+                </p>
+              </div>
+              <a
+                href={`https://wa.me/55${WHATSAPP_NUMBER}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="outline" size="sm" className="gap-1.5 w-full">
+                  <MessageCircle size={14} />
+                  Entre em contato
+                </Button>
+              </a>
+            </motion.div>
           </motion.div>
         </motion.div>
       </section>
