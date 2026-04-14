@@ -13,6 +13,7 @@ export function useAdminAnimals(status: AnimalStatus | null = null) {
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
     placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 2,
   })
 
   const animals = result.data?.pages.flatMap((p) => p.animals) ?? []

@@ -6,5 +6,6 @@ export function useApplication(id: string | undefined) {
     queryKey: ['applications', 'detail', id],
     queryFn: () => getApplicationById(id!),
     enabled: !!id,
+    staleTime: 1000 * 60 * 5,
   })
 }

@@ -6,5 +6,6 @@ export function useAnimal(id: string | undefined) {
     queryKey: ['animals', 'detail', id],
     queryFn: () => getAnimalById(id!),
     enabled: !!id,
+    staleTime: 1000 * 60 * 5,
   })
 }
