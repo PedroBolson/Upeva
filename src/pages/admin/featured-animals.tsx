@@ -271,18 +271,21 @@ export function FeaturedAnimalsPage() {
     title: 'Animais em Destaque',
     subtitle: 'Defina quais animais aparecem na página inicial. O sistema sorteia 4 por sessão.',
     actions: (
-      <div className="flex items-center gap-3">
-        <Badge variant="accent">
+      <div className="flex min-w-0 items-center gap-2">
+        <Badge variant="accent" className="whitespace-nowrap shrink-0">
           {effectiveList.length} / {MAX_FEATURED}
         </Badge>
         {remaining > 0 && (
-          <Button variant="outline" onClick={() => setPickerOpen(true)} className="gap-2">
+          <Button variant="outline" onClick={() => setPickerOpen(true)} className="gap-1.5 shrink-0">
             <Plus size={16} />
-            Adicionar animal
+            <span className="hidden sm:inline">Adicionar animal</span>
           </Button>
         )}
-        <Button onClick={handleSave} disabled={!hasEdited || isSaving || isLoading}>
-          {isSaving ? <><Spinner size="sm" /><span className="ml-2">Salvando…</span></> : 'Salvar destaques'}
+        <Button onClick={handleSave} disabled={!hasEdited || isSaving || isLoading} className="shrink-0">
+          {isSaving
+            ? <><Spinner size="sm" /><span className="ml-2 hidden sm:inline">Salvando…</span></>
+            : <><span className="sm:hidden">Salvar</span><span className="hidden sm:inline">Salvar destaques</span></>
+          }
         </Button>
       </div>
     ),
