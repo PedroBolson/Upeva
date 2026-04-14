@@ -1,13 +1,15 @@
 import { useMemo, useState, useCallback } from 'react'
-import { Reorder, useDragControls } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
+import { Reorder } from 'framer-motion'
 import { GripVertical, Plus, Star, Trash2, ImageOff, Check, Search } from 'lucide-react'
 import { Button, Input, Badge, Modal, EmptyState, Spinner } from '@/components/ui'
 import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
 import { useFeaturedSettings, useUpdateFeaturedAnimals } from '@/features/animals/hooks/use-featured-settings'
-import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS } from '@/features/animals/types/animal.types'
+import { SPECIES_LABELS, SEX_LABELS } from '@/features/animals/types/animal.types'
 import type { Animal } from '@/features/animals/types/animal.types'
+import type { FeaturedAnimalsCache } from '@/features/animals/types/featured-cache.types'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import { cn } from '@/utils/cn'
 
@@ -21,26 +23,18 @@ interface FeaturedRowProps {
 }
 
 function FeaturedRow({ animal, onRemove }: FeaturedRowProps) {
-  const controls = useDragControls()
   const coverPhoto = animal.photos[animal.coverPhotoIndex] ?? animal.photos[0]
+  const meta = [SPECIES_LABELS[animal.species], SEX_LABELS[animal.sex]]
 
   return (
     <Reorder.Item
       value={animal}
-      dragListener={false}
-      dragControls={controls}
       className={cn(
         'flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5',
-        'shadow-sm select-none',
+        'shadow-sm select-none cursor-grab active:cursor-grabbing',
       )}
     >
-      <button
-        onPointerDown={(e) => controls.start(e)}
-        className="cursor-grab active:cursor-grabbing touch-none text-muted-foreground hover:text-foreground shrink-0"
-        aria-label={`Reordenar ${animal.name}`}
-      >
-        <GripVertical size={16} />
-      </button>
+      <GripVertical size={16} className="text-muted-foreground shrink-0" />
 
       <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted">
         {coverPhoto ? (
@@ -52,15 +46,16 @@ function FeaturedRow({ animal, onRemove }: FeaturedRowProps) {
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{animal.name}</p>
-        <p className="text-xs text-muted-foreground">
-          {SPECIES_LABELS[animal.species]} · {SEX_LABELS[animal.sex]}
-          {animal.size && ` · ${SIZE_LABELS[animal.size]}`}
-        </p>
+      <p className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{animal.name}</p>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {meta.map((label) => (
+          <Badge key={label} variant="accent" className="text-xs font-normal">{label}</Badge>
+        ))}
       </div>
 
       <button
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={() => onRemove(animal.id)}
         className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors"
         aria-label={`Remover ${animal.name} dos destaques`}
@@ -187,7 +182,6 @@ function AnimalPickerModal({ open, onClose, selectedIds, onConfirm, remaining }:
                     <p className="text-sm font-medium text-foreground truncate">{animal.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {SPECIES_LABELS[animal.species]} · {SEX_LABELS[animal.sex]}
-                      {animal.size && ` · ${SIZE_LABELS[animal.size]}`}
                     </p>
                   </div>
 
@@ -223,6 +217,7 @@ function AnimalPickerModal({ open, onClose, selectedIds, onConfirm, remaining }:
 export function FeaturedAnimalsPage() {
   useDocumentTitle(buildAdminTitle('Destaques'))
 
+  const queryClient = useQueryClient()
   const { data: cached, isLoading } = useFeaturedSettings()
   const { mutate: save, isPending: isSaving, error: saveError } = useUpdateFeaturedAnimals()
 
@@ -258,16 +253,26 @@ export function FeaturedAnimalsPage() {
 
   const handleSave = useCallback(() => {
     save(effectiveList.map((a) => a.id), {
-      onSuccess: () => setHasEdited(false),
+      onSuccess: () => {
+        // Patch the cache before switching back to it so the list doesn't
+        // flicker through stale data while the background refetch is in-flight.
+        queryClient.setQueryData<FeaturedAnimalsCache | null>(
+          ['admin', 'featured'],
+          (old) => old
+            ? { ...old, animalIds: effectiveList.map((a) => a.id), items: effectiveList }
+            : old,
+        )
+        setHasEdited(false)
+      },
     })
-  }, [effectiveList, save])
+  }, [effectiveList, save, queryClient])
 
   useAdminPageHeader(useMemo(() => ({
     title: 'Animais em Destaque',
     subtitle: 'Defina quais animais aparecem na página inicial. O sistema sorteia 4 por sessão.',
     actions: (
       <div className="flex items-center gap-3">
-        <Badge variant="secondary">
+        <Badge variant="accent">
           {effectiveList.length} / {MAX_FEATURED}
         </Badge>
         {remaining > 0 && (

@@ -4,6 +4,7 @@ import type { AnimalStatus, ApplicationStatus } from '@/types/common'
 type BadgeVariant =
   | 'default'
   | 'secondary'
+  | 'accent'
   | 'outline'
   | 'success'
   | 'warning'
@@ -16,6 +17,7 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 const variantClasses: Record<BadgeVariant, string> = {
   default:   'bg-primary text-primary-foreground',
   secondary: 'bg-secondary text-secondary-foreground',
+  accent:    'bg-accent text-accent-foreground',
   outline:   'border border-border bg-transparent text-foreground',
   success:   'bg-success text-success-foreground',
   warning:   'bg-warning text-warning-foreground',
