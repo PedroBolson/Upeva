@@ -77,7 +77,7 @@ export function useFeaturedAnimals(count: number = 6) {
   })
 
   const data = useMemo(
-    () => shuffled(result.data ?? []).slice(0, count),
+    () => weightedSample(result.data ?? [], count),
     [result.data, count],
   )
 
@@ -93,11 +93,19 @@ export function useSimilarAnimals(animal: Animal | undefined) {
   })
 }
 
-function shuffled<T>(arr: T[]): T[] {
-  const pool = [...arr]
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-      ;[pool[i], pool[j]] = [pool[j], pool[i]]
-  }
-  return pool
+// Weighted reservoir sampling (Efraimidis-Spirakis).
+// Items earlier in the array receive higher weight (slope=0.5 softens the
+// gradient so the top slot isn't guaranteed). When pool ≤ k the original
+// order is preserved (complement mode — no selection needed).
+function weightedSample<T>(items: T[], k: number): T[] {
+  if (items.length <= k) return [...items]
+
+  return items
+    .map((item, i) => ({
+      item,
+      key: Math.random() ** (1 / (items.length - i * 0.5)),
+    }))
+    .sort((a, b) => b.key - a.key)
+    .slice(0, k)
+    .map((x) => x.item)
 }
