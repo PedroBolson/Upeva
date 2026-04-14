@@ -11,6 +11,7 @@ import {
   X,
   ChevronLeft,
   Users,
+  Star,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -36,6 +37,7 @@ function getAuthLoadingSkeleton(pathname: string): React.ReactNode {
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, role: undefined as UserRole | undefined },
   { to: '/admin/animais', label: 'Animais', icon: PawPrint, end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/destaques', label: 'Destaques', icon: Star, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined },

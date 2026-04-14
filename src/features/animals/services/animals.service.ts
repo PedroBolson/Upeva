@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { deleteAnimalPhoto } from './animal-storage.service'
+import { getFeaturedAnimalsCache } from './featured-animals.service'
 import type { AnimalStatus, Sex, Size, Species } from '@/types/common'
 import type { Animal, AnimalFilters } from '../types/animal.types'
 
@@ -56,8 +57,8 @@ export async function getAvailableAnimalsPaginated(
   const constraints: QueryConstraint[] = [where('status', 'in', ['available', 'under_review'])]
 
   if (filters.species) constraints.push(where('species', '==', filters.species))
-  if (filters.sex)     constraints.push(where('sex', '==', filters.sex))
-  if (filters.size)    constraints.push(where('size', '==', filters.size))
+  if (filters.sex) constraints.push(where('sex', '==', filters.sex))
+  if (filters.size) constraints.push(where('size', '==', filters.size))
 
   constraints.push(orderBy('createdAt', 'desc'))
   constraints.push(limit(PUBLIC_PAGE_SIZE + 1))
@@ -76,18 +77,38 @@ export async function getAvailableAnimalsPaginated(
 }
 
 /**
- * Fetches all available animals for the home page featured rail.
- * No ordering or hard limit — caller shuffles and slices to the desired count.
- * Capped at poolLimit to bound reads as the catalogue grows.
+ * Returns a pool of animals for the home page featured rail.
+ *
+ * - If the admin curated pool has >= displayCount animals: returns the full
+ *   curated pool so the caller can shuffle and rotate among them.
+ * - If the pool is smaller than displayCount: complements with random animals
+ *   (excluding already-featured IDs) to reach exactly displayCount.
+ *
+ * This ensures featured animals are never mixed with random ones when the
+ * admin has configured enough destaques.
  */
-export async function getFeaturedAnimals(poolLimit: number = 50): Promise<Animal[]> {
+export async function getFeaturedAnimals(displayCount: number = 4): Promise<Animal[]> {
+  const cache = await getFeaturedAnimalsCache()
+  const featured = cache?.items ?? []
+
+  // Admin has enough featured animals — return full pool for caller to shuffle
+  if (featured.length >= displayCount) return featured
+
+  // Not enough featured animals — complement with random to reach displayCount
+  const needed = displayCount - featured.length
+  const featuredIds = new Set(featured.map((a) => a.id))
   const q = query(
     collection(db, 'animals'),
     where('status', 'in', ['available', 'under_review']),
-    limit(poolLimit),
+    limit(Math.min(needed * 2, 20)),
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => docToAnimal(d.id, d.data()))
+  const complement = snap.docs
+    .map((d) => docToAnimal(d.id, d.data()))
+    .filter((a) => !featuredIds.has(a.id))
+    .slice(0, needed)
+
+  return [...featured, ...complement]
 }
 
 type SimilarAnimalSeed = Pick<Animal, 'id' | 'species' | 'sex' | 'size'>

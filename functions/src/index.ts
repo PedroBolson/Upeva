@@ -990,6 +990,71 @@ export const recalibrateQueuePositions = onCall(
   }
 );
 
+// ── updateFeaturedAnimals: admin selects the home page featured animal pool ───
+// Reads each selected animal, validates availability, then writes a single
+// denormalized cache document at metadata/featuredAnimals. The public home page
+// reads that one document instead of doing 50 individual reads per visit.
+export const updateFeaturedAnimals = onCall(
+  { region: "southamerica-east1", maxInstances: 3 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin") {
+      throw new HttpsError("permission-denied", "Only admins can update featured animals.");
+    }
+
+    const { animalIds } = request.data as { animalIds?: unknown };
+
+    if (!Array.isArray(animalIds)) {
+      throw new HttpsError("invalid-argument", "animalIds must be an array.");
+    }
+    if (animalIds.length > 12) {
+      throw new HttpsError("invalid-argument", "Maximum 12 featured animals allowed.");
+    }
+    if (!animalIds.every((id) => typeof id === "string" && id.length > 0)) {
+      throw new HttpsError("invalid-argument", "All entries in animalIds must be non-empty strings.");
+    }
+
+    // Deduplicate to prevent duplicate reads and corrupted cache entries
+    const ids = [...new Set(animalIds as string[])];
+
+    if (ids.length > 12) {
+      throw new HttpsError("invalid-argument", "Maximum 12 featured animals allowed.");
+    }
+
+    const validStatuses: AnimalStatus[] = ["available", "under_review"];
+
+    const snapshots = await Promise.all(ids.map((id) => db.collection("animals").doc(id).get()));
+
+    const items: Record<string, unknown>[] = [];
+    for (let i = 0; i < snapshots.length; i++) {
+      const snap = snapshots[i];
+      if (!snap.exists) {
+        throw new HttpsError("not-found", `Animal "${ids[i]}" not found.`);
+      }
+      const data = snap.data() as Record<string, unknown>;
+      if (!validStatuses.includes(data.status as AnimalStatus)) {
+        throw new HttpsError(
+          "failed-precondition",
+          `Animal "${ids[i]}" is not available for adoption.`
+        );
+      }
+      items.push({ id: snap.id, ...data });
+    }
+
+    // updatedBy is intentionally omitted — this document is publicly readable
+    // and admin UIDs should not be exposed to anonymous visitors.
+    await db.collection("metadata").doc("featuredAnimals").set({
+      animalIds: ids,
+      items,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+);
+
 // ── onApplicationStatusChanged: sync animal status + maintain counts ───────────
 // Melhoria 10: deduplicates retried events using event ID.
 export const onApplicationStatusChanged = onDocumentWritten(

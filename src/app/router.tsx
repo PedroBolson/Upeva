@@ -20,6 +20,7 @@ import { ApplicationsPage } from '@/pages/admin/applications'
 import { ApplicationDetailPage } from '@/pages/admin/application-detail'
 import { SettingsPage } from '@/pages/admin/settings'
 import { UsersPage } from '@/pages/admin/users'
+import { FeaturedAnimalsPage } from '@/pages/admin/featured-animals'
 
 const router = createBrowserRouter([
   {
@@ -29,12 +30,12 @@ const router = createBrowserRouter([
   {
     element: <PublicLayout />,
     children: [
-      { path: '/animais',      element: <AnimalsPage /> },
-      { path: '/animais/:id',  element: <AnimalDetailPage /> },
-      { path: '/adotar',       element: <AdoptionGeneralPage /> },
-      { path: '/adotar/:id',   element: <AdoptionFormPage /> },
-      { path: '/sobre',        element: <AboutPage /> },
-      { path: '/contato',      element: <ContactPage /> },
+      { path: '/animais', element: <AnimalsPage /> },
+      { path: '/animais/:id', element: <AnimalDetailPage /> },
+      { path: '/adotar', element: <AdoptionGeneralPage /> },
+      { path: '/adotar/:id', element: <AdoptionFormPage /> },
+      { path: '/sobre', element: <AboutPage /> },
+      { path: '/contato', element: <ContactPage /> },
     ],
   },
   {
@@ -48,14 +49,15 @@ const router = createBrowserRouter([
   {
     element: <AdminLayout />,
     children: [
-      { path: '/admin',                         element: <DashboardPage /> },
-      { path: '/admin/animais',                 element: <AdminAnimalsPage /> },
-      { path: '/admin/animais/novo',            element: <AnimalFormPage /> },
-      { path: '/admin/animais/:id/editar',      element: <AnimalFormPage /> },
-      { path: '/admin/candidaturas',            element: <ApplicationsPage /> },
-      { path: '/admin/candidaturas/:id',        element: <ApplicationDetailPage /> },
-      { path: '/admin/usuarios',                element: <ProtectedRoute requiredRole="admin"><UsersPage /></ProtectedRoute> },
-      { path: '/admin/configuracoes',           element: <SettingsPage /> },
+      { path: '/admin', element: <DashboardPage /> },
+      { path: '/admin/animais', element: <AdminAnimalsPage /> },
+      { path: '/admin/animais/novo', element: <AnimalFormPage /> },
+      { path: '/admin/animais/:id/editar', element: <AnimalFormPage /> },
+      { path: '/admin/candidaturas', element: <ApplicationsPage /> },
+      { path: '/admin/candidaturas/:id', element: <ApplicationDetailPage /> },
+      { path: '/admin/usuarios', element: <ProtectedRoute requiredRole="admin"><UsersPage /></ProtectedRoute> },
+      { path: '/admin/destaques', element: <FeaturedAnimalsPage /> },
+      { path: '/admin/configuracoes', element: <SettingsPage /> },
     ],
   },
 ])

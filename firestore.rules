@@ -97,6 +97,12 @@ service cloud.firestore {
 
     // ── Metadata (counts, config) ──────────────────────────────────────────────
     // Staff can read aggregated counts. Writes are Cloud Functions only.
+    // featuredAnimals is readable publicly — the home page reads it anonymously.
+
+    match /metadata/featuredAnimals {
+      allow read: if true;
+      allow write: if false; // Cloud Functions only
+    }
 
     match /metadata/{doc} {
       allow read: if isStaff();

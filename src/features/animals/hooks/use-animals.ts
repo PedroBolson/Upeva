@@ -68,8 +68,11 @@ export function useAnimals(filters: AnimalFilters = {}) {
 
 export function useFeaturedAnimals(count: number = 6) {
   const result = useQuery<Animal[]>({
-    queryKey: ['animals', 'featured'],
-    queryFn: () => getFeaturedAnimals(50),
+    // count is part of the key so different display sizes get independent cache entries
+    queryKey: ['animals', 'featured', count],
+    // Request exactly the display count — service returns the curated pool
+    // (all featured if >= count, or complemented to reach count exactly)
+    queryFn: () => getFeaturedAnimals(count),
     staleTime: 1000 * 60 * 10,
   })
 
@@ -94,7 +97,7 @@ function shuffled<T>(arr: T[]): T[] {
   const pool = [...arr]
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
   return pool
 }
