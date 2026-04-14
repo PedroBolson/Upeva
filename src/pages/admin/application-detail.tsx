@@ -198,9 +198,9 @@ export function ApplicationDetailPage() {
         adminNotes,
         ...(isGeneralInterest && currentAnimalId
           ? {
-              animalId: currentAnimalId,
-              animalName: selectedAnimalName,
-            }
+            animalId: currentAnimalId,
+            animalName: selectedAnimalName,
+          }
           : {}),
       },
       {
@@ -258,9 +258,9 @@ export function ApplicationDetailPage() {
     : app.species === 'dog'
       ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)} · Porte: ${formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}`
       : [
-          app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
-          app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
-        ].filter(Boolean).join(' · ') || '—'
+        app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
+        app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
+      ].filter(Boolean).join(' · ') || '—'
   const whatsAppHref = getWhatsAppHref(app.phone)
   const hasLinkableOptions = animalOptions.length > 0
 
@@ -327,11 +327,15 @@ export function ApplicationDetailPage() {
           Voltar para Candidaturas
         </Link>
 
-        <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <div>
+        <div className="mt-4">
+          <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-foreground">{app.fullName}</h1>
+            <div className="flex justify-end shrink-0">
+              <ApplicationStatusBadge status={app.status} />
+            </div>
+          </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 w-full sm:grid-cols-2 lg:grid-cols-3 lg:w-fit lg:mx-auto">
               <SummaryCard
                 icon={PawPrint}
                 label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
@@ -343,7 +347,11 @@ export function ApplicationDetailPage() {
                 icon={Mail}
                 label="Contato"
                 value={app.email}
+                valueHref={`mailto:${app.email}`}
+                valueIcon={<Mail size={14} />}
                 helper={app.phone}
+                helperHref={whatsAppHref}
+                helperIcon={<MessageCircle size={14} />}
               />
               <SummaryCard
                 icon={CalendarClock}
@@ -352,10 +360,6 @@ export function ApplicationDetailPage() {
                 helper={`Recebida em ${formattedCreatedAt}`}
               />
             </div>
-          </div>
-          <div className="flex justify-start lg:justify-end">
-            <ApplicationStatusBadge status={app.status} />
-          </div>
         </div>
       </Card>
 
@@ -624,12 +628,20 @@ function SummaryCard({
   value,
   helper,
   onClick,
+  valueHref,
+  helperHref,
+  valueIcon,
+  helperIcon,
 }: {
   icon: React.ElementType
   label: string
   value: string
   helper?: string
   onClick?: () => void
+  valueHref?: string
+  helperHref?: string | null
+  valueIcon?: React.ReactNode
+  helperIcon?: React.ReactNode
 }) {
   const Comp = onClick ? 'button' : 'div'
   return (
@@ -644,8 +656,22 @@ function SummaryCard({
         <Icon size={14} />
         <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
       </div>
-      <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
-      {helper && <p className="mt-1 text-xs text-muted-foreground">{helper}</p>}
+      {valueHref ? (
+        <a href={valueHref} target={valueHref.startsWith('https://') ? '_blank' : undefined} rel={valueHref.startsWith('https://') ? 'noopener noreferrer' : undefined} className="mt-2 flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors">
+          {valueIcon}{value}
+        </a>
+      ) : (
+        <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
+      )}
+      {helper && (
+        helperHref ? (
+          <a href={helperHref} target={helperHref.startsWith('https://') ? '_blank' : undefined} rel={helperHref.startsWith('https://') ? 'noopener noreferrer' : undefined} className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
+            {helperIcon}{helper}
+          </a>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+        )
+      )}
     </Comp>
   )
 }

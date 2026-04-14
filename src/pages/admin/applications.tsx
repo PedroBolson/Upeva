@@ -104,7 +104,7 @@ export function ApplicationsPage() {
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredApplications, sortColumn, sortDir])
 
   // Counts for tab badges come from metadata (no extra reads)
@@ -319,6 +319,7 @@ export function ApplicationsPage() {
           </div>
 
           <ResponsiveDataList
+            breakpoint="xl"
             columns={columns}
             data={sortedApplications}
             keyExtractor={(a) => a.id}

@@ -79,7 +79,7 @@ export function AdminAnimalsPage() {
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortColumn, sortDir])
 
   const activeStatusLabel = statusFilter ? STATUS_LABELS[statusFilter] : 'Todos os status'
@@ -322,6 +322,7 @@ export function AdminAnimalsPage() {
           </div>
 
           <ResponsiveDataList
+            breakpoint="xl"
             columns={columns}
             data={sorted}
             keyExtractor={(a) => a.id}

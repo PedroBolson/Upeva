@@ -16,7 +16,11 @@ interface ResponsiveDataListProps<T> {
   sortDir?: 'asc' | 'desc'
   onSort?: (key: string) => void
   animated?: boolean
+  breakpoint?: 'md' | 'lg' | 'xl'
 }
+
+const tableVisible = { md: 'hidden md:block', lg: 'hidden lg:block', xl: 'hidden xl:block' }
+const cardsVisible = { md: 'space-y-3 md:hidden', lg: 'space-y-3 lg:hidden', xl: 'space-y-3 xl:hidden' }
 
 export function ResponsiveDataList<T>({
   columns,
@@ -31,6 +35,7 @@ export function ResponsiveDataList<T>({
   sortDir,
   onSort,
   animated = false,
+  breakpoint = 'md',
 }: ResponsiveDataListProps<T>) {
   if (data.length === 0) {
     return (
@@ -42,7 +47,7 @@ export function ResponsiveDataList<T>({
 
   return (
     <div className={cn('w-full', className)}>
-      <div className="hidden md:block">
+      <div className={tableVisible[breakpoint]}>
         <DataTable
           columns={columns}
           data={data}
@@ -56,7 +61,7 @@ export function ResponsiveDataList<T>({
         />
       </div>
 
-      <div className={cn('space-y-3 md:hidden', mobileClassName)}>
+      <div className={cn(cardsVisible[breakpoint], mobileClassName)}>
         {animated ? (
           <AnimatePresence initial={false}>
             {data.map((row) => (
