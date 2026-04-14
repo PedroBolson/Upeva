@@ -46,8 +46,13 @@ divider
 info "Etapa 2/3 — ${BOLD}Detectando targets do Firebase${NC}"
 divider
 
-# Arquivos alterados no último commit (funciona mesmo no primeiro commit)
-CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null || true)
+# Arquivos alterados em todos os commits ainda não enviados ao remote.
+# Fallback para o último commit quando ainda não existe branch remoto (primeiro push).
+if git rev-parse "@{u}" >/dev/null 2>&1; then
+  CHANGED=$(git diff "@{u}"...HEAD --name-only)
+else
+  CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null || true)
+fi
 
 TARGETS="hosting"
 
@@ -63,7 +68,7 @@ if echo "$CHANGED" | grep -q "^storage\.rules$"; then
   TARGETS="${TARGETS},storage"
 fi
 
-info "Arquivos alterados no último commit:"
+info "Arquivos alterados nos commits não enviados:"
 if [ -n "$CHANGED" ]; then
   echo "$CHANGED" | while IFS= read -r f; do
     echo -e "   ${DIM}•${NC} ${f}"
