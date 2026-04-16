@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as functionsV1 from "firebase-functions/v1";
@@ -65,6 +65,104 @@ const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 const PHONE_REGEX = /^\(\d{2}\)\s\d{5}-\d{4}$/;
 const CEP_REGEX = /^\d{5}-\d{3}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const VALID_STATES = new Set([
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+  "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+  "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+]);
+
+function isValidCPF(cpf: string): boolean {
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i);
+  let rem = (sum * 10) % 11;
+  if (rem === 10 || rem === 11) rem = 0;
+  if (rem !== parseInt(digits[9])) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i);
+  rem = (sum * 10) % 11;
+  if (rem === 10 || rem === 11) rem = 0;
+  return rem === parseInt(digits[10]);
+}
+
+function assertMaxLength(value: string, max: number, field: string): void {
+  if (value.length > max) {
+    throw new HttpsError("invalid-argument", `${field} excede o limite de ${max} caracteres.`);
+  }
+}
+
+async function runTransactionWithRetry<T>(
+  callback: (tx: Transaction) => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await db.runTransaction(callback);
+    } catch (err) {
+      lastError = err;
+      const code = (err as { code?: string }).code;
+      if (code !== "aborted" && code !== "unavailable") throw err;
+      if (attempt < maxRetries - 1) {
+        await new Promise((res) => setTimeout(res, Math.random() * 200 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function buildAndCacheSimilarAnimals(
+  animalId: string,
+  animal: { species: Species; sex?: Sex; size?: Size },
+): Promise<void> {
+  const COUNT = 4;
+  const FETCH_LIMIT = 8;
+
+  type QueryPlan = { species: Species; sex?: Sex; size?: Size };
+  const plans: QueryPlan[] = [];
+  if (animal.species === "dog" && animal.size) {
+    plans.push({ species: animal.species, sex: animal.sex, size: animal.size });
+  }
+  plans.push({ species: animal.species, sex: animal.sex });
+  plans.push({ species: animal.species });
+
+  const seen = new Set<string>();
+  const uniquePlans = plans.filter((p) => {
+    const key = JSON.stringify(p);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const matches: Record<string, unknown>[] = [];
+  const seenIds = new Set<string>([animalId]);
+
+  for (const plan of uniquePlans) {
+    if (matches.length >= COUNT) break;
+
+    const base = db.collection("animals").where("status", "==", "available");
+    const withSpecies = base.where("species", "==", plan.species);
+    const withSex = plan.sex ? withSpecies.where("sex", "==", plan.sex) : withSpecies;
+    const withSize = plan.size ? withSex.where("size", "==", plan.size) : withSex;
+    const snap = await withSize.orderBy("createdAt", "desc").limit(FETCH_LIMIT).get();
+
+    for (const docSnap of snap.docs) {
+      if (seenIds.has(docSnap.id)) continue;
+      seenIds.add(docSnap.id);
+      matches.push({ id: docSnap.id, ...docSnap.data() });
+      if (matches.length >= COUNT) break;
+    }
+  }
+
+  await db.collection("animalSimilarityCache").doc(animalId).set({
+    items: matches,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
 
 function isGeneralInterestApplication(application: ApplicationRecord): boolean {
   if (!application.animalId) return true;
@@ -408,7 +506,9 @@ export const createApplication = onCall(
     const animalId = rawAnimalId || undefined;
     const animalName = rawAnimalName || undefined;
     const fullName = (data.fullName as string).trim();
+    assertMaxLength(fullName, 100, "fullName");
     const email = (data.email as string).toLowerCase().trim();
+    assertMaxLength(email, 254, "email");
     const cpf = (data.cpf as string).trim();
     const phone = (data.phone as string).trim();
     const birthDate = (data.birthDate as string).trim();
@@ -419,6 +519,9 @@ export const createApplication = onCall(
     }
     if (!CPF_REGEX.test(cpf)) {
       throw new HttpsError("invalid-argument", "Formato de CPF inválido.");
+    }
+    if (!isValidCPF(cpf)) {
+      throw new HttpsError("invalid-argument", "CPF inválido.");
     }
     if (!PHONE_REGEX.test(phone)) {
       throw new HttpsError("invalid-argument", "Formato de telefone inválido.");
@@ -458,12 +561,18 @@ export const createApplication = onCall(
       city: (addressData.city as string).trim(),
       state: (addressData.state as string).trim().toUpperCase(),
     };
-    if ((address.state as string).length !== 2) {
+    if (!VALID_STATES.has(address.state as string)) {
       throw new HttpsError("invalid-argument", "UF inválida no endereço.");
     }
 
+    assertMaxLength(address.street as string, 150, "address.street");
+    assertMaxLength(address.number as string, 20, "address.number");
+    assertMaxLength(address.neighborhood as string, 100, "address.neighborhood");
+    assertMaxLength(address.city as string, 100, "address.city");
+
     if (typeof addressData.complement === "string" && addressData.complement.trim()) {
       address.complement = addressData.complement.trim();
+      assertMaxLength(address.complement as string, 50, "address.complement");
     }
 
     // Rate limiting — max 5 applications per email per 24h
@@ -472,18 +581,20 @@ export const createApplication = onCall(
     const now = Date.now();
     const windowMs = 24 * 60 * 60 * 1000;
 
-    const allowed = await db.runTransaction(async (tx) => {
+    const allowed = await runTransactionWithRetry(async (tx) => {
       const snap = await tx.get(rateLimitRef);
+      // expiresAt enables Firestore TTL policy to auto-delete stale rate limit docs
+      const expiresAt = new Timestamp(Math.floor((now + windowMs) / 1000), 0);
 
       if (!snap.exists) {
-        tx.set(rateLimitRef, { count: 1, windowStart: now });
+        tx.set(rateLimitRef, { count: 1, windowStart: now, expiresAt });
         return true;
       }
 
       const { count, windowStart } = snap.data() as { count: number; windowStart: number };
 
       if (now - windowStart > windowMs) {
-        tx.set(rateLimitRef, { count: 1, windowStart: now });
+        tx.set(rateLimitRef, { count: 1, windowStart: now, expiresAt });
         return true;
       }
 
@@ -515,6 +626,15 @@ export const createApplication = onCall(
       acceptsNoResale, acceptsLiabilityTerms, acceptsResponsibility,
       comments,
     } = data;
+
+    if (typeof adoptionReason === "string") assertMaxLength(adoptionReason, 2000, "adoptionReason");
+    if (typeof comments === "string") assertMaxLength(comments, 1000, "comments");
+    if (typeof previousPets === "string") assertMaxLength(previousPets, 1000, "previousPets");
+    if (typeof currentPetsVaccinationReason === "string") assertMaxLength(currentPetsVaccinationReason, 500, "currentPetsVaccinationReason");
+    if (typeof scratchBehaviorResponse === "string") assertMaxLength(scratchBehaviorResponse, 1000, "scratchBehaviorResponse");
+    if (typeof escapeResponse === "string") assertMaxLength(escapeResponse, 1000, "escapeResponse");
+    if (typeof cannotKeepResponse === "string") assertMaxLength(cannotKeepResponse, 1000, "cannotKeepResponse");
+    if (typeof longTermCommitment === "string") assertMaxLength(longTermCommitment, 1000, "longTermCommitment");
 
     let resolvedAnimalName = animalName;
     let waitlistEntry = false;
@@ -627,6 +747,7 @@ export const updateApplicationReview = onCall(
       request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
     const adminNotes = typeof request.data.adminNotes === "string" ?
       request.data.adminNotes.trim() : undefined;
+    if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
     const appRef = db.collection("applications").doc(id.trim());
 
     let resolvedAnimalId: string | undefined;
@@ -940,6 +1061,13 @@ export const recalibrateQueuePositions = onCall(
       .where("animalId", "!=", null)
       .get();
 
+    if (appsSnap.size > 10_000) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Muitas candidaturas. Contate o suporte para dividir esta operação.",
+      );
+    }
+
     // Group by animalId, sort each group by createdAt ASC, assign positions
     const byAnimal = new Map<string, Array<{ id: string; createdAt: unknown }>>();
 
@@ -1154,7 +1282,7 @@ export const onAnimalChanged = onDocumentWritten(
     if (!processed) return;
 
     const before = event.data?.before.data() as { status: AnimalStatus } | undefined;
-    const after = event.data?.after.data() as { status: AnimalStatus } | undefined;
+    const after = event.data?.after.data() as { status: AnimalStatus; species?: Species; sex?: Sex; size?: Size } | undefined;
 
     const countsRef = db.collection("metadata").doc("counts");
 
@@ -1181,6 +1309,19 @@ export const onAnimalChanged = onDocumentWritten(
         },
         { merge: true }
       );
+    }
+
+    // Rebuild similar-animals cache when the animal becomes (un)available
+    const animalId = event.params.animalId;
+    if (after && (after.status === "available" || after.status === "under_review") && after.species) {
+      await buildAndCacheSimilarAnimals(animalId, {
+        species: after.species,
+        sex: after.sex,
+        size: after.size,
+      });
+    } else {
+      // Animal deleted or no longer accessible — remove stale cache entry
+      await db.collection("animalSimilarityCache").doc(animalId).delete().catch(() => {});
     }
   }
 );

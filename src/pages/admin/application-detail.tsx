@@ -177,7 +177,7 @@ export function ApplicationDetailPage() {
     queryKey: ['applications', 'active-for-animal', approvalAnimalId, id],
     queryFn: () => getActiveApplicationsForAnimal(approvalAnimalId!, id!),
     enabled: Boolean(approvalAnimalId && id),
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
   })
 
   const needsRelinkConfirmation = Boolean(

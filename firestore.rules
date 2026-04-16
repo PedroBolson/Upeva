@@ -109,6 +109,14 @@ service cloud.firestore {
       allow write: if false; // Cloud Functions only
     }
 
+    // ── Animal similarity cache ────────────────────────────────────────────────
+    // Pre-computed by Cloud Function on animal write. Public read, no client writes.
+
+    match /animalSimilarityCache/{animalId} {
+      allow read: if true;
+      allow write: if false; // Cloud Functions only
+    }
+
     // ── Rate limits ────────────────────────────────────────────────────────────
     // Internal use only — no client access.
 

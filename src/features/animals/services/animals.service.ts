@@ -165,6 +165,12 @@ export async function getSimilarAnimals(
   animal: SimilarAnimalSeed,
   count: number = 4,
 ): Promise<Animal[]> {
+  const cacheSnap = await getDoc(doc(db, 'animalSimilarityCache', animal.id))
+  if (cacheSnap.exists()) {
+    const items = (cacheSnap.data().items as Animal[]) ?? []
+    if (items.length > 0) return items.slice(0, count)
+  }
+
   const matches: Animal[] = []
   const seenIds = new Set<string>([animal.id])
   const fetchLimit = Math.max(count * 2, 8)

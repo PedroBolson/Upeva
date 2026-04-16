@@ -18,7 +18,6 @@ import { Button } from '@/components/ui'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
-// TODO: confirmar número do WhatsApp para contato
 const WHATSAPP_NUMBER = '54984030187'
 const PIX_KEY = '54984030187'
 

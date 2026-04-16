@@ -59,7 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return
           }
 
-          console.error('Falha ao carregar o perfil do usuário.', error)
+          console.error('Falha ao carregar o perfil do usuário.')
+          if (import.meta.env.DEV) console.error(error)
           setUserProfile(null)
         } finally {
           if (!active || currentRequestId !== requestId) {
