@@ -1321,7 +1321,11 @@ export const onAnimalChanged = onDocumentWritten(
       });
     } else {
       // Animal deleted or no longer accessible — remove stale cache entry
-      await db.collection("animalSimilarityCache").doc(animalId).delete().catch(() => {});
+      try {
+        await db.collection("animalSimilarityCache").doc(animalId).delete();
+      } catch (_) {
+        // Cache entry may not exist — safe to ignore
+      }
     }
   }
 );
