@@ -313,8 +313,10 @@ async function appendToAnimalQueue(animalId: string, appId: string): Promise<voi
 // preventing duplicate processing of retried Firestore trigger events.
 async function markEventProcessed(eventId: string): Promise<boolean> {
   const ref = db.collection("_processedEvents").doc(eventId);
+  // expiresAt = 7 days from now — safe margin above the 24h retry window
+  const expiresAt = new Timestamp(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, 0);
   try {
-    await ref.create({ processedAt: FieldValue.serverTimestamp() });
+    await ref.create({ processedAt: FieldValue.serverTimestamp(), expiresAt });
     return true; // First time — safe to proceed
   } catch {
     return false; // Already processed — skip
