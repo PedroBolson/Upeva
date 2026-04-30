@@ -29,3 +29,4 @@ dist-ssr
 # Local tool state and generated Firebase CLI cache
 .firebase/
 .claude/settings.local.json
+.claude/

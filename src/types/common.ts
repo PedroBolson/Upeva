@@ -25,6 +25,15 @@ export type ApplicationStatus =
   | 'approved'
   | 'rejected'
   | 'withdrawn'
+  | 'declined'
+
+export type RejectionReason =
+  | 'inadequate_housing'
+  | 'no_landlord_permission'
+  | 'financial_instability'
+  | 'previous_animal_negligence'
+  | 'incompatible_lifestyle'
+  | 'other'
 
 export type HousingType =
   | 'house_open_yard'

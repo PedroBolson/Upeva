@@ -37,6 +37,8 @@ export interface UpdateApplicationReviewInput {
   adminNotes?: string
   animalId?: string
   animalName?: string
+  rejectionReason?: string
+  rejectionDetails?: string
 }
 
 const ADMIN_PAGE_SIZE = 25

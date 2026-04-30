@@ -1,4 +1,4 @@
-import type { Timestamp, Species, HousingType, ApplicationStatus } from '@/types/common'
+import type { Timestamp, Species, HousingType, ApplicationStatus, RejectionReason } from '@/types/common'
 
 export interface AdoptionFormData {
   // Step 1: Identificação
@@ -73,6 +73,9 @@ export interface AdoptionApplication extends AdoptionFormData {
   species: Species
   status: ApplicationStatus
   adminNotes?: string
+  rejectionReason?: RejectionReason
+  rejectionDetails?: string
+  pendingExport?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
 }

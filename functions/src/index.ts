@@ -17,7 +17,27 @@ type ApplicationStatus =
   | "in_review"
   | "approved"
   | "rejected"
-  | "withdrawn";
+  | "withdrawn"
+  | "declined";
+
+type RejectionReason =
+  | "inadequate_housing"
+  | "no_landlord_permission"
+  | "financial_instability"
+  | "previous_animal_negligence"
+  | "incompatible_lifestyle"
+  | "other";
+
+const VALID_REJECTION_REASONS = new Set<RejectionReason>([
+  "inadequate_housing",
+  "no_landlord_permission",
+  "financial_instability",
+  "previous_animal_negligence",
+  "incompatible_lifestyle",
+  "other",
+]);
+
+const REJECTION_DETAILS_MIN_LENGTH = 100;
 type AnimalStatus = "available" | "under_review" | "adopted" | "archived";
 type Species = "dog" | "cat";
 type Sex = "male" | "female";
@@ -52,9 +72,13 @@ function isUserRole(value: unknown): value is UserRole {
 }
 
 function isApplicationStatus(value: unknown): value is ApplicationStatus {
-  return ["pending", "in_review", "approved", "rejected", "withdrawn"].includes(
+  return ["pending", "in_review", "approved", "rejected", "withdrawn", "declined"].includes(
     String(value)
   );
+}
+
+function isRejectionReason(value: unknown): value is RejectionReason {
+  return VALID_REJECTION_REASONS.has(value as RejectionReason);
 }
 
 function isValidEmail(email: string): boolean {
@@ -735,6 +759,8 @@ export const updateApplicationReview = onCall(
       adminNotes?: string;
       animalId?: string;
       animalName?: string;
+      rejectionReason?: string;
+      rejectionDetails?: string;
     };
 
     if (typeof id !== "string" || !id.trim()) {
@@ -745,12 +771,39 @@ export const updateApplicationReview = onCall(
       throw new HttpsError("invalid-argument", "Status da candidatura inválido.");
     }
 
+    const appRef = db.collection("applications").doc(id.trim());
+
+    // DECLINED: delete immediately — no PDF, no flag, no further processing
+    if (status === "declined") {
+      const snap = await appRef.get();
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "Candidatura não encontrada.");
+      }
+      await appRef.delete();
+      return { success: true };
+    }
+
+    // REJECTED: validate required fields before proceeding
+    if (status === "rejected") {
+      if (!isRejectionReason(request.data.rejectionReason)) {
+        throw new HttpsError("invalid-argument", "Motivo de rejeição inválido.");
+      }
+      const details = typeof request.data.rejectionDetails === "string" ?
+        request.data.rejectionDetails.trim() :
+        "";
+      if (details.length < REJECTION_DETAILS_MIN_LENGTH) {
+        throw new HttpsError(
+          "invalid-argument",
+          `Descrição deve ter no mínimo ${REJECTION_DETAILS_MIN_LENGTH} caracteres.`
+        );
+      }
+    }
+
     const requestedAnimalId = typeof request.data.animalId === "string" &&
       request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
     const adminNotes = typeof request.data.adminNotes === "string" ?
       request.data.adminNotes.trim() : undefined;
     if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
-    const appRef = db.collection("applications").doc(id.trim());
 
     let resolvedAnimalId: string | undefined;
     let resolvedAnimalName: string | undefined;
@@ -869,6 +922,12 @@ export const updateApplicationReview = onCall(
         status,
         updatedAt: FieldValue.serverTimestamp(),
       };
+
+      if (status === "rejected") {
+        payload.rejectionReason = request.data.rejectionReason;
+        payload.rejectionDetails = (request.data.rejectionDetails as string).trim();
+        payload.pendingExport = true;
+      }
 
       if (adminNotes !== undefined) {
         payload.adminNotes = adminNotes;
@@ -1240,6 +1299,10 @@ export const onApplicationStatusChanged = onDocumentWritten(
 
     if (!after && before?.animalId) {
       await recomputeAnimalState(before.animalId);
+      // Recalibrate queue when an active application is deleted (e.g. declined)
+      if (before.status === "pending" || before.status === "in_review") {
+        await recalibrateAnimalQueue(before.animalId);
+      }
       return;
     }
 

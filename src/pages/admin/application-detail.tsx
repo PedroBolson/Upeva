@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
+import { RejectionModal } from '@/features/adoption/components/rejection-modal'
 import { AnimalQuickViewModal } from '@/features/animals/components/animal-quick-view-modal'
 import { cn } from '@/utils/cn'
 import { DetailSection, DetailField } from '@/components/ui/detail-view'
@@ -17,8 +18,17 @@ import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import { formatDate } from '@/utils/format'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
-import type { ApplicationStatus, Timestamp } from '@/types/common'
+import type { ApplicationStatus, RejectionReason, Timestamp } from '@/types/common'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
+
+const REJECTION_REASON_LABELS: Record<string, string> = {
+  inadequate_housing:          'Moradia inadequada',
+  no_landlord_permission:      'Sem autorização do proprietário',
+  financial_instability:       'Instabilidade financeira',
+  previous_animal_negligence:  'Histórico de negligência com animais',
+  incompatible_lifestyle:      'Estilo de vida incompatível',
+  other:                       'Outro',
+}
 
 const HOUSING_LABELS: Record<string, string> = {
   house_open_yard: 'Casa com quintal aberto',
@@ -97,6 +107,7 @@ function Bool({ value }: { value: boolean | undefined }) {
 
 export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { data: app, isLoading, error, refetch } = useApplication(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
 
@@ -111,6 +122,8 @@ export function ApplicationDetailPage() {
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
   const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false)
   const [isAnimalModalOpen, setIsAnimalModalOpen] = useState(false)
+  const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false)
+  const [isStatusInfoOpen, setIsStatusInfoOpen] = useState(false)
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -242,6 +255,37 @@ export function ApplicationDetailPage() {
     saveReview()
   }
 
+  function handleDecline() {
+    if (!id) return
+    setSaveError(null)
+    updateReview(
+      { id, status: 'declined' },
+      {
+        onSuccess: () => navigate('/admin/candidaturas'),
+        onError: (e) => {
+          setIsRejectionModalOpen(false)
+          setSaveError(getReviewErrorMessage(e))
+        },
+      },
+    )
+  }
+
+  function handleReject(reason: RejectionReason, details: string) {
+    if (!id) return
+    setSaveError(null)
+    updateReview(
+      { id, status: 'rejected', rejectionReason: reason, rejectionDetails: details },
+      {
+        onSuccess: () => {
+          setIsRejectionModalOpen(false)
+          setSaved(true)
+          setSavedMessage('Rejeição registrada. Será arquivada no ciclo semanal.')
+        },
+        onError: (e) => setSaveError(getReviewErrorMessage(e)),
+      },
+    )
+  }
+
   if (isLoading) return <PageSpinner />
   if (error || !app) {
     return (
@@ -250,6 +294,9 @@ export function ApplicationDetailPage() {
       </div>
     )
   }
+
+  const canBeRejected = app.status === 'pending' || app.status === 'in_review'
+  const isTerminalStatus = app.status === 'rejected'
 
   const hasSpecificAnimal = Boolean(app.animalId)
   const animalLabel = hasSpecificAnimal ? app.animalName ?? 'Animal vinculado' : 'Interesse geral'
@@ -315,6 +362,14 @@ export function ApplicationDetailPage() {
         confirmLabel="Trocar animal"
         cancelLabel="Cancelar"
         variant="warning"
+        loading={isPending}
+      />
+
+      <RejectionModal
+        open={isRejectionModalOpen}
+        onClose={() => setIsRejectionModalOpen(false)}
+        onDecline={handleDecline}
+        onReject={handleReject}
         loading={isPending}
       />
 
@@ -525,57 +580,109 @@ export function ApplicationDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">Triagem</h2>
             </div>
 
-            <div className="mt-4 flex flex-col gap-4">
-              <Select
-                label="Status"
-                options={APPLICATION_STATUS_OPTIONS}
-                value={currentStatus}
-                onChange={(value) => setSelectedStatus(value as ApplicationStatus)}
-              />
+            {isTerminalStatus ? (
+              <div className="mt-4 flex flex-col gap-3">
+                <div className="rounded-lg border border-danger/20 bg-danger/5 p-4 flex flex-col gap-2">
+                  <p className="text-xs font-medium text-danger uppercase tracking-wide">
+                    {app.rejectionReason
+                      ? REJECTION_REASON_LABELS[app.rejectionReason]
+                      : 'Rejeição definitiva'}
+                  </p>
+                  {app.rejectionDetails && (
+                    <p className="text-sm text-muted-foreground leading-relaxed">{app.rejectionDetails}</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  No próximo ciclo semanal: PDF gerado, arquivado no Drive e removido do sistema.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">Status</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsStatusInfoOpen((v) => !v)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        aria-expanded={isStatusInfoOpen}
+                      >
+                        <Info size={13} />
+                        {isStatusInfoOpen ? 'Fechar' : 'O que significa cada status?'}
+                      </button>
+                    </div>
+                    {isStatusInfoOpen && (
+                      <div className="rounded-lg border border-border bg-muted/50 p-3 text-xs text-muted-foreground flex flex-col gap-1.5">
+                        <p><strong className="text-foreground">Pendente</strong> — recebido, aguardando triagem</p>
+                        <p><strong className="text-foreground">Em análise</strong> — em avaliação ativa pela equipe</p>
+                        <p><strong className="text-foreground">Aprovada</strong> — adoção confirmada · PDF gerado e arquivado em 30 dias</p>
+                        <p><strong className="text-foreground">Retirada</strong> — candidato desistiu · removido automaticamente em 30 dias</p>
+                        <p><strong className="text-foreground">Recusar candidatura</strong> — use o botão abaixo para declinar (sem registro) ou rejeitar definitivamente (com alerta permanente)</p>
+                      </div>
+                    )}
+                    <Select
+                      options={APPLICATION_STATUS_OPTIONS}
+                      value={currentStatus}
+                      onChange={(value) => setSelectedStatus(value as ApplicationStatus)}
+                    />
+                  </div>
 
-              {isGeneralInterest && (
-                <Select
-                  label="Vincular animal"
-                  options={animalOptions}
-                  value={currentAnimalId || undefined}
-                  onChange={(value) => setSelectedAnimalId(value)}
-                  placeholder={
-                    linkableAnimalsLoading
-                      ? 'Carregando animais compatíveis…'
-                      : 'Selecione um animal compatível'
-                  }
-                  hint={
-                    hasLinkableOptions
-                      ? 'Só aparecem animais disponíveis que combinam com as preferências desta candidatura.'
-                      : 'Nenhum animal disponível corresponde a esta candidatura no momento.'
-                  }
-                  disabled={linkableAnimalsLoading || (!hasLinkableOptions && !currentAnimalId)}
-                />
-              )}
+                  {isGeneralInterest && (
+                    <Select
+                      label="Vincular animal"
+                      options={animalOptions}
+                      value={currentAnimalId || undefined}
+                      onChange={(value) => setSelectedAnimalId(value)}
+                      placeholder={
+                        linkableAnimalsLoading
+                          ? 'Carregando animais compatíveis…'
+                          : 'Selecione um animal compatível'
+                      }
+                      hint={
+                        hasLinkableOptions
+                          ? 'Só aparecem animais disponíveis que combinam com as preferências desta candidatura.'
+                          : 'Nenhum animal disponível corresponde a esta candidatura no momento.'
+                      }
+                      disabled={linkableAnimalsLoading || (!hasLinkableOptions && !currentAnimalId)}
+                    />
+                  )}
 
-              <Textarea
-                label="Nota interna"
-                placeholder="Motivo, observações para a equipe…"
-                rows={6}
-                value={adminNotes}
-                onChange={(e) => setAdminNotesDraft(e.target.value)}
-              />
-            </div>
+                  <Textarea
+                    label="Nota interna"
+                    placeholder="Motivo, observações para a equipe…"
+                    rows={6}
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotesDraft(e.target.value)}
+                  />
+                </div>
 
-            <div className="mt-4 flex flex-col gap-3">
-              <Button onClick={handleSave} disabled={isPending} className="w-full gap-1.5">
-                {isPending && <Loader2 size={14} className="animate-spin" />}
-                {isPending ? 'Salvando…' : 'Salvar alterações'}
-              </Button>
-              {saveError && (
-                <span className="text-sm text-danger">{saveError}</span>
-              )}
-              {saved && (
-                <span className="text-sm text-success">
-                  {savedMessage ?? 'Salvo com sucesso.'}
-                </span>
-              )}
-            </div>
+                <div className="mt-4 flex flex-col gap-3">
+                  <Button onClick={handleSave} disabled={isPending} className="w-full gap-1.5">
+                    {isPending && <Loader2 size={14} className="animate-spin" />}
+                    {isPending ? 'Salvando…' : 'Salvar alterações'}
+                  </Button>
+                  {canBeRejected && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-danger border-danger/30 hover:bg-danger/5"
+                      onClick={() => setIsRejectionModalOpen(true)}
+                      disabled={isPending}
+                    >
+                      Recusar candidatura
+                    </Button>
+                  )}
+                  {saveError && (
+                    <span className="text-sm text-danger">{saveError}</span>
+                  )}
+                  {saved && (
+                    <span className="text-sm text-success">
+                      {savedMessage ?? 'Salvo com sucesso.'}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </Card>
 
           <Card className="border-border/80 p-5">

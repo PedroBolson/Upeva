@@ -48,8 +48,9 @@ const applicationStatusMap: Record<ApplicationStatus, { label: string; variant: 
   pending:    { label: 'Pendente',    variant: 'warning' },
   in_review:  { label: 'Em análise', variant: 'default' },
   approved:   { label: 'Aprovada',   variant: 'success' },
-  rejected:   { label: 'Recusada',   variant: 'danger' },
+  rejected:   { label: 'Rejeitada',  variant: 'danger' },
   withdrawn:  { label: 'Desistência', variant: 'outline' },
+  declined:   { label: 'Declinada',  variant: 'secondary' },
 }
 
 export function AnimalStatusBadge({ status }: { status: AnimalStatus }) {

@@ -1,10 +1,10 @@
 import type { ApplicationStatus } from '@/types/common'
 
+// Used in the triagem select — rejected/declined go through the rejection modal, not this select
 export const APPLICATION_STATUS_OPTIONS: Array<{ value: ApplicationStatus; label: string }> = [
   { value: 'pending', label: 'Pendente' },
   { value: 'in_review', label: 'Em análise' },
   { value: 'approved', label: 'Aprovada' },
-  { value: 'rejected', label: 'Rejeitada' },
   { value: 'withdrawn', label: 'Retirada' },
 ]
 
