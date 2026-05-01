@@ -17,7 +17,17 @@ export function createAdoptionSchema(species: Species, hasSpecificAnimal = false
       fullName: z.string().min(3, 'Nome deve ter ao menos 3 caracteres'),
       cpf: z
         .string()
-        .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, 'CPF inválido (ex: 000.000.000-00)'),
+        .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, 'CPF inválido (ex: 000.000.000-00)')
+        .refine((cpf) => {
+          const digits = cpf.replace(/\D/g, '')
+          if (/^(\d)\1{10}$/.test(digits)) return false
+          const calc = (len: number) => {
+            const sum = digits.slice(0, len).split('').reduce((acc, d, i) => acc + Number(d) * (len + 1 - i), 0)
+            const rem = (sum * 10) % 11
+            return rem === 10 ? 0 : rem
+          }
+          return calc(9) === Number(digits[9]) && calc(10) === Number(digits[10])
+        }, 'CPF inválido'),
       email: z.string().email('E-mail inválido'),
       birthDate: z.string().min(1, 'Informe a data de nascimento'),
       phone: z

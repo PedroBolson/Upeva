@@ -243,18 +243,7 @@ export function ApplicationsPage() {
       cell: (a) => (
         <div>
           <p className="font-medium text-foreground">{a.fullName}</p>
-          <p className="text-xs text-muted-foreground">{a.cpf}</p>
-        </div>
-      ),
-    },
-    {
-      key: 'contact',
-      header: 'Contato',
-      sortKey: sortKeys.contact,
-      cell: (a) => (
-        <div>
-          <p className="text-sm text-foreground">{a.email}</p>
-          <p className="text-xs text-muted-foreground">{a.phone}</p>
+          <p className="text-xs text-muted-foreground">{a.email}</p>
         </div>
       ),
     },

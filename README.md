@@ -1,13 +1,13 @@
 # 🐾 Upeva
 
-Plataforma web para divulgação de animais, envio de candidaturas de adoção e operação interna da ONG.
+Plataforma web para divulgação de animais, envio de candidaturas de adoção e operação interna da ONG União Pela Vida Animal — Flores da Cunha/RS.
 
 O projeto é uma SPA em React com duas áreas principais:
 
-- **Área pública** — vitrine de animais, fila de adoção com waitlist e formulário multi-etapas
+- **Área pública** — vitrine de animais, fila de adoção com waitlist e formulário multi-etapas com consentimento LGPD granular
 - **Área administrativa** — painel protegido por Firebase Auth para a equipe da ONG
 
-O backend usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Functions, com foco em baixo custo de leitura/escrita e segurança por padrão.
+O backend usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Functions, com foco em baixo custo de leitura/escrita, segurança por padrão e conformidade com a LGPD.
 
 ---
 
@@ -17,6 +17,7 @@ O backend usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Funct
 - [PWA](#-pwa)
 - [Fila de adoção](#-fila-de-adoção)
 - [Segurança](#-segurança)
+- [LGPD e Privacidade](#-lgpd-e-privacidade)
 - [Escalabilidade](#-escalabilidade)
 - [Stack](#-stack)
 - [Rotas](#️-rotas)
@@ -36,21 +37,26 @@ O backend usa Firebase Hosting, Firestore, Storage, Authentication e Cloud Funct
 ## ✅ Estado atual do projeto
 
 ### Área pública
-- Home com rail de animais disponíveis (pool de até 50, embaralhado client-side a cada visita)
+- Home com pool curado de até 12 animais em destaque (drag-to-reorder pelo admin, 1 leitura Firestore por visita pública)
 - Listagem pública com filtros por espécie, sexo, porte e busca por nome — inclui animais `under_review` com badge de status
 - Animações inteligentes que distinguem dados em cache de carregamentos reais
 - Página de detalhe do animal com galeria de fotos e CTA de adoção adaptado ao status (disponível ou waitlist)
 - Formulário público de candidatura por animal ou geral, com 8 etapas e campos condicionais por espécie
+- **Modal de consentimento granular** (LGPD) antes do início do formulário — dois checkboxes por finalidade, bloqueante até ambos marcados
 - Tela de sucesso pós-candidatura com posição na fila para candidatos em waitlist
-- Páginas institucionais `sobre` e `contato`
+- Páginas institucionais `sobre`, `contato`, `politica-de-privacidade` e `termos-de-uso`
 
 ### Área administrativa
 - Dashboard com gráficos de distribuição de status (animais e candidaturas) via Recharts, Skeleton loading e miniaturas de fotos
 - Listagem de animais com cabeçalhos de coluna ordenáveis e animações por linha
 - CRUD de animais com upload de fotos no Firebase Storage
+- **Arquivamento de animais com motivo obrigatório** — modal com reason (enum), detalhes livres e data do ocorrido
+- **Animais em destaque** — curadoria de até 12 animais com drag-to-reorder (Framer Motion Reorder) em `/admin/destaques`
 - Listagem de candidaturas com filtro por animal (no header), posição na fila visível por linha e animações Framer Motion
+- **Fluxo de rejeição bifurcado**: `DECLINED` (recusa simples, sem registro) e `REJECTED` (definitivo, com campos obrigatórios, PDF e flag)
 - Fluxo de aprovação com conversão automática de candidatos concorrentes para interesse geral
-- Detalhe de candidatura com layout multi-coluna, vinculação de animal (para candidaturas gerais), contatos diretos (mailto + WhatsApp) e modal de quick-view do animal
+- Detalhe de candidatura com layout multi-coluna, dados de PII decifrados server-side, **alerta de flag de rejeição** para CPF flagado, vinculação de animal, contatos diretos e modal de quick-view do animal
+- **Painel de alertas** (`/admin/alertas`) — listagem de flags de rejeição com remoção individual (direito ao esquecimento LGPD Art. 18)
 - Gestão de usuários com criação, alteração de role e exclusão (somente admin)
 - Página de redefinição de senha (`/admin/reset-password`)
 - Configurações com ações de manutenção: recalibrar contadores e recalibrar posições de fila
@@ -107,7 +113,9 @@ As regras ficam em [`firestore.rules`](firestore.rules) e usam **Custom Claims**
 | `animals` | pública | staff (create valida campos obrigatórios e enums) |
 | `applications` | staff | create e review bloqueados no cliente (Cloud Functions only); update direto bloqueado |
 | `users` | próprio doc ou admin | somente `displayName` pelo próprio usuário; resto via Cloud Functions |
-| `metadata` | staff | Cloud Functions only |
+| `metadata/featuredAnimals` | pública | Cloud Functions only |
+| `metadata/counts` | staff | Cloud Functions only |
+| `rejectionFlags` | staff | Cloud Functions only |
 | `rateLimits` | — | Cloud Functions only |
 | `_processedEvents` | — | Cloud Functions only |
 | qualquer outra | — | deny explícito (catch-all rule) |
@@ -129,9 +137,59 @@ Todas as functions admin verificam o role diretamente no token JWT (`request.aut
 
 O payload do formulário é filtrado por allowlist antes de ser gravado no Firestore — campos arbitrários enviados pelo cliente são descartados. O animal vinculado é **resolvido do Firestore** (não confiado nos dados do cliente). Animais `adopted` ou `archived` bloqueiam o envio.
 
+### Criptografia de PII em repouso
+
+Campos sensíveis das candidaturas (`cpf`, `phone`, `address`, `birthDate`) são cifrados com **AES-256-GCM** antes de serem gravados no Firestore:
+
+- IV aleatório por operação — mesmo texto produz ciphertexts distintos
+- Auth tag do GCM detecta adulteração dos dados em repouso
+- A chave de criptografia e a chave HMAC ficam **exclusivamente no Secret Manager** — nunca em `.env` ou no código
+- O admin nunca lê o Firestore diretamente para esses campos — a Cloud Function `getApplicationPII` decifra server-side antes de retornar
+- Nenhum campo decifrado jamais aparece em logs (Cloud Functions `logger`)
+
+### Hashes de CPF e email (rejectionFlags)
+
+Flags de rejeição não armazenam CPF ou email em nenhuma forma — apenas **HMAC-SHA256** com chave secreta separada do Secret Manager. Isso elimina vulnerabilidade a rainbow tables (que afeta SHA-256 puro, dado que CPF tem formato previsível).
+
 ### `updateApplicationReview` — callable exclusivo para triagem
 
 Mutações de review (status, notas, animal vinculado) só podem ser feitas via Cloud Function, que valida regras de negócio no servidor (exclusividade de aprovação, status de animal, etc.).
+
+---
+
+## 🛡️ LGPD e Privacidade
+
+### Conformidade implementada
+
+| Requisito | Implementação |
+|---|---|
+| Consentimento granular (Art. 7, I) | Modal de duplo checkbox antes do formulário — finalidades separadas |
+| Minimização de dados | PII cifrado em repouso; excluído após prazo de retenção |
+| Retenção limitada | Candidaturas aprovadas e animais arquivados: 30 dias → exportados como PDF → excluídos |
+| Direito ao esquecimento (Art. 18) | Endpoint `deleteRejectionFlag` + UI de remoção no painel admin |
+| Encarregado de Dados (DPO) | Identificado na Política de Privacidade (coordenação da ONG) |
+| Accountability (Art. 37) | Dados mapeados neste README; constantes de retenção em `src/types/common.ts` |
+| Política pública | `/politica-de-privacidade` e `/termos-de-uso` disponíveis a qualquer visitante |
+
+### Fluxo de exportação e deleção (cron semanal — domingo 2h)
+
+```
+applications (approved, > 30 dias)  → PDF contrato  → Drive → deletar Firestore + Storage
+applications (rejected, pendingExport) → PDF rejeição → Drive → criar flag HMAC → deletar Firestore
+applications (withdrawn, > 30 dias) → deletar Firestore (sem PDF, sem flag)
+animals (archived, > 30 dias)       → PDF arquivamento → Drive → deletar Firestore + Storage
+```
+
+Nenhum dado pessoal legível permanece no Firestore após o período de retenção. Os PDFs ficam no Google Drive da ONG, acessíveis apenas à equipe.
+
+### Constantes de retenção
+
+Definidas em `src/types/common.ts` e referenciadas na Política de Privacidade:
+
+```typescript
+APPROVED_RETENTION_DAYS = 30
+ARCHIVED_ANIMAL_RETENTION_DAYS = 30
+```
 
 ---
 
@@ -148,9 +206,13 @@ Todas as listagens usam o padrão `limit(N+1) + startAfter(cursor)`:
 | Candidaturas (admin) | 25 |
 | Usuários (admin) | 50 |
 
+### Cache de animais em destaque
+
+A home pública lê **1 documento Firestore por visita** (`metadata/featuredAnimals`) em vez de até 50. O admin cuida um pool de até 12 animais com ordem personalizada; a Cloud Function `updateFeaturedAnimals` mantém o cache atualizado.
+
 ### Rate limiting
 
-Candidaturas de adoção são limitadas a **5 por e-mail por 24 horas**, usando transação atômica no Firestore com hash SHA-256 do e-mail como chave.
+Candidaturas de adoção são limitadas a **5 por e-mail por 24 horas**, usando transação atômica no Firestore com HMAC do e-mail como chave (resistente a rainbow tables).
 
 ### `recalibrateCounts`
 
@@ -172,6 +234,13 @@ Cada Cloud Function tem seu próprio limite de instâncias:
 | `deleteUser` | 3 |
 | `recalibrateCounts` | 3 |
 | `recalibrateQueuePositions` | 3 |
+| `archiveAnimal` | 5 |
+| `getApplicationPII` | 5 |
+| `checkRejectionFlag` | 5 |
+| `deleteRejectionFlag` | 3 |
+| `updateFeaturedAnimals` | 3 |
+| `cleanOperationalData` (cron diário) | 1 |
+| `archiveAndCleanup` (cron semanal) | 1 |
 
 ### Deduplicação de triggers
 
@@ -201,7 +270,7 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
 - TanStack Query 5 (`keepPreviousData`, `useInfiniteQuery`, `staleTime` por query)
 - React Hook Form + Zod
 - Tailwind CSS 4
-- Framer Motion
+- Framer Motion (animações + Reorder para drag-and-drop de destaques)
 - Recharts (gráficos de status no dashboard)
 - `vite-plugin-pwa` + Workbox
 - Firebase Web SDK (com `persistentLocalCache`)
@@ -215,6 +284,10 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
 - Firebase Functions (`southamerica-east1`)
   - `onUserCreated` — 1st gen (trigger de Auth)
   - demais functions — 2nd gen
+- Google Cloud Secret Manager (chaves de criptografia AES-256-GCM e HMAC)
+- Google Drive API v3 (exportação de PDFs via Service Account)
+- `pdf-lib` (geração de PDFs em memória, server-side)
+- `@googleapis/drive` (cliente Drive autenticado via Service Account)
 
 ---
 
@@ -224,13 +297,15 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
 
 | Rota | Descrição |
 |---|---|
-| `/` | Home com destaque de animais |
+| `/` | Home com animais em destaque (1 leitura Firestore) |
 | `/animais` | Listagem com filtros (inclui animais under_review) |
 | `/animais/:id` | Detalhe do animal |
-| `/adotar` | Candidatura geral |
-| `/adotar/:id` | Candidatura vinculada a um animal |
+| `/adotar` | Candidatura geral (com consentimento LGPD) |
+| `/adotar/:id` | Candidatura vinculada a um animal (com consentimento LGPD) |
 | `/sobre` | Página institucional |
 | `/contato` | Contatos da ONG |
+| `/politica-de-privacidade` | Política de Privacidade (LGPD) |
+| `/termos-de-uso` | Termos de Uso |
 
 ### Administrativas (requerem autenticação)
 
@@ -244,6 +319,8 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
 | `/admin/animais/:id/editar` | staff |
 | `/admin/candidaturas` | staff |
 | `/admin/candidaturas/:id` | staff |
+| `/admin/destaques` | staff |
+| `/admin/alertas` | admin only |
 | `/admin/usuarios` | admin only |
 | `/admin/configuracoes` | staff |
 
@@ -255,8 +332,8 @@ A autenticação usa `email/senha` no Firebase Auth com **Custom Claims** para a
 
 | Role | Acesso |
 |---|---|
-| `admin` | acesso total, incluindo gestão de usuários, alteração de roles e exclusão de usuários |
-| `reviewer` | dashboard, animais, candidaturas e configurações |
+| `admin` | acesso total, incluindo gestão de usuários, alertas de flags e configurações destrutivas |
+| `reviewer` | dashboard, animais, candidaturas, destaques e configurações de manutenção |
 
 O login valida se o usuário tem um perfil em `users/{uid}` com role válido. Se o token não contiver o claim `role` (usuários anteriores ao deploy dos Custom Claims), a function `refreshUserClaims` é chamada automaticamente para sincronizar.
 
@@ -266,7 +343,11 @@ A redefinição de senha está disponível em `/admin/reset-password` via Fireba
 
 ## ☁️ Cloud Functions
 
-As functions ficam em [`functions/src/index.ts`](functions/src/index.ts).
+As functions ficam em [`functions/src/index.ts`](functions/src/index.ts). Helpers em [`functions/src/lib/`](functions/src/lib/):
+
+- `crypto.util.ts` — AES-256-GCM (`encrypt`/`decrypt`) e HMAC-SHA256 (`hmac`)
+- `pdf.helper.ts` — geração de PDFs em memória com `pdf-lib` (3 templates)
+- `drive.helper.ts` — upload para Google Drive com Service Account e subpastas anuais
 
 ### `onUserCreated`
 Trigger de Auth (1st gen) — espelha o usuário em `users/{uid}` e define Custom Claims. O primeiro usuário criado recebe `role: "admin"`, os demais recebem `role: "reviewer"`.
@@ -281,10 +362,25 @@ Callable — somente `admin`. Atualiza role de outro usuário (autoalteração b
 Callable — somente `admin`. Remove o usuário do Firebase Auth e do Firestore (autoexclusão bloqueada).
 
 ### `createApplication`
-Callable — público. Resolve o animal vinculado do Firestore, valida campos obrigatórios, filtra payload por allowlist, aplica rate limiting (5/24h por e-mail), calcula posição na fila e estado de waitlist, e grava via Admin SDK. Retorna metadados de fila para o frontend.
+Callable — público. Resolve o animal vinculado do Firestore, valida campos obrigatórios, filtra payload por allowlist, **cifra PII** (CPF, telefone, endereço, data de nascimento) com AES-256-GCM antes de gravar, aplica rate limiting (5/24h por HMAC do e-mail), calcula posição na fila e estado de waitlist.
 
 ### `updateApplicationReview`
-Callable — staff. Centraliza todas as mutações de triagem: atualização de status, notas internas, vinculação/desvinculação de animal. Valida regras de negócio no servidor (exclusividade de aprovação, compatibilidade de animal, estado de adoção) e executa a conversão automática de candidatos concorrentes na aprovação.
+Callable — staff. Centraliza todas as mutações de triagem: atualização de status, notas internas, vinculação/desvinculação de animal. Para `REJECTED` (definitivo): valida campos obrigatórios (`rejectionReason`, `rejectionDetails`, confirmação explícita) e marca `pendingExport: true` para o cron de exportação. Para `DECLINED`: deleção simples sem registro.
+
+### `getApplicationPII`
+Callable — staff. Decifra os campos sensíveis da candidatura (`cpf`, `phone`, `address`, `birthDate`) server-side e os retorna ao painel admin. O Firestore nunca é lido diretamente pelo cliente para esses campos.
+
+### `checkRejectionFlag`
+Callable — staff. Verifica se o CPF de uma candidatura tem flag ativa em `rejectionFlags` (via HMAC), retornando os metadados da flag (motivo, data, contagem).
+
+### `deleteRejectionFlag`
+Callable — somente `admin`. Remove uma flag de `rejectionFlags` para exercício do direito ao esquecimento (LGPD Art. 18).
+
+### `archiveAnimal`
+Callable — staff. Arquiva um animal com motivo obrigatório (`archiveReason` enum), detalhes livres e data do ocorrido. O status `archived` só pode ser definido via esta function — garante que o motivo sempre seja registrado.
+
+### `updateFeaturedAnimals`
+Callable — staff. Valida e grava o pool de animais em destaque em `metadata/featuredAnimals` (cache denormalizado lido pela home pública).
 
 ### `refreshUserClaims`
 Callable — usuário autenticado. Sincroniza Custom Claims a partir do Firestore para usuários que não os possuem no token.
@@ -307,6 +403,18 @@ Trigger em `animals/{animalId}` — mantém contadores de animais em `metadata/c
 
 > Ambos os triggers usam deduplicação por `event.id` para garantir idempotência.
 
+### `cleanOperationalData` (cron diário — 3h)
+Remove documentos operacionais expirados que os TTLs do Firestore possam deixar como resíduo: `rateLimits` expirados, `_processedEvents` expirados e entradas órfãs em `animalSimilarityCache`.
+
+### `archiveAndCleanup` (cron semanal — domingo 2h)
+Exporta e limpa dados conforme as políticas de retenção LGPD:
+
+1. **Candidaturas aprovadas** com mais de 30 dias → PDF contrato → Drive → excluir Firestore + fotos do Storage
+2. **Candidaturas rejeitadas** (`pendingExport: true`) → PDF rejeição → Drive → criar flag HMAC em `rejectionFlags` → excluir Firestore
+3. **Candidaturas `withdrawn`** com mais de 30 dias → excluir Firestore (sem PDF, sem flag)
+4. **Animais arquivados** com mais de 30 dias → PDF arquivamento → Drive → excluir Firestore + fotos do Storage
+5. Recalibrar `metadata/counts` após cada lote de deleções
+
 ---
 
 ## 🗄️ Estrutura de dados
@@ -316,10 +424,12 @@ Trigger em `animals/{animalId}` — mantém contadores de animais em `metadata/c
 | Coleção | Descrição |
 |---|---|
 | `animals` | Animais da ONG |
-| `applications` | Candidaturas de adoção |
+| `applications` | Candidaturas de adoção (PII cifrado) |
 | `users` | Perfis da equipe (espelho do Firebase Auth) |
-| `metadata` | Contadores agregados (`counts`) para o dashboard |
-| `rateLimits` | Estado do rate limiting por hash de e-mail |
+| `metadata/featuredAnimals` | Cache do pool de destaques da home (leitura pública) |
+| `metadata/counts` | Contadores agregados para o dashboard (staff only) |
+| `rejectionFlags` | Flags HMAC de rejeição definitiva (sem PII em texto plano) |
+| `rateLimits` | Estado do rate limiting por HMAC de e-mail |
 | `_processedEvents` | IDs de eventos de trigger já processados (deduplicação) |
 
 #### `animals`
@@ -328,6 +438,7 @@ Trigger em `animals/{animalId}` — mantém contadores de animais em `metadata/c
 name, species, sex, size?, breed?, estimatedAge?, description,
 photos, coverPhotoIndex, status, vaccines, neutered, specialNeeds?,
 adoptedApplicationId?, adoptedAt?, activeApplicationCount?, queueHead?,
+archiveReason?, archiveDetails?, archiveDate?, archivedAt?,
 createdAt, updatedAt
 ```
 
@@ -336,14 +447,27 @@ Status possíveis: `available` · `under_review` · `adopted` · `archived`
 #### `applications`
 
 ```
-animalId?, animalName?, species, fullName, email, phone, birthDate, address,
+animalId?, animalName?, species, fullName, email,
+cpf (AES-256-GCM), phone (AES-256-GCM), birthDate (AES-256-GCM), address (AES-256-GCM),
 [respostas completas do formulário de 8 etapas],
 status, queuePosition?, isWaitlisted?,
 previousAnimalId?, previousAnimalName?,
+rejectionReason?, rejectionDetails?, rejectedBy?, rejectedAt?,
+pendingExport?,
 adminNotes?, createdAt, updatedAt
 ```
 
-Status possíveis: `pending` · `in_review` · `approved` · `rejected` · `withdrawn`
+Status possíveis: `pending` · `in_review` · `approved` · `rejected` · `withdrawn` · `declined`
+
+#### `rejectionFlags`
+
+```
+id: hmac(cpf)         — chave do documento
+emailHash: hmac(email)
+rejectedAt, rejectionCount, driveUrl, reason
+```
+
+Nenhum dado pessoal legível. O documento é identificado e consultado pelo HMAC do CPF.
 
 #### `users`
 
@@ -362,6 +486,22 @@ Fotos dos animais em `animals/{animalId}/{timestamp}_{filename}`.
 | `applications` | `animalId ASC` + `status ASC` + `createdAt ASC` |
 | `applications` | `animalId ASC` + `status ASC` + `queuePosition ASC` |
 
+### Google Drive — estrutura de pastas
+
+```
+Contratos de Adoção/
+  2026/
+    application_{id}_{year}.pdf
+Rejeições Definitivas/
+  2026/
+    rejection_{id}_{year}.pdf
+Animais Arquivados/
+  2026/
+    animal_{id}_{year}.pdf
+```
+
+Subpastas anuais criadas automaticamente pelo helper `getYearlyFolderId()`.
+
 ---
 
 ## 🏗️ Estrutura do frontend
@@ -375,19 +515,27 @@ src/
                  # cep-input, confirm-modal, date-picker, detail-view,
                  # masked-input, tab-group, toast/toaster, university-badge...
   features/
-    adoption/    # form multi-step, hooks, schemas, services, tipos de fila
-    animals/     # cards, galeria, filtros, quick-view modal, hooks, services, storage
+    adoption/    # form multi-step, consent-modal, hooks, schemas, services, tipos de fila
+    animals/     # cards, galeria, filtros, quick-view modal, archive-modal, hooks, services, storage
     auth/        # context, protected-route, smart-entry, hooks, services
     admin/       # header context, hooks, metadata service
     contact/     # componentes e config de links
     users/       # hooks e services
-  layouts/       # PublicLayout, AdminLayout
+  layouts/       # PublicLayout (com footer linkando política e termos), AdminLayout
   lib/           # firebase.ts (com persistentLocalCache), query-client.ts
   pages/
-    admin/       # login, reset-password, dashboard, animais, candidaturas, usuários, configurações
-    public/      # home, animais, animal-detail, adotar, adotar-geral, sobre, contato
-  types/         # tipos compartilhados
+    admin/       # login, reset-password, dashboard, animais, candidaturas,
+                 # destaques, alertas, usuários, configurações
+    public/      # home, animais, animal-detail, adotar, adotar-geral, sobre,
+                 # contato, privacy-policy, terms-of-use
+  types/         # tipos compartilhados + constantes de retenção LGPD
   utils/         # cn, animations, format
+functions/src/
+  index.ts       # ponto de exportação de todas as Cloud Functions
+  lib/
+    crypto.util.ts   # AES-256-GCM + HMAC-SHA256
+    pdf.helper.ts    # geração de PDFs (3 templates com pdf-lib)
+    drive.helper.ts  # Google Drive API (upload + subpastas anuais)
 ```
 
 ---
@@ -406,6 +554,14 @@ VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 VITE_FIREBASE_FUNCTIONS_REGION=southamerica-east1
 ```
+
+As chaves sensíveis das Cloud Functions ficam **exclusivamente no Google Cloud Secret Manager** — nunca em `.env`:
+
+| Secret | Uso |
+|---|---|
+| `PII_ENCRYPTION_KEY` | Chave AES-256 (hex 64 chars) para cifrar CPF, telefone, endereço e data de nascimento |
+| `HMAC_SECRET_KEY` | Chave HMAC-SHA256 para hashes de CPF e email em `rejectionFlags` e `rateLimits` |
+| `DRIVE_SERVICE_ACCOUNT_KEY` | JSON completo da Service Account `upeva-drive-archiver@upevapets.iam.gserviceaccount.com` |
 
 ---
 
@@ -438,6 +594,8 @@ npm --prefix functions run build
 # ou com hot reload:
 npm --prefix functions run serve
 ```
+
+> As Cloud Functions que usam Secret Manager (`createApplication`, `getApplicationPII`, `archiveAndCleanup`, etc.) precisam estar deployadas para funcionar com os secrets reais. Localmente, simule os valores via variáveis de ambiente temporárias ou use o emulador com `--import`.
 
 ---
 
@@ -504,4 +662,5 @@ A partir daí, novos usuários devem ser criados pela tela `/admin/usuarios`.
 - Não há suite automatizada de testes configurada no momento
 - A região padrão do projeto para Firestore e Functions é `southamerica-east1`
 - `onUserCreated` usa 1st gen (único trigger de Auth disponível nessa geração); as demais functions usam 2nd gen
-- O arquivo [`PLAN.md`](PLAN.md) existe no repositório como referência de implementação; este README descreve o estado real do código
+- O arquivo [`.claude/ROADMAP.md`](.claude/ROADMAP.md) documenta o histórico de implementação por fase e sprint
+- A comarca para fins jurídicos é **Flores da Cunha/RS**
