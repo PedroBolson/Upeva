@@ -106,21 +106,21 @@
     {
       "collectionGroup": "_processedEvents",
       "fieldPath": "expiresAt",
+      "ttlConfig": {},
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" },
         { "order": "DESCENDING", "queryScope": "COLLECTION" },
-        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
-        { "order": "ASCENDING", "queryScope": "COLLECTION", "ttl": true }
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
       ]
     },
     {
       "collectionGroup": "rateLimits",
       "fieldPath": "expiresAt",
+      "ttlConfig": {},
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" },
         { "order": "DESCENDING", "queryScope": "COLLECTION" },
-        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
-        { "order": "ASCENDING", "queryScope": "COLLECTION", "ttl": true }
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
       ]
     }
   ]

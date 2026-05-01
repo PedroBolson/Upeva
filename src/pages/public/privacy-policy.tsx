@@ -55,7 +55,7 @@ export function PrivacyPolicyPage() {
         </motion.div>
 
         <Section title="Quem somos" icon={UserCheck}>
-          <Row label="Controlador:" value="Upeva Adoções — União Pela Vida Animal" />
+          <Row label="Controlador:" value="Upeva — União Pela Vida Animal" />
           <Row label="Encarregado (DPO):" value="Coordenação do projeto — contato abaixo" />
           <Row label="E-mail:" value={<a href={`mailto:${DPO_EMAIL}`} className="text-primary hover:underline">{DPO_EMAIL}</a>} />
         </Section>
