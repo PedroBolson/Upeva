@@ -21,7 +21,9 @@ const heroSystemBarPaths = new Set(['/', '/sobre', '/contato'])
 
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
+  const [scrolled, setScrolled] = useState(() =>
+    typeof window !== 'undefined' ? window.scrollY > 12 : false,
+  )
   const location = useLocation()
 
   useEffect(() => {
@@ -32,10 +34,6 @@ export function PublicLayout({ children }: PublicLayoutProps) {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  useEffect(() => {
-    setScrolled(window.scrollY > 12)
-  }, [location.pathname])
 
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'

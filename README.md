@@ -127,7 +127,7 @@ As regras ficam em [`storage.rules`](storage.rules):
 - Leitura pública de imagens de animais
 - **Create/update** restrito a staff autenticado com Custom Claims
 - **Delete** restrito a staff — sem depender de `request.resource` (permite deletar arquivos existentes)
-- Upload limitado a `image/*` com até 10 MB
+- Upload limitado a `image/*` com até 5 MB
 
 ### Cloud Functions — autorização
 
@@ -235,8 +235,8 @@ Cada Cloud Function tem seu próprio limite de instâncias:
 | `recalibrateCounts` | 3 |
 | `recalibrateQueuePositions` | 3 |
 | `archiveAnimal` | 5 |
-| `getApplicationPII` | 5 |
-| `checkRejectionFlag` | 5 |
+| `getApplicationPII` | 10 |
+| `checkRejectionFlag` | 10 |
 | `deleteRejectionFlag` | 3 |
 | `updateFeaturedAnimals` | 3 |
 | `cleanOperationalData` (cron diário) | 1 |
@@ -285,9 +285,9 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
   - `onUserCreated` — 1st gen (trigger de Auth)
   - demais functions — 2nd gen
 - Google Cloud Secret Manager (chaves de criptografia AES-256-GCM e HMAC)
-- Google Drive API v3 (exportação de PDFs via Service Account)
+- Google Drive API v3 (exportação de PDFs via OAuth2 + Secret Manager)
 - `pdf-lib` (geração de PDFs em memória, server-side)
-- `@googleapis/drive` (cliente Drive autenticado via Service Account)
+- `@googleapis/drive` (cliente Drive autenticado por refresh token)
 
 ---
 
@@ -347,10 +347,10 @@ As functions ficam em [`functions/src/index.ts`](functions/src/index.ts). Helper
 
 - `crypto.util.ts` — AES-256-GCM (`encrypt`/`decrypt`) e HMAC-SHA256 (`hmac`)
 - `pdf.helper.ts` — geração de PDFs em memória com `pdf-lib` (3 templates)
-- `drive.helper.ts` — upload para Google Drive com Service Account e subpastas anuais
+- `drive.helper.ts` — upload para Google Drive com OAuth2 e subpastas anuais
 
 ### `onUserCreated`
-Trigger de Auth (1st gen) — espelha o usuário em `users/{uid}` e define Custom Claims. O primeiro usuário criado recebe `role: "admin"`, os demais recebem `role: "reviewer"`.
+Trigger de Auth (1st gen) — faz apenas o bootstrap seguro do primeiro administrador. O primeiro usuário criado recebe `role: "admin"`; usuários criados depois não recebem role automática e devem ser provisionados pela tela `/admin/usuarios`.
 
 ### `createUser`
 Callable — somente `admin`. Cria usuário no Firebase Auth, define Custom Claims e grava o perfil em `users/{uid}`.
@@ -561,7 +561,9 @@ As chaves sensíveis das Cloud Functions ficam **exclusivamente no Google Cloud 
 |---|---|
 | `PII_ENCRYPTION_KEY` | Chave AES-256 (hex 64 chars) para cifrar CPF, telefone, endereço e data de nascimento |
 | `HMAC_SECRET_KEY` | Chave HMAC-SHA256 para hashes de CPF e email em `rejectionFlags` e `rateLimits` |
-| `DRIVE_SERVICE_ACCOUNT_KEY` | JSON completo da Service Account `upeva-drive-archiver@upevapets.iam.gserviceaccount.com` |
+| `DRIVE_OAUTH_CLIENT_ID` | Client ID OAuth2 usado pelo helper de upload para o Google Drive |
+| `DRIVE_OAUTH_CLIENT_SECRET` | Client secret OAuth2 usado pelo helper de upload para o Google Drive |
+| `DRIVE_OAUTH_REFRESH_TOKEN` | Refresh token da conta autorizada a gravar nas pastas internas da ONG |
 
 ---
 

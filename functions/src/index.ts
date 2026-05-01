@@ -357,8 +357,33 @@ async function markEventProcessed(eventId: string): Promise<boolean> {
   }
 }
 
+function getStoragePathFromDownloadUrl(url: string): string | null {
+  const encodedPath = url.split("/o/")[1]?.split("?")[0];
+  return encodedPath ? decodeURIComponent(encodedPath) : null;
+}
+
+async function deleteStorageFilesFromUrls(urls: unknown): Promise<void> {
+  if (!Array.isArray(urls)) return;
+
+  await Promise.all(
+    urls
+      .filter((url): url is string => typeof url === "string" && url.length > 0)
+      .map(async (url) => {
+        const path = getStoragePathFromDownloadUrl(url);
+        if (!path) return;
+
+        try {
+          await adminStorage.bucket().file(path).delete();
+        } catch {
+          // File may already be gone; cleanup must stay idempotent.
+        }
+      })
+  );
+}
+
 // ── onUserCreated: mirror Firebase Auth user → Firestore users/{uid} ──────────
-// The first mirrored user becomes admin. Later users default to reviewer.
+// The first mirrored user becomes admin for bootstrap. Later users do not receive
+// an automatic staff role; they must be created through createUser by an admin.
 // Custom Claims are set so Firestore/Storage rules can use request.auth.token.role.
 export const onUserCreated = functionsV1
   .region("southamerica-east1")
@@ -383,17 +408,19 @@ export const onUserCreated = functionsV1
       }
 
       const adminUsers = await transaction.get(adminQuery);
-      const role: UserRole = adminUsers.empty ? "admin" : "reviewer";
-      roleToSet = role;
+      if (!adminUsers.empty) {
+        return;
+      }
 
       transaction.set(docRef, {
         uid: user.uid,
         email: user.email ?? "",
         displayName: user.displayName ?? user.email?.split("@")[0] ?? "",
-        role,
+        role: "admin",
         createdAt: FieldValue.serverTimestamp(),
         createdBy: "system",
       });
+      roleToSet = "admin";
     });
 
     if (roleToSet) {
@@ -446,17 +473,21 @@ export const createUser = onCall(
 
     const newUser = await adminAuth.createUser({ email, password, displayName });
 
-    // Set Custom Claims before Firestore write so rules are consistent
-    await adminAuth.setCustomUserClaims(newUser.uid, { role });
+    try {
+      await db.collection("users").doc(newUser.uid).set({
+        uid: newUser.uid,
+        email,
+        displayName,
+        role,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: request.auth.uid,
+      });
 
-    await db.collection("users").doc(newUser.uid).set({
-      uid: newUser.uid,
-      email,
-      displayName,
-      role,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy: request.auth.uid,
-    });
+      await adminAuth.setCustomUserClaims(newUser.uid, { role });
+    } catch (err) {
+      await adminAuth.deleteUser(newUser.uid).catch(() => undefined);
+      throw err;
+    }
 
     return { uid: newUser.uid };
   }
@@ -1402,7 +1433,7 @@ export const onAnimalChanged = onDocumentWritten(
       // Animal deleted or no longer accessible — remove stale cache entry
       try {
         await db.collection("animalSimilarityCache").doc(animalId).delete();
-      } catch (_) {
+      } catch {
         // Cache entry may not exist — safe to ignore
       }
     }
@@ -1721,19 +1752,7 @@ export const archiveAndCleanup = onSchedule(
         const animalSnap = await db.collection("animals").doc(animalId).get();
         if (animalSnap.exists) {
           const animalData = animalSnap.data() as Record<string, unknown>;
-          const photos = (animalData.photos as string[]) ?? [];
-          await Promise.all(
-            photos.map(async (url) => {
-              const encodedPath = url.split("/o/")[1]?.split("?")[0];
-              if (encodedPath) {
-                try {
-                  await adminStorage.bucket().file(decodeURIComponent(encodedPath)).delete();
-                } catch {
-                  // ignore if already deleted
-                }
-              }
-            })
-          );
+          await deleteStorageFilesFromUrls(animalData.photos);
           await animalSnap.ref.delete();
         }
       }
@@ -1842,6 +1861,7 @@ export const archiveAndCleanup = onSchedule(
         `animal_${docSnap.id}_${year}.pdf`,
         folderId
       );
+      await deleteStorageFilesFromUrls(data.photos);
       await docSnap.ref.update({ driveUrl });
       await docSnap.ref.delete();
     }

@@ -26,6 +26,11 @@ const ROLE_OPTIONS = [
   { value: 'reviewer', label: 'Analista' },
 ]
 
+const SORT_KEYS: Record<string, (u: UserProfile) => string> = {
+  displayName: (u) => (u.displayName ?? '').toLowerCase(),
+  role: (u) => u.role,
+}
+
 const createUserSchema = z.object({
   displayName: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
   email: z.email('Digite um email válido'),
@@ -53,7 +58,7 @@ export function UsersPage() {
     isFetchingNextPage,
   } = useUsers()
 
-  const users = data?.pages.flatMap((p) => p.users) ?? []
+  const users = useMemo(() => data?.pages.flatMap((p) => p.users) ?? [], [data])
   const { mutateAsync: createUser, isPending: creating } = useCreateUser()
   const { mutate: updateRole } = useUpdateUserRole()
   const { mutateAsync: deleteUser, isPending: deleting } = useDeleteUser()
@@ -67,7 +72,7 @@ export function UsersPage() {
     if (searchParams.get('novo') === 'true') {
       setSearchParams({}, { replace: true })
     }
-  }, [])
+  }, [searchParams, setSearchParams])
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null)
   const [search, setSearch] = useState('')
   const [sortColumn, setSortColumn] = useState<string>('displayName')
@@ -118,11 +123,6 @@ export function UsersPage() {
 
   const isAdmin = currentUser?.role === 'admin'
 
-  const sortKeys: Record<string, (u: UserProfile) => string> = {
-    displayName: (u) => (u.displayName ?? '').toLowerCase(),
-    role: (u) => u.role,
-  }
-
   function handleSort(key: string) {
     if (sortColumn === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -145,7 +145,7 @@ export function UsersPage() {
   )
 
   const sorted = useMemo(() => {
-    const fn = sortKeys[sortColumn]
+    const fn = SORT_KEYS[sortColumn]
     if (!fn) return filtered
     return [...filtered].sort((a, b) => {
       const av = fn(a)
@@ -154,14 +154,13 @@ export function UsersPage() {
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortColumn, sortDir])
 
   const columns: Column<UserProfile>[] = [
     {
       key: 'displayName',
       header: 'Nome',
-      sortKey: sortKeys.displayName,
+      sortKey: SORT_KEYS.displayName,
       cell: (u) => (
         <div>
           <p className="font-medium text-foreground">{u.displayName}</p>
@@ -172,7 +171,7 @@ export function UsersPage() {
     {
       key: 'role',
       header: 'Papel',
-      sortKey: sortKeys.role,
+      sortKey: SORT_KEYS.role,
       cell: (u) => <UserRoleBadge role={u.role} />,
     },
     {

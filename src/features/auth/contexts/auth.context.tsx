@@ -63,11 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (import.meta.env.DEV) console.error(error)
           setUserProfile(null)
         } finally {
-          if (!active || currentRequestId !== requestId) {
-            return
+          if (active && currentRequestId === requestId) {
+            setProfileLoading(false)
           }
-
-          setProfileLoading(false)
         }
       })()
     })

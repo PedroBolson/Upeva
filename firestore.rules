@@ -35,6 +35,11 @@ service cloud.firestore {
       return isAdmin() || isReviewer();
     }
 
+    function isArchivedTransition() {
+      return resource.data.status != 'archived'
+        && request.resource.data.status == 'archived';
+    }
+
     // ── Animals ────────────────────────────────────────────────────────────────
     // Public read; staff create/edit/delete.
     // Create validates required fields and enum values (Melhoria 5).
@@ -44,10 +49,11 @@ service cloud.firestore {
 
       allow create: if isStaff()
         && request.resource.data.keys().hasAll(['name', 'species', 'status', 'sex', 'description'])
-        && request.resource.data.status in ['available', 'under_review', 'adopted', 'archived']
+        && request.resource.data.status in ['available', 'under_review']
         && request.resource.data.species in ['dog', 'cat'];
 
-      allow update, delete: if isStaff();
+      allow update: if isStaff() && !isArchivedTransition();
+      allow delete: if isStaff();
     }
 
     // ── Adoption applications ──────────────────────────────────────────────────

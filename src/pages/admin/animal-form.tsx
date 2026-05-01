@@ -243,6 +243,11 @@ export function AnimalFormPage() {
   const statusValue = status ?? animal?.status ?? 'available'
   const displayName = name?.trim() || animal?.name || 'Novo animal'
   const speciesLabel = species ? SPECIES_LABELS[species] : 'Espécie a definir'
+  const statusOptions = isEditing
+    ? ANIMAL_STATUS_OPTIONS
+    : ANIMAL_STATUS_OPTIONS.filter((option) =>
+      option.value === 'available' || option.value === 'under_review',
+    )
   const profileHelper =
     [
       sex ? SEX_LABELS[sex] : null,
@@ -615,7 +620,7 @@ export function AnimalFormPage() {
                 render={({ field }) => (
                   <Select
                     label="Status"
-                    options={ANIMAL_STATUS_OPTIONS}
+                    options={statusOptions}
                     value={field.value}
                     onChange={(v) => handleStatusChange(v, field.onChange)}
                     onBlur={field.onBlur}
