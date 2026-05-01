@@ -720,7 +720,6 @@ export const createApplication = onCall(
       phone: encrypt(phone),
       birthDate: encrypt(birthDate),
       address: encrypt(JSON.stringify(address)),
-      piiMigrated: true,
       adultsCount, childrenCount,
       adoptionReason, hoursHomePeoplePerDay,
       housingType,
@@ -1438,26 +1437,16 @@ export const getApplicationPII = onCall(
 
     const data = appSnap.data() as Record<string, unknown>;
 
-    if (data.piiMigrated === true) {
-      try {
-        return {
-          cpf: decrypt(data.cpf as string),
-          phone: decrypt(data.phone as string),
-          birthDate: decrypt(data.birthDate as string),
-          address: JSON.parse(decrypt(data.address as string)),
-        };
-      } catch {
-        throw new HttpsError("internal", "Falha ao decifrar dados sensíveis.");
-      }
+    try {
+      return {
+        cpf: decrypt(data.cpf as string),
+        phone: decrypt(data.phone as string),
+        birthDate: decrypt(data.birthDate as string),
+        address: JSON.parse(decrypt(data.address as string)),
+      };
+    } catch {
+      throw new HttpsError("internal", "Falha ao decifrar dados sensíveis.");
     }
-
-    // Documento legado: campos em texto plano (antes do deploy de 2.1)
-    return {
-      cpf: (data.cpf as string) ?? "",
-      phone: (data.phone as string) ?? "",
-      birthDate: (data.birthDate as string) ?? "",
-      address: (data.address ?? null) as Record<string, unknown>,
-    };
   }
 );
 
@@ -1563,14 +1552,10 @@ export const checkRejectionFlag = onCall(
     const data = appSnap.data() as Record<string, unknown>;
 
     let rawCpf: string;
-    if (data.piiMigrated === true) {
-      try {
-        rawCpf = decrypt(data.cpf as string);
-      } catch {
-        throw new HttpsError("internal", "Falha ao decifrar CPF para verificação de flag.");
-      }
-    } else {
-      rawCpf = (data.cpf as string) ?? "";
+    try {
+      rawCpf = decrypt(data.cpf as string);
+    } catch {
+      throw new HttpsError("internal", "Falha ao decifrar CPF para verificação de flag.");
     }
 
     if (!rawCpf) return { flagged: false };
@@ -1676,7 +1661,6 @@ export const cleanOperationalData = onSchedule(
 
 // ── archiveAndCleanup: cron semanal domingo às 2h — exporta e limpa dados ──────
 // Processa em ordem: candidaturas → animais. Cada tipo em lotes de 400.
-// Guards de compatibilidade: piiMigrated e archiveReason ausente.
 export const archiveAndCleanup = onSchedule(
   {
     schedule: "0 2 * * 0",
@@ -1690,21 +1674,12 @@ export const archiveAndCleanup = onSchedule(
     const ONG_NAME = "Upeva Adoções";
     const year = new Date().getFullYear();
 
-    // ── Utilitário: decifra PII com guard de compatibilidade ──────────────────
     function readPII(data: Record<string, unknown>) {
-      if (data.piiMigrated === true) {
-        return {
-          cpf: decrypt(data.cpf as string),
-          phone: decrypt(data.phone as string),
-          birthDate: decrypt(data.birthDate as string),
-          address: JSON.parse(decrypt(data.address as string)),
-        };
-      }
       return {
-        cpf: (data.cpf as string) ?? "",
-        phone: (data.phone as string) ?? "",
-        birthDate: (data.birthDate as string) ?? "",
-        address: (data.address ?? {}) as Record<string, string>,
+        cpf: decrypt(data.cpf as string),
+        phone: decrypt(data.phone as string),
+        birthDate: decrypt(data.birthDate as string),
+        address: JSON.parse(decrypt(data.address as string)),
       };
     }
 

@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { PawPrint, ArrowLeft, AlertCircle } from 'lucide-react'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
 import { AdoptionForm } from '@/features/adoption/components/adoption-form'
+import { ConsentModal } from '@/features/adoption/components/consent-modal'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -11,6 +13,7 @@ export function AdoptionFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
+  const [consentGiven, setConsentGiven] = useState(false)
 
   useDocumentTitle(buildPublicTitle(animal ? `Adotar ${animal.name}` : 'Formulário de adoção'))
 
@@ -109,6 +112,7 @@ export function AdoptionFormPage() {
         )}
       </div>
 
+      <ConsentModal open={!consentGiven} onAccept={() => setConsentGiven(true)} />
       <AdoptionForm animal={animal} />
     </div>
   )

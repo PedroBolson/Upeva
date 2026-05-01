@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Controller, useFormContext } from 'react-hook-form'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
@@ -58,8 +59,25 @@ const TERMS: Array<{
     name: 'acceptsResponsibility',
     label: (
       <>
-        Confirmo que li e concordo com todos os termos acima e assumo a{' '}
-        <strong>responsabilidade total</strong> pelo bem-estar deste animal.
+        Confirmo que li e concordo com todos os termos acima, com os{' '}
+        <Link
+          to="/termos-de-uso"
+          target="_blank"
+          className="text-primary underline-offset-2 hover:underline"
+          onClick={e => e.stopPropagation()}
+        >
+          Termos de Uso
+        </Link>{' '}
+        e com a{' '}
+        <Link
+          to="/politica-de-privacidade"
+          target="_blank"
+          className="text-primary underline-offset-2 hover:underline"
+          onClick={e => e.stopPropagation()}
+        >
+          Política de Privacidade
+        </Link>
+        , e assumo a <strong>responsabilidade total</strong> pelo bem-estar deste animal.
       </>
     ),
   },
@@ -79,8 +97,15 @@ export function StepAgreements() {
           Termos e compromissos
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Leia com atenção e confirme cada item. Estes termos estarão
-          presentes no contrato de adoção.
+          Leia com atenção e confirme cada item. Estes termos estarão presentes no contrato de adoção.{' '}
+          Consulte também os{' '}
+          <Link to="/termos-de-uso" target="_blank" className="text-primary underline-offset-2 hover:underline">
+            Termos de Uso
+          </Link>{' '}
+          e a{' '}
+          <Link to="/politica-de-privacidade" target="_blank" className="text-primary underline-offset-2 hover:underline">
+            Política de Privacidade
+          </Link>.
         </p>
       </div>
 

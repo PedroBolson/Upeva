@@ -197,6 +197,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 <Link to="/adotar" className="hover:text-foreground transition-colors">
                   Formulário de adoção
                 </Link>
+                <Link to="/termos-de-uso" className="hover:text-foreground transition-colors">
+                  Termos de Uso
+                </Link>
+                <Link to="/politica-de-privacidade" className="hover:text-foreground transition-colors">
+                  Privacidade
+                </Link>
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Dog, Cat, ArrowLeft, PawPrint } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { AdoptionForm } from '@/features/adoption/components/adoption-form'
+import { ConsentModal } from '@/features/adoption/components/consent-modal'
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { Species } from '@/types/common'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
@@ -42,10 +43,12 @@ export function AdoptionGeneralPage() {
     }
     return null
   })
+  const [consentGiven, setConsentGiven] = useState(false)
 
   if (species) {
     return (
       <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-10 sm:pt-24">
+        <ConsentModal open={!consentGiven} onAccept={() => setConsentGiven(true)} />
         <button
           onClick={() => setSpecies(null)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"

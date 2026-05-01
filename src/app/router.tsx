@@ -10,6 +10,8 @@ import { AdoptionFormPage } from '@/pages/public/adoption-form'
 import { AdoptionGeneralPage } from '@/pages/public/adoption-general'
 import { AboutPage } from '@/pages/public/about'
 import { ContactPage } from '@/pages/public/contact'
+import { PrivacyPolicyPage } from '@/pages/public/privacy-policy'
+import { TermsOfUsePage } from '@/pages/public/terms-of-use'
 
 import { LoginPage } from '@/pages/admin/login'
 import { ResetPasswordPage } from '@/pages/admin/reset-password'
@@ -37,6 +39,8 @@ const router = createBrowserRouter([
       { path: '/adotar/:id', element: <AdoptionFormPage /> },
       { path: '/sobre', element: <AboutPage /> },
       { path: '/contato', element: <ContactPage /> },
+      { path: '/politica-de-privacidade', element: <PrivacyPolicyPage /> },
+      { path: '/termos-de-uso', element: <TermsOfUsePage /> },
     ],
   },
   {

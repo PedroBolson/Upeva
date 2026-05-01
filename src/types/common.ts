@@ -37,6 +37,9 @@ export type RejectionReason =
 
 export type ArchiveReason = 'death' | 'serious_illness' | 'transfer' | 'other'
 
+export const APPROVED_RETENTION_DAYS = 30
+export const ARCHIVED_ANIMAL_RETENTION_DAYS = 30
+
 export type HousingType =
   | 'house_open_yard'
   | 'house_closed_yard'
