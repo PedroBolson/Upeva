@@ -55,7 +55,7 @@ export type ArchivedAnimalPdfData = {
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 
-const PAGE_WIDTH = 595;   // A4 em pontos
+const PAGE_WIDTH = 595; // A4 em pontos
 const PAGE_HEIGHT = 842;
 const MARGIN = 50;
 const LINE_HEIGHT = 16;
@@ -243,6 +243,8 @@ async function createBase(): Promise<{ doc: PDFDocument; font: PDFFont; boldFont
 /**
  * Contrato de Adoção — gerado quando uma candidatura aprovada é arquivada
  * após 30 dias. Registra o compromisso formal de adoção.
+ * @param {object} data - Dados do contrato (adotante, animal, datas).
+ * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
  */
 export async function generateContractPdf(data: ContractPdfData): Promise<Buffer> {
   const { doc, font, boldFont, page } = await createBase();
@@ -285,6 +287,8 @@ export async function generateContractPdf(data: ContractPdfData): Promise<Buffer
 /**
  * Registro de Rejeição Definitiva — gerado quando uma candidatura com status
  * `rejected` é arquivada. Alimenta também a flag em `rejectionFlags`.
+ * @param {object} data - Dados da rejeição (solicitante, motivo, revisor).
+ * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
  */
 export async function generateRejectionPdf(data: RejectionPdfData): Promise<Buffer> {
   const { doc, font, boldFont, page } = await createBase();
@@ -329,6 +333,8 @@ export async function generateRejectionPdf(data: RejectionPdfData): Promise<Buff
 /**
  * Registro de Arquivamento de Animal — gerado quando um animal arquivado
  * é removido do Firestore após 30 dias. Preserva histórico do ocorrido.
+ * @param {object} data - Dados do animal e motivo do arquivamento.
+ * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
  */
 export async function generateArchivedAnimalPdf(data: ArchivedAnimalPdfData): Promise<Buffer> {
   const { doc, font, boldFont, page } = await createBase();
@@ -380,19 +386,22 @@ type PdfDataMap = {
 /**
  * Dispatcher reutilizável: escolhe o template correto pelo nome e retorna
  * o Buffer do PDF gerado em memória.
+ * @param {string} template - Nome do template: contract, rejection ou archivedAnimal.
+ * @param {object} data - Dados tipados conforme o template escolhido.
+ * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
  */
 export async function generatePdf<T extends PdfTemplate>(
   template: T,
   data: PdfDataMap[T]
 ): Promise<Buffer> {
   switch (template) {
-    case "contract":
-      return generateContractPdf(data as ContractPdfData);
-    case "rejection":
-      return generateRejectionPdf(data as RejectionPdfData);
-    case "archivedAnimal":
-      return generateArchivedAnimalPdf(data as ArchivedAnimalPdfData);
-    default:
-      throw new Error(`Template de PDF desconhecido: ${template}`);
+  case "contract":
+    return generateContractPdf(data as ContractPdfData);
+  case "rejection":
+    return generateRejectionPdf(data as RejectionPdfData);
+  case "archivedAnimal":
+    return generateArchivedAnimalPdf(data as ArchivedAnimalPdfData);
+  default:
+    throw new Error(`Template de PDF desconhecido: ${template}`);
   }
 }

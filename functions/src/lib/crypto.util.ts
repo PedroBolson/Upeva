@@ -5,7 +5,7 @@ export const piiEncryptionKey = defineSecret("PII_ENCRYPTION_KEY");
 export const hmacSecretKey = defineSecret("HMAC_SECRET_KEY");
 
 const ALGORITHM = "aes-256-gcm";
-const IV_BYTES = 12;  // 96-bit IV — recomendado para GCM
+const IV_BYTES = 12; // 96-bit IV — recomendado para GCM
 const AUTH_TAG_BYTES = 16;
 
 /**
@@ -13,6 +13,8 @@ const AUTH_TAG_BYTES = 16;
  * Retorna `iv_hex:authTag_hex:ciphertext_hex`.
  * IV aleatório por chamada garante que o mesmo texto produz cifras distintas.
  * A chave é lida do Secret Manager em tempo de execução — nunca em variável de ambiente.
+ * @param {string} text - Texto em claro a cifrar.
+ * @return {string} Ciphertext no formato iv:authTag:encrypted (hex).
  */
 export function encrypt(text: string): string {
   const key = Buffer.from(piiEncryptionKey.value(), "hex");
@@ -28,6 +30,8 @@ export function encrypt(text: string): string {
 /**
  * Decifra um ciphertext gerado por encrypt().
  * Lança erro se a GCM authentication tag falhar — detecta adulteração ou chave errada.
+ * @param {string} ciphertext - Ciphertext no formato iv:authTag:encrypted (hex).
+ * @return {string} Texto em claro original.
  */
 export function decrypt(ciphertext: string): string {
   const parts = ciphertext.split(":");
@@ -51,6 +55,8 @@ export function decrypt(ciphertext: string): string {
  * HMAC-SHA256 com chave secreta separada.
  * Usado para hashes one-way de CPF e email em rejectionFlags.
  * Diferente de SHA-256 puro, resiste a rainbow tables pois a chave é secreta.
+ * @param {string} text - Valor a assinar (CPF ou email em claro).
+ * @return {string} Digest hex do HMAC-SHA256.
  */
 export function hmac(text: string): string {
   return createHmac("sha256", hmacSecretKey.value()).update(text, "utf8").digest("hex");

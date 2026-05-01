@@ -1,4 +1,4 @@
-import { auth as googleAuthPlus, drive, drive_v3 } from "@googleapis/drive";
+import { auth as googleAuthPlus, drive, drive_v3 as DriveV3 } from "@googleapis/drive";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 
@@ -13,7 +13,7 @@ export const DRIVE_FOLDERS = {
 
 export type DriveFolderKey = keyof typeof DRIVE_FOLDERS;
 
-let _driveClient: drive_v3.Drive | undefined;
+let _driveClient: DriveV3.Drive | undefined;
 
 /**
  * Retorna cliente autenticado do Google Drive usando a Service Account
@@ -22,8 +22,9 @@ let _driveClient: drive_v3.Drive | undefined;
  *
  * Deve ser chamado dentro de funções que declaram `driveSecret` nos seus
  * `secrets: [driveSecret]` — o valor é injetado como env var pelo runtime.
+ * @return {object} Cliente autenticado do Google Drive v3.
  */
-export function getDriveClient(): drive_v3.Drive {
+export function getDriveClient(): DriveV3.Drive {
   if (_driveClient) return _driveClient;
 
   const raw = driveSecret.value();
@@ -51,6 +52,9 @@ export function getDriveClient(): drive_v3.Drive {
  * Busca ou cria a subpasta do ano dentro da pasta base informada.
  * Idempotente: duas execuções no mesmo ano retornam o mesmo folder ID,
  * sem criar duplicatas.
+ * @param {string} baseFolderId - ID da pasta raiz no Drive.
+ * @param {number} year - Ano a ser usado como nome da subpasta.
+ * @return {Promise<string>} ID da subpasta do ano.
  */
 export async function getYearlyFolderId(baseFolderId: string, year: number): Promise<string> {
   const drive = getDriveClient();
@@ -60,8 +64,8 @@ export async function getYearlyFolderId(baseFolderId: string, year: number): Pro
     q: [
       `'${baseFolderId}' in parents`,
       `name = '${folderName}'`,
-      `mimeType = 'application/vnd.google-apps.folder'`,
-      `trashed = false`,
+      "mimeType = 'application/vnd.google-apps.folder'",
+      "trashed = false",
     ].join(" and "),
     fields: "files(id, name)",
     spaces: "drive",
@@ -94,6 +98,10 @@ export async function getYearlyFolderId(baseFolderId: string, year: number): Pro
  * Faz upload de um Buffer como PDF no Google Drive e retorna a URL de
  * visualização do arquivo. O arquivo fica visível apenas para quem tem
  * acesso à pasta (não é público).
+ * @param {Buffer} buffer - Conteúdo do arquivo a enviar.
+ * @param {string} fileName - Nome do arquivo no Drive.
+ * @param {string} folderId - ID da pasta destino no Drive.
+ * @return {Promise<string>} URL de visualização do arquivo enviado.
  */
 export async function uploadToDrive(
   buffer: Buffer,

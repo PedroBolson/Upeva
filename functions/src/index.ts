@@ -1819,9 +1819,9 @@ export const archiveAndCleanup = onSchedule(
       const data = docSnap.data() as Record<string, unknown>;
       const folderId = await getYearlyFolderId(DRIVE_FOLDERS.archivedAnimals, year);
       const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
-      const archivedAt = data.archivedAt instanceof Timestamp
-        ? (data.archivedAt as Timestamp).toDate()
-        : new Date();
+      const archivedAt = data.archivedAt instanceof Timestamp ?
+        (data.archivedAt as Timestamp).toDate() :
+        new Date();
 
       const pdfBuffer = await generatePdf("archivedAnimal", {
         animalId: docSnap.id,
@@ -1860,10 +1860,14 @@ export const archiveAndCleanup = onSchedule(
     ]);
 
     const animalCounts: Record<string, number> = { total: animalTotalSnap.data().count };
-    animalStatuses.forEach((s, i) => { animalCounts[s] = animalStatusSnaps[i].data().count; });
+    animalStatuses.forEach((s, i) => {
+      animalCounts[s] = animalStatusSnaps[i].data().count;
+    });
 
     const appCounts: Record<string, number> = { total: appTotalSnap.data().count };
-    appStatuses.forEach((s, i) => { appCounts[s] = appStatusSnaps[i].data().count; });
+    appStatuses.forEach((s, i) => {
+      appCounts[s] = appStatusSnaps[i].data().count;
+    });
 
     await db.collection("metadata").doc("counts").set({ animals: animalCounts, applications: appCounts });
   }
