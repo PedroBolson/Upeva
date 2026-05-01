@@ -9,12 +9,12 @@ import { cn } from '@/utils/cn'
 import type { RejectionReason } from '@/types/common'
 
 const REJECTION_REASON_OPTIONS: Array<{ value: RejectionReason; label: string }> = [
-  { value: 'inadequate_housing',        label: 'Moradia inadequada' },
-  { value: 'no_landlord_permission',    label: 'Sem autorização do proprietário' },
-  { value: 'financial_instability',     label: 'Instabilidade financeira' },
+  { value: 'inadequate_housing', label: 'Moradia inadequada' },
+  { value: 'no_landlord_permission', label: 'Sem autorização do proprietário' },
+  { value: 'financial_instability', label: 'Instabilidade financeira' },
   { value: 'previous_animal_negligence', label: 'Histórico de negligência com animais' },
-  { value: 'incompatible_lifestyle',    label: 'Estilo de vida incompatível' },
-  { value: 'other',                     label: 'Outro' },
+  { value: 'incompatible_lifestyle', label: 'Estilo de vida incompatível' },
+  { value: 'other', label: 'Outro' },
 ]
 
 const MIN_DETAILS_LENGTH = 100
@@ -97,11 +97,11 @@ export function RejectionModal({ open, onClose, onDecline, onReject, loading }: 
         </p>
         <p className="text-muted-foreground">
           <strong className="text-foreground">Declinar</strong> — recusa simples sem registro permanente.
-          Indicado para perfis incompletos, duplicatas ou desistências.
+          Indicado para perfis incompletos, duplicatas. <br />(Esta rejeição não gera registro permanente e será apenas removida do sistema.)
         </p>
         <p className="mt-1 text-muted-foreground">
           <strong className="text-foreground">Rejeitar definitivamente</strong> — gera um registro de alerta
-          permanente para a equipe com o motivo documentado. A candidatura será arquivada no Drive.
+          permanente para a equipe com o motivo documentado. <br />(A candidatura será arquivada no Drive e também registrada (criptografada) no histórico da ONG para flags futuras.)
         </p>
       </div>
 
