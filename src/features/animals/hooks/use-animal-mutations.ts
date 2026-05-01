@@ -6,13 +6,14 @@ import {
   deleteAnimal,
   updateAnimal,
   updateAnimalStatus,
+  archiveAnimal,
   type AnimalPayload,
+  type ArchiveAnimalInput,
 } from '../services/animals.service'
 
 function invalidate() {
   queryClient.invalidateQueries({ queryKey: ['animals'] })
   queryClient.invalidateQueries({ queryKey: ['admin', 'animals'] })
-  // Cloud Function updates metadata/counts asynchronously — refresh after delay
   setTimeout(() => {
     queryClient.invalidateQueries({ queryKey: ['metadata', 'counts'] })
   }, 2000)
@@ -37,6 +38,13 @@ export function useUpdateAnimalStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: AnimalStatus }) =>
       updateAnimalStatus(id, status),
+    onSuccess: invalidate,
+  })
+}
+
+export function useArchiveAnimal() {
+  return useMutation({
+    mutationFn: (input: ArchiveAnimalInput) => archiveAnimal(input),
     onSuccess: invalidate,
   })
 }

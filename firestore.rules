@@ -123,5 +123,15 @@ service cloud.firestore {
     match /rateLimits/{doc} {
       allow read, write: if false; // Cloud Functions only
     }
+
+    // ── Rejection flags ────────────────────────────────────────────────────────
+    // Contém apenas hashes HMAC de CPF/email (nunca PII em texto plano).
+    // Leitura: staff pode listar e ler para exibição no painel.
+    // Escrita: Cloud Functions only — criação pelo cron, deleção pelo CF deleteRejectionFlag.
+
+    match /rejectionFlags/{flagId} {
+      allow read: if isStaff();
+      allow write: if false; // Cloud Functions only
+    }
   }
 }

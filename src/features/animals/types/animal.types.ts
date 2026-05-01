@@ -1,4 +1,4 @@
-import type { Timestamp, Species, Sex, Size, AnimalStatus } from '@/types/common'
+import type { Timestamp, Species, Sex, Size, AnimalStatus, ArchiveReason } from '@/types/common'
 
 export interface Animal {
   id: string
@@ -18,6 +18,10 @@ export interface Animal {
   adoptedApplicationId?: string
   adoptedAt?: Timestamp
   activeApplicationCount?: number
+  archiveReason?: ArchiveReason
+  archiveDetails?: string
+  archiveDate?: string
+  archivedAt?: Timestamp
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -46,8 +50,8 @@ export const SIZE_LABELS: Record<Size, string> = {
 }
 
 export const STATUS_LABELS: Record<AnimalStatus, string> = {
-  available:    'Disponível',
+  available: 'Disponível',
   under_review: 'Em análise',
-  adopted:      'Adotado',
-  archived:     'Arquivado',
+  adopted: 'Adotado',
+  archived: 'Arquivado',
 }

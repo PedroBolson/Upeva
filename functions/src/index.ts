@@ -1,15 +1,25 @@
-import { createHash } from "crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
 import { FieldValue, getFirestore, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as functionsV1 from "firebase-functions/v1";
+import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./lib/crypto.util.js";
+import { generatePdf, type AddressData } from "./lib/pdf.helper.js";
+import {
+  uploadToDrive,
+  getYearlyFolderId,
+  DRIVE_FOLDERS,
+  driveSecret,
+} from "./lib/drive.helper.js";
 
 initializeApp();
 
 const db = getFirestore();
 const adminAuth = getAuth();
+const adminStorage = getStorage();
 
 type UserRole = "admin" | "reviewer";
 type ApplicationStatus =
@@ -496,7 +506,7 @@ export const updateUserRole = onCall(
 // Rate limit: max 5 submissions per email per 24h.
 // Blocks direct client writes so all applications pass through validation.
 export const createApplication = onCall(
-  { region: "southamerica-east1", maxInstances: 10 },
+  { region: "southamerica-east1", maxInstances: 10, secrets: [piiEncryptionKey, hmacSecretKey] },
   async (request) => {
     const data = request.data as Record<string, unknown>;
 
@@ -602,7 +612,7 @@ export const createApplication = onCall(
     }
 
     // Rate limiting — max 5 applications per email per 24h
-    const emailHash = createHash("sha256").update(email).digest("hex").slice(0, 32);
+    const emailHash = hmac(email).slice(0, 32);
     const rateLimitRef = db.collection("rateLimits").doc(emailHash);
     const now = Date.now();
     const windowMs = 24 * 60 * 60 * 1000;
@@ -705,7 +715,12 @@ export const createApplication = onCall(
 
     const applicationPayload: Record<string, unknown> = {
       species,
-      fullName, email, cpf, phone, birthDate, cep, address,
+      fullName, email, cep,
+      cpf: encrypt(cpf),
+      phone: encrypt(phone),
+      birthDate: encrypt(birthDate),
+      address: encrypt(JSON.stringify(address)),
+      piiMigrated: true,
       adultsCount, childrenCount,
       adoptionReason, hoursHomePeoplePerDay,
       housingType,
@@ -1392,5 +1407,489 @@ export const onAnimalChanged = onDocumentWritten(
         // Cache entry may not exist — safe to ignore
       }
     }
+  }
+);
+
+// ── getApplicationPII: devolve campos sensíveis decifrados para o admin ──────────
+// O admin nunca lê CPF/phone/address/birthDate diretamente do Firestore —
+// esses campos estão cifrados em repouso. Essa CF decifra server-side e retorna
+// apenas os campos PII, separados do documento principal (sem Timestamp issues).
+export const getApplicationPII = onCall(
+  { region: "southamerica-east1", maxInstances: 10, secrets: [piiEncryptionKey] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      throw new HttpsError("permission-denied", "Only staff can access PII.");
+    }
+
+    const { id } = request.data as { id?: string };
+    if (typeof id !== "string" || !id.trim()) {
+      throw new HttpsError("invalid-argument", "ID da candidatura inválido.");
+    }
+
+    const appSnap = await db.collection("applications").doc(id.trim()).get();
+    if (!appSnap.exists) {
+      throw new HttpsError("not-found", "Candidatura não encontrada.");
+    }
+
+    const data = appSnap.data() as Record<string, unknown>;
+
+    if (data.piiMigrated === true) {
+      try {
+        return {
+          cpf: decrypt(data.cpf as string),
+          phone: decrypt(data.phone as string),
+          birthDate: decrypt(data.birthDate as string),
+          address: JSON.parse(decrypt(data.address as string)),
+        };
+      } catch {
+        throw new HttpsError("internal", "Falha ao decifrar dados sensíveis.");
+      }
+    }
+
+    // Documento legado: campos em texto plano (antes do deploy de 2.1)
+    return {
+      cpf: (data.cpf as string) ?? "",
+      phone: (data.phone as string) ?? "",
+      birthDate: (data.birthDate as string) ?? "",
+      address: (data.address ?? null) as Record<string, unknown>,
+    };
+  }
+);
+
+// ── archiveAnimal: arquiva um animal com motivo obrigatório ───────────────────
+// Status "archived" não pode mais ser definido via Firestore direto — garante
+// que arquivamentos sempre registram motivo, detalhes e data do ocorrido.
+// O CF também dispara o trigger onAnimalChanged que atualiza metadata/counts.
+
+const VALID_ARCHIVE_REASONS = new Set([
+  "death",
+  "serious_illness",
+  "transfer",
+  "other",
+]);
+
+export const archiveAnimal = onCall(
+  { region: "southamerica-east1", maxInstances: 5 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      throw new HttpsError("permission-denied", "Only staff can archive animals.");
+    }
+
+    const { animalId, archiveReason, archiveDetails, archiveDate } = request.data as {
+      animalId?: string;
+      archiveReason?: string;
+      archiveDetails?: string;
+      archiveDate?: string;
+    };
+
+    if (typeof animalId !== "string" || !animalId.trim()) {
+      throw new HttpsError("invalid-argument", "ID do animal inválido.");
+    }
+    if (!VALID_ARCHIVE_REASONS.has(archiveReason as string)) {
+      throw new HttpsError("invalid-argument", "Motivo de arquivamento inválido.");
+    }
+    const details = typeof archiveDetails === "string" ? archiveDetails.trim() : "";
+    if (details.length < 20) {
+      throw new HttpsError("invalid-argument", "Detalhes devem ter no mínimo 20 caracteres.");
+    }
+    assertMaxLength(details, 1000, "archiveDetails");
+    if (typeof archiveDate !== "string" || !ISO_DATE_REGEX.test(archiveDate)) {
+      throw new HttpsError("invalid-argument", "Data do ocorrido inválida.");
+    }
+
+    const animalRef = db.collection("animals").doc(animalId.trim());
+    const animalSnap = await animalRef.get();
+
+    if (!animalSnap.exists) {
+      throw new HttpsError("not-found", "Animal não encontrado.");
+    }
+
+    const animal = animalSnap.data() as AnimalRecord;
+    if (animal.status === "adopted") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Animais adotados não podem ser arquivados diretamente."
+      );
+    }
+
+    await animalRef.update({
+      status: "archived",
+      archiveReason,
+      archiveDetails: details,
+      archiveDate,
+      archivedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { success: true };
+  }
+);
+
+// ── checkRejectionFlag: verifica se o solicitante de uma candidatura tem flag ──
+// Computa hmac(cpf) a partir dos dados da candidatura e consulta rejectionFlags.
+// Nunca expõe o CPF — apenas retorna se existe flag e os metadados públicos dela.
+export const checkRejectionFlag = onCall(
+  { region: "southamerica-east1", maxInstances: 10, secrets: [piiEncryptionKey, hmacSecretKey] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      throw new HttpsError("permission-denied", "Only staff can check rejection flags.");
+    }
+
+    const { applicationId } = request.data as { applicationId?: string };
+    if (typeof applicationId !== "string" || !applicationId.trim()) {
+      throw new HttpsError("invalid-argument", "ID da candidatura inválido.");
+    }
+
+    const appSnap = await db.collection("applications").doc(applicationId.trim()).get();
+    if (!appSnap.exists) {
+      throw new HttpsError("not-found", "Candidatura não encontrada.");
+    }
+
+    const data = appSnap.data() as Record<string, unknown>;
+
+    let rawCpf: string;
+    if (data.piiMigrated === true) {
+      try {
+        rawCpf = decrypt(data.cpf as string);
+      } catch {
+        throw new HttpsError("internal", "Falha ao decifrar CPF para verificação de flag.");
+      }
+    } else {
+      rawCpf = (data.cpf as string) ?? "";
+    }
+
+    if (!rawCpf) return { flagged: false };
+
+    const cpfHash = hmac(rawCpf);
+    const flagSnap = await db.collection("rejectionFlags").doc(cpfHash).get();
+
+    if (!flagSnap.exists) return { flagged: false };
+
+    const flag = flagSnap.data() as Record<string, unknown>;
+    return {
+      flagged: true,
+      flagId: cpfHash,
+      reason: flag.reason ?? null,
+      rejectionCount: flag.rejectionCount ?? 1,
+      rejectedAt: flag.rejectedAt ?? null,
+    };
+  }
+);
+
+// ── deleteRejectionFlag: remove flag (LGPD Art. 18 — direito ao esquecimento) ──
+// Exclusivo para role admin. Registra a deleção no audit log (fase 3.3).
+export const deleteRejectionFlag = onCall(
+  { region: "southamerica-east1", maxInstances: 3 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin") {
+      throw new HttpsError("permission-denied", "Only admins can delete rejection flags.");
+    }
+
+    const { flagId } = request.data as { flagId?: string };
+    if (typeof flagId !== "string" || !flagId.trim()) {
+      throw new HttpsError("invalid-argument", "ID da flag inválido.");
+    }
+
+    const flagRef = db.collection("rejectionFlags").doc(flagId.trim());
+    const flagSnap = await flagRef.get();
+
+    if (!flagSnap.exists) {
+      throw new HttpsError("not-found", "Flag não encontrada.");
+    }
+
+    await flagRef.delete();
+    return { success: true };
+  }
+);
+
+// ── cleanOperationalData: cron diário às 3h — remove docs TTL residuais ────────
+// TTL do Firestore pode ter latência de até 24h. Este cron faz uma segunda
+// passagem para garantir deleção de docs que TTL não limpou em tempo hábil.
+export const cleanOperationalData = onSchedule(
+  { schedule: "0 3 * * *", timeZone: "America/Sao_Paulo", region: "southamerica-east1" },
+  async () => {
+    const now = Timestamp.now();
+    const BATCH_MAX = 400;
+
+    // rateLimits expirados
+    const rateLimitsSnap = await db.collection("rateLimits")
+      .where("expiresAt", "<=", now)
+      .limit(BATCH_MAX)
+      .get();
+
+    // _processedEvents expirados
+    const processedEventsSnap = await db.collection("_processedEvents")
+      .where("expiresAt", "<=", now)
+      .limit(BATCH_MAX)
+      .get();
+
+    // animalSimilarityCache órfão — animal não existe mais
+    const cacheSnap = await db.collection("animalSimilarityCache").limit(500).get();
+    const orphanCacheRefs: FirebaseFirestore.DocumentReference[] = [];
+    for (const cacheDoc of cacheSnap.docs) {
+      const animalSnap = await db.collection("animals").doc(cacheDoc.id).get();
+      if (!animalSnap.exists) {
+        orphanCacheRefs.push(cacheDoc.ref);
+      }
+    }
+
+    let batch = db.batch();
+    let opCount = 0;
+
+    const addToBatch = async (ref: FirebaseFirestore.DocumentReference) => {
+      batch.delete(ref);
+      opCount++;
+      if (opCount >= BATCH_MAX) {
+        await batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
+    };
+
+    for (const doc of rateLimitsSnap.docs) await addToBatch(doc.ref);
+    for (const doc of processedEventsSnap.docs) await addToBatch(doc.ref);
+    for (const ref of orphanCacheRefs) await addToBatch(ref);
+
+    if (opCount > 0) await batch.commit();
+  }
+);
+
+// ── archiveAndCleanup: cron semanal domingo às 2h — exporta e limpa dados ──────
+// Processa em ordem: candidaturas → animais. Cada tipo em lotes de 400.
+// Guards de compatibilidade: piiMigrated e archiveReason ausente.
+export const archiveAndCleanup = onSchedule(
+  {
+    schedule: "0 2 * * 0",
+    timeZone: "America/Sao_Paulo",
+    region: "southamerica-east1",
+    secrets: [piiEncryptionKey, hmacSecretKey, driveSecret],
+  },
+  async () => {
+    const now = Date.now();
+    const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
+    const ONG_NAME = "Upeva Adoções";
+    const year = new Date().getFullYear();
+
+    // ── Utilitário: decifra PII com guard de compatibilidade ──────────────────
+    function readPII(data: Record<string, unknown>) {
+      if (data.piiMigrated === true) {
+        return {
+          cpf: decrypt(data.cpf as string),
+          phone: decrypt(data.phone as string),
+          birthDate: decrypt(data.birthDate as string),
+          address: JSON.parse(decrypt(data.address as string)),
+        };
+      }
+      return {
+        cpf: (data.cpf as string) ?? "",
+        phone: (data.phone as string) ?? "",
+        birthDate: (data.birthDate as string) ?? "",
+        address: (data.address ?? {}) as Record<string, string>,
+      };
+    }
+
+    // ── 1. approved > 30 dias → PDF contrato → Drive → deletar ──────────────
+    const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const approvedSnap = await db.collection("applications")
+      .where("status", "==", "approved")
+      .where("updatedAt", "<=", approvedCutoff)
+      .limit(400)
+      .get();
+
+    for (const docSnap of approvedSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const pii = readPII(data);
+      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.contracts, year);
+      const pdfBuffer = await generatePdf("contract", {
+        applicationId: docSnap.id,
+        fullName: data.fullName as string,
+        email: data.email as string,
+        cpf: pii.cpf,
+        phone: pii.phone,
+        birthDate: pii.birthDate,
+        address: pii.address as AddressData,
+        animalId: (data.animalId as string) ?? "",
+        animalName: (data.animalName as string) ?? "Animal",
+        species: (data.species as string) ?? "dog",
+        approvedAt: (data.updatedAt as Timestamp).toDate(),
+        ongName: ONG_NAME,
+      });
+      const driveUrl = await uploadToDrive(
+        pdfBuffer,
+        `contrato_${docSnap.id}_${year}.pdf`,
+        folderId
+      );
+
+      // Deletar animal + fotos do Storage + candidatura (PDF salvo no Drive)
+      const animalId = data.animalId as string | undefined;
+      if (animalId) {
+        const animalSnap = await db.collection("animals").doc(animalId).get();
+        if (animalSnap.exists) {
+          const animalData = animalSnap.data() as Record<string, unknown>;
+          const photos = (animalData.photos as string[]) ?? [];
+          await Promise.all(
+            photos.map(async (url) => {
+              const encodedPath = url.split("/o/")[1]?.split("?")[0];
+              if (encodedPath) {
+                try {
+                  await adminStorage.bucket().file(decodeURIComponent(encodedPath)).delete();
+                } catch {
+                  // ignore if already deleted
+                }
+              }
+            })
+          );
+          await animalSnap.ref.delete();
+        }
+      }
+      void driveUrl; // PDF já está no Drive; não há doc para atualizar
+      await docSnap.ref.delete();
+    }
+
+    // ── 2. rejected + pendingExport → PDF rejeição → Drive → flag → deletar ──
+    const rejectedSnap = await db.collection("applications")
+      .where("status", "==", "rejected")
+      .where("pendingExport", "==", true)
+      .limit(400)
+      .get();
+
+    for (const docSnap of rejectedSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const pii = readPII(data);
+      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.rejections, year);
+      const pdfBuffer = await generatePdf("rejection", {
+        applicationId: docSnap.id,
+        fullName: data.fullName as string,
+        email: data.email as string,
+        cpf: pii.cpf,
+        animalName: data.animalName as string | undefined,
+        species: (data.species as string) ?? "dog",
+        rejectionReason: data.rejectionReason as string,
+        rejectionDetails: data.rejectionDetails as string,
+        reviewerName: "Equipe Upeva",
+        rejectedAt: (data.updatedAt as Timestamp).toDate(),
+        ongName: ONG_NAME,
+      });
+      const driveUrl = await uploadToDrive(
+        pdfBuffer,
+        `rejeicao_${docSnap.id}_${year}.pdf`,
+        folderId
+      );
+
+      // Criar/atualizar flag com HMAC do CPF
+      const cpfHash = hmac(pii.cpf);
+      const flagRef = db.collection("rejectionFlags").doc(cpfHash);
+      const existingFlag = await flagRef.get();
+      if (existingFlag.exists) {
+        await flagRef.update({
+          rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
+          rejectedAt: FieldValue.serverTimestamp(),
+          reason: data.rejectionReason,
+          driveUrl,
+        });
+      } else {
+        await flagRef.set({
+          emailHash: hmac(data.email as string),
+          rejectionCount: 1,
+          rejectedAt: FieldValue.serverTimestamp(),
+          reason: data.rejectionReason,
+          driveUrl,
+        });
+      }
+
+      await docSnap.ref.delete();
+    }
+
+    // ── 3. withdrawn > 30 dias → deletar (sem PDF, sem flag) ────────────────
+    const withdrawnCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const withdrawnSnap = await db.collection("applications")
+      .where("status", "==", "withdrawn")
+      .where("updatedAt", "<=", withdrawnCutoff)
+      .limit(400)
+      .get();
+
+    for (const docSnap of withdrawnSnap.docs) {
+      await docSnap.ref.delete();
+    }
+
+    // ── 4. archived animals > 30 dias → PDF arquivamento → Drive → deletar ──
+    const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const archivedAnimalsSnap = await db.collection("animals")
+      .where("status", "==", "archived")
+      .where("archivedAt", "<=", archivedCutoff)
+      .limit(400)
+      .get();
+
+    for (const docSnap of archivedAnimalsSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.archivedAnimals, year);
+      const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
+      const archivedAt = data.archivedAt instanceof Timestamp
+        ? (data.archivedAt as Timestamp).toDate()
+        : new Date();
+
+      const pdfBuffer = await generatePdf("archivedAnimal", {
+        animalId: docSnap.id,
+        animalName: (data.name as string) ?? "Animal",
+        species: (data.species as string) ?? "dog",
+        sex: data.sex as string | undefined,
+        size: data.size as string | undefined,
+        // Guard: legado sem motivo usa valor padrão
+        archiveReason: (data.archiveReason as string) ?? "Não informado (registro legado)",
+        archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
+        archiveDate: new Date(archiveDate),
+        archivedAt,
+        ongName: ONG_NAME,
+      });
+
+      const driveUrl = await uploadToDrive(
+        pdfBuffer,
+        `animal_${docSnap.id}_${year}.pdf`,
+        folderId
+      );
+      await docSnap.ref.update({ driveUrl });
+      await docSnap.ref.delete();
+    }
+
+    // ── 5. Recalibrar contadores após deleções ───────────────────────────────
+    const animalStatuses = ["available", "under_review", "adopted", "archived"] as const;
+    const appStatuses = ["pending", "in_review", "approved", "rejected", "withdrawn"] as const;
+
+    const [animalTotalSnap, ...animalStatusSnaps] = await Promise.all([
+      db.collection("animals").count().get(),
+      ...animalStatuses.map((s) => db.collection("animals").where("status", "==", s).count().get()),
+    ]);
+    const [appTotalSnap, ...appStatusSnaps] = await Promise.all([
+      db.collection("applications").count().get(),
+      ...appStatuses.map((s) => db.collection("applications").where("status", "==", s).count().get()),
+    ]);
+
+    const animalCounts: Record<string, number> = { total: animalTotalSnap.data().count };
+    animalStatuses.forEach((s, i) => { animalCounts[s] = animalStatusSnaps[i].data().count; });
+
+    const appCounts: Record<string, number> = { total: appTotalSnap.data().count };
+    appStatuses.forEach((s, i) => { appCounts[s] = appStatusSnaps[i].data().count; });
+
+    await db.collection("metadata").doc("counts").set({ animals: animalCounts, applications: appCounts });
   }
 );

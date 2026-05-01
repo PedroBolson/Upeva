@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useApplication } from '@/features/adoption/hooks/use-application'
+import { useApplicationPII } from '@/features/adoption/hooks/use-application-pii'
+import { useRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
@@ -22,12 +24,12 @@ import type { ApplicationStatus, RejectionReason, Timestamp } from '@/types/comm
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
 
 const REJECTION_REASON_LABELS: Record<string, string> = {
-  inadequate_housing:          'Moradia inadequada',
-  no_landlord_permission:      'Sem autorização do proprietário',
-  financial_instability:       'Instabilidade financeira',
-  previous_animal_negligence:  'Histórico de negligência com animais',
-  incompatible_lifestyle:      'Estilo de vida incompatível',
-  other:                       'Outro',
+  inadequate_housing: 'Moradia inadequada',
+  no_landlord_permission: 'Sem autorização do proprietário',
+  financial_instability: 'Instabilidade financeira',
+  previous_animal_negligence: 'Histórico de negligência com animais',
+  incompatible_lifestyle: 'Estilo de vida incompatível',
+  other: 'Outro',
 }
 
 const HOUSING_LABELS: Record<string, string> = {
@@ -109,6 +111,8 @@ export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: app, isLoading, error, refetch } = useApplication(id)
+  const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
+  const { data: flagResult } = useRejectionFlag(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
 
   useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
@@ -131,6 +135,10 @@ export function ApplicationDetailPage() {
   const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
   const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
   const currentAnimalId = selectedAnimalId ?? app?.animalId ?? ''
+
+  // Campos PII nunca lidos direto do Firestore — sempre via CF getApplicationPII
+  const phone = pii?.phone ?? ''
+  const whatsAppHref = piiLoading ? null : getWhatsAppHref(phone)
 
   const {
     data: linkableAnimals = [],
@@ -308,7 +316,6 @@ export function ApplicationDetailPage() {
         app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
         app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
       ].filter(Boolean).join(' · ') || '—'
-  const whatsAppHref = getWhatsAppHref(app.phone)
   const hasLinkableOptions = animalOptions.length > 0
 
   return (
@@ -391,30 +398,30 @@ export function ApplicationDetailPage() {
           </div>
 
           <div className="mt-4 grid gap-3 w-full sm:grid-cols-2 lg:grid-cols-3 lg:w-fit lg:mx-auto">
-              <SummaryCard
-                icon={PawPrint}
-                label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
-                value={animalLabel}
-                helper={app.previousAnimalName ? `Inscreveu-se para ${app.previousAnimalName} · adotado` : animalHelper}
-                onClick={hasSpecificAnimal ? () => setIsAnimalModalOpen(true) : undefined}
-              />
-              <SummaryCard
-                icon={Mail}
-                label="Contato"
-                value={app.email}
-                valueHref={`mailto:${app.email}`}
-                valueIcon={<Mail size={14} />}
-                helper={app.phone}
-                helperHref={whatsAppHref}
-                helperIcon={<MessageCircle size={14} />}
-              />
-              <SummaryCard
-                icon={CalendarClock}
-                label="Última atualização"
-                value={formattedUpdatedAt}
-                helper={`Recebida em ${formattedCreatedAt}`}
-              />
-            </div>
+            <SummaryCard
+              icon={PawPrint}
+              label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
+              value={animalLabel}
+              helper={app.previousAnimalName ? `Inscreveu-se para ${app.previousAnimalName} · adotado` : animalHelper}
+              onClick={hasSpecificAnimal ? () => setIsAnimalModalOpen(true) : undefined}
+            />
+            <SummaryCard
+              icon={Mail}
+              label="Contato"
+              value={app.email}
+              valueHref={`mailto:${app.email}`}
+              valueIcon={<Mail size={14} />}
+              helper={piiLoading ? '•••' : phone}
+              helperHref={whatsAppHref}
+              helperIcon={<MessageCircle size={14} />}
+            />
+            <SummaryCard
+              icon={CalendarClock}
+              label="Última atualização"
+              value={formattedUpdatedAt}
+              helper={`Recebida em ${formattedCreatedAt}`}
+            />
+          </div>
         </div>
       </Card>
 
@@ -427,7 +434,7 @@ export function ApplicationDetailPage() {
               {/* Step 1: Identificação */}
               <DetailSection title="Identificação">
                 <DetailField label="Nome completo" value={app.fullName} />
-                <DetailField label="CPF" value={app.cpf || undefined} />
+                <DetailField label="CPF" value={piiLoading ? '•••' : (pii?.cpf || undefined)} />
                 <ContactField
                   label="E-mail"
                   value={app.email}
@@ -437,20 +444,25 @@ export function ApplicationDetailPage() {
                 />
                 <ContactField
                   label="Telefone"
-                  value={app.phone}
+                  value={piiLoading ? '•••' : phone}
                   href={whatsAppHref}
                   actionLabel="Abrir WhatsApp"
                   icon={<MessageCircle size={14} />}
                 />
-                <DetailField label="Data de nascimento" value={formatDate(app.birthDate)} />
+                <DetailField
+                  label="Data de nascimento"
+                  value={piiLoading ? '•••' : formatDate(pii?.birthDate ?? '')}
+                />
                 <DetailField label="CEP" value={app.cep || undefined} />
                 <div className="sm:col-span-2">
                   <DetailField
                     label="Endereço"
                     value={
-                      app.address
-                        ? `${app.address.street}, ${app.address.number}${app.address.complement ? ` ${app.address.complement}` : ''} — ${app.address.neighborhood ? `${app.address.neighborhood}, ` : ''}${app.address.city}/${app.address.state}`
-                        : '—'
+                      piiLoading
+                        ? '•••'
+                        : pii?.address
+                          ? `${pii.address.street}, ${pii.address.number}${pii.address.complement ? ` ${pii.address.complement}` : ''} — ${pii.address.neighborhood ? `${pii.address.neighborhood}, ` : ''}${pii.address.city}/${pii.address.state}`
+                          : '—'
                     }
                   />
                 </div>
@@ -574,6 +586,21 @@ export function ApplicationDetailPage() {
         </div>
 
         <div className="flex flex-col gap-6 xl:sticky xl:top-24 xl:self-start">
+          {flagResult?.flagged && (
+            <div className="rounded-lg border border-warning/30 bg-warning/8 p-4 flex flex-col gap-1.5">
+              <p className="text-sm font-semibold text-warning">
+                Alerta: solicitante com histórico de rejeição
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {flagResult.rejectionCount > 1
+                  ? `Este CPF possui ${flagResult.rejectionCount} rejeições definitivas registradas.`
+                  : 'Este CPF possui 1 rejeição definitiva registrada.'}
+                {flagResult.reason ? ` Último motivo: ${flagResult.reason}.` : ''}
+                {' '}Decida com contexto — o bloqueio automático não é aplicado.
+              </p>
+            </div>
+          )}
+
           <Card className="border-border/80 p-5">
             <div className="flex items-center gap-2">
               <HeartHandshake size={16} className="text-primary" />
@@ -720,7 +747,7 @@ export function ApplicationDetailPage() {
               )}
               <SidebarField label="Recebida em" value={formattedCreatedAt} />
               <SidebarField label="Última atualização" value={formattedUpdatedAt} />
-              <SidebarField label="Contato" value={`${app.email} · ${app.phone}`} />
+              <SidebarField label="Contato" value={`${app.email} · ${piiLoading ? '•••' : (pii?.phone ?? '—')}`} />
             </div>
           </Card>
         </div>

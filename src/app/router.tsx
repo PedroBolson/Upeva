@@ -21,6 +21,7 @@ import { ApplicationDetailPage } from '@/pages/admin/application-detail'
 import { SettingsPage } from '@/pages/admin/settings'
 import { UsersPage } from '@/pages/admin/users'
 import { FeaturedAnimalsPage } from '@/pages/admin/featured-animals'
+import { RejectionFlagsPage } from '@/pages/admin/rejection-flags'
 
 const router = createBrowserRouter([
   {
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
       { path: '/admin/candidaturas/:id', element: <ApplicationDetailPage /> },
       { path: '/admin/usuarios', element: <ProtectedRoute requiredRole="admin"><UsersPage /></ProtectedRoute> },
       { path: '/admin/destaques', element: <FeaturedAnimalsPage /> },
+      { path: '/admin/alertas', element: <ProtectedRoute requiredRole="admin"><RejectionFlagsPage /></ProtectedRoute> },
       { path: '/admin/configuracoes', element: <SettingsPage /> },
     ],
   },

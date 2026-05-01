@@ -15,10 +15,11 @@ import {
   type DocumentSnapshot,
   type QueryConstraint,
 } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '@/lib/firebase'
 import { deleteAnimalPhoto } from './animal-storage.service'
 import { getFeaturedAnimalsCache } from './featured-animals.service'
-import type { AnimalStatus, Sex, Size, Species } from '@/types/common'
+import type { AnimalStatus, Sex, Size, Species, ArchiveReason } from '@/types/common'
 import type { Animal, AnimalFilters } from '../types/animal.types'
 
 export type AnimalPayload = Omit<Animal, 'id' | 'createdAt' | 'updatedAt'>
@@ -274,6 +275,18 @@ export async function updateAnimal(id: string, data: Partial<AnimalPayload>): Pr
 
 export async function updateAnimalStatus(id: string, status: AnimalStatus): Promise<void> {
   await updateDoc(doc(db, 'animals', id), { status, updatedAt: serverTimestamp() })
+}
+
+export type ArchiveAnimalInput = {
+  animalId: string
+  archiveReason: ArchiveReason
+  archiveDetails: string
+  archiveDate: string
+}
+
+export async function archiveAnimal(input: ArchiveAnimalInput): Promise<void> {
+  const fn = httpsCallable<ArchiveAnimalInput, { success: true }>(functions, 'archiveAnimal')
+  await fn(input)
 }
 
 export async function deleteAnimal(id: string, photoUrls: string[] = []): Promise<void> {

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { Button, Card, Input, AnimalStatusBadge, ResponsiveDataList, Select } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
+import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
 import { AnimalPhotoThumbnail } from '@/features/animals/components/animal-photo-thumbnail'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
@@ -12,11 +13,11 @@ import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-ov
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
-import { useDeleteAnimal, useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
+import { useDeleteAnimal, useUpdateAnimalStatus, useArchiveAnimal } from '@/features/animals/hooks/use-animal-mutations'
 import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS, STATUS_LABELS } from '@/features/animals/types/animal.types'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import type { Animal } from '@/features/animals/types/animal.types'
-import type { AnimalStatus } from '@/types/common'
+import type { AnimalStatus, ArchiveReason } from '@/types/common'
 import { cn } from '@/utils/cn'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -38,6 +39,8 @@ export function AdminAnimalsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [animalToDelete, setAnimalToDelete] = useState<Animal | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [animalToArchive, setAnimalToArchive] = useState<Animal | null>(null)
+  const [archiveError, setArchiveError] = useState<string | null>(null)
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const { animals: allAnimals, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
@@ -45,6 +48,30 @@ export function AdminAnimalsPage() {
 
   const { mutate: updateStatus } = useUpdateAnimalStatus()
   const { mutate: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
+  const { mutate: archiveAnimalMutation, isPending: isArchiving } = useArchiveAnimal()
+
+  function handleStatusChange(animal: Animal, status: AnimalStatus) {
+    if (status === 'archived') {
+      setArchiveError(null)
+      setAnimalToArchive(animal)
+    } else {
+      updateStatus({ id: animal.id, status })
+    }
+  }
+
+  function handleConfirmArchive(reason: ArchiveReason, details: string, archiveDate: string) {
+    if (!animalToArchive) return
+    archiveAnimalMutation(
+      { animalId: animalToArchive.id, archiveReason: reason, archiveDetails: details, archiveDate },
+      {
+        onSuccess: () => setAnimalToArchive(null),
+        onError: () => {
+          setAnimalToArchive(null)
+          setArchiveError('Não foi possível arquivar o animal. Tente novamente.')
+        },
+      },
+    )
+  }
 
   const filtered = useMemo(
     () =>
@@ -247,9 +274,7 @@ export function AdminAnimalsPage() {
           <Select
             options={ANIMAL_STATUS_OPTIONS}
             value={a.status}
-            onChange={(value) =>
-              updateStatus({ id: a.id, status: value as AnimalStatus })
-            }
+            onChange={(value) => handleStatusChange(a, value as AnimalStatus)}
             className="text-xs py-1"
             aria-label="Alterar status"
           />
@@ -289,6 +314,14 @@ export function AdminAnimalsPage() {
         loading={isDeletingAnimal}
       />
 
+      <ArchiveAnimalModal
+        open={animalToArchive !== null}
+        animalName={animalToArchive?.name ?? ''}
+        onClose={() => setAnimalToArchive(null)}
+        onConfirm={handleConfirmArchive}
+        loading={isArchiving}
+      />
+
       {isLoading && <AdminListSkeleton rows={8} columns={4} />}
 
       {error && (
@@ -321,6 +354,12 @@ export function AdminAnimalsPage() {
             )}
           </div>
 
+          {(archiveError || deleteError) && (
+            <p role="alert" className="text-sm text-danger">
+              {archiveError ?? deleteError}
+            </p>
+          )}
+
           <ResponsiveDataList
             breakpoint="xl"
             columns={columns}
@@ -331,7 +370,7 @@ export function AdminAnimalsPage() {
               <AnimalMobileCard
                 animal={animal}
                 onEdit={() => navigate(`/admin/animais/${animal.id}/editar`)}
-                onStatusChange={(status) => updateStatus({ id: animal.id, status })}
+                onStatusChange={(status) => handleStatusChange(animal, status)}
                 onDelete={() => {
                   setDeleteError(null)
                   setAnimalToDelete(animal)

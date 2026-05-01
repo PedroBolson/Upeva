@@ -35,6 +35,8 @@ export type RejectionReason =
   | 'incompatible_lifestyle'
   | 'other'
 
+export type ArchiveReason = 'death' | 'serious_illness' | 'transfer' | 'other'
+
 export type HousingType =
   | 'house_open_yard'
   | 'house_closed_yard'
