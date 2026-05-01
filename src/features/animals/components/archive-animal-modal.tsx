@@ -4,6 +4,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { DatePicker } from '@/components/ui/date-picker'
 import { cn } from '@/utils/cn'
 import type { ArchiveReason } from '@/types/common'
 
@@ -114,18 +115,11 @@ export function ArchiveAnimalModal({
           </p>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">
-            Data do ocorrido
-          </label>
-          <input
-            type="date"
-            value={archiveDate}
-            onChange={(e) => setArchiveDate(e.target.value)}
-            max={new Date().toISOString().split('T')[0]}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        <DatePicker
+          label="Data do ocorrido"
+          value={archiveDate}
+          onChange={(v) => setArchiveDate(v)}
+        />
 
         {validationError && (
           <p role="alert" className="text-sm text-danger">{validationError}</p>

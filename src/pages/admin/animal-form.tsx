@@ -10,11 +10,13 @@ import { FileUpload } from '@/components/ui/file-upload'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
-import { useCreateAnimal, useDeleteAnimal, useUpdateAnimal } from '@/features/animals/hooks/use-animal-mutations'
+import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal } from '@/features/animals/hooks/use-animal-mutations'
+import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS } from '@/features/animals/types/animal.types'
+import type { ArchiveReason } from '@/types/common'
 import { cn } from '@/utils/cn'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -43,6 +45,7 @@ export function AnimalFormPage() {
   const { mutateAsync: createAnimal } = useCreateAnimal()
   const { mutateAsync: updateAnimal } = useUpdateAnimal()
   const { mutateAsync: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
+  const { mutate: archiveAnimal, isPending: isArchiving } = useArchiveAnimal()
 
   useDocumentTitle(
     buildAdminTitle(
@@ -64,6 +67,7 @@ export function AnimalFormPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleteAnimalModalOpen, setIsDeleteAnimalModalOpen] = useState(false)
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false)
 
   const {
     control,
@@ -207,6 +211,25 @@ export function AnimalFormPage() {
     }
   })
 
+  function handleStatusChange(value: string, fieldOnChange: (v: string) => void) {
+    if (value === 'archived' && isEditing && animal) {
+      setIsArchiveModalOpen(true)
+      return
+    }
+    fieldOnChange(value)
+  }
+
+  function handleConfirmArchive(reason: ArchiveReason, details: string, archiveDate: string) {
+    if (!animal) return
+    archiveAnimal(
+      { animalId: animal.id, archiveReason: reason, archiveDetails: details, archiveDate },
+      {
+        onSuccess: () => navigate('/admin/animais'),
+        onError: () => setSubmitError('Não foi possível arquivar o animal. Tente novamente.'),
+      },
+    )
+  }
+
   if (isEditing && isLoading) return <PageSpinner />
   if (isEditing && (error || !animal)) {
     return (
@@ -254,6 +277,14 @@ export function AnimalFormPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <ArchiveAnimalModal
+        open={isArchiveModalOpen}
+        animalName={animal?.name ?? ''}
+        onClose={() => setIsArchiveModalOpen(false)}
+        onConfirm={handleConfirmArchive}
+        loading={isArchiving}
+      />
+
       <ConfirmModal
         open={photoToDelete !== null}
         onClose={() => setPhotoToDelete(null)}
@@ -586,7 +617,7 @@ export function AnimalFormPage() {
                     label="Status"
                     options={ANIMAL_STATUS_OPTIONS}
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={(v) => handleStatusChange(v, field.onChange)}
                     onBlur={field.onBlur}
                     required
                   />

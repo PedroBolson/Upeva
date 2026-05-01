@@ -1,8 +1,13 @@
-import { auth as googleAuthPlus, drive, drive_v3 as DriveV3 } from "@googleapis/drive";
+import { drive, drive_v3 as DriveV3 } from "@googleapis/drive";
+import { OAuth2Client } from "google-auth-library";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 
-const driveSecret = defineSecret("DRIVE_SERVICE_ACCOUNT_KEY");
+const driveClientId = defineSecret("DRIVE_OAUTH_CLIENT_ID");
+const driveClientSecret = defineSecret("DRIVE_OAUTH_CLIENT_SECRET");
+const driveRefreshToken = defineSecret("DRIVE_OAUTH_REFRESH_TOKEN");
+
+export const driveSecrets = [driveClientId, driveClientSecret, driveRefreshToken];
 
 // Folder IDs raiz no Google Drive (compartilhados com upeva.adocoes@gmail.com)
 export const DRIVE_FOLDERS = {
@@ -16,35 +21,26 @@ export type DriveFolderKey = keyof typeof DRIVE_FOLDERS;
 let _driveClient: DriveV3.Drive | undefined;
 
 /**
- * Retorna cliente autenticado do Google Drive usando a Service Account
- * armazenada no Secret Manager. O cliente é cacheado por instância da
- * Cloud Function (reutilizado entre invocações quentes).
- *
- * Deve ser chamado dentro de funções que declaram `driveSecret` nos seus
- * `secrets: [driveSecret]` — o valor é injetado como env var pelo runtime.
+ * Retorna cliente autenticado do Google Drive usando OAuth2 com refresh token
+ * da conta upeva.adocoes@gmail.com armazenado no Secret Manager. O cliente é
+ * cacheado por instância da Cloud Function (reutilizado entre invocações quentes).
  * @return {object} Cliente autenticado do Google Drive v3.
  */
 export function getDriveClient(): DriveV3.Drive {
   if (_driveClient) return _driveClient;
 
-  const raw = driveSecret.value();
-  if (!raw) {
-    throw new Error("DRIVE_SERVICE_ACCOUNT_KEY não está disponível no Secret Manager.");
+  const clientId = driveClientId.value();
+  const clientSecret = driveClientSecret.value();
+  const refreshToken = driveRefreshToken.value();
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error("Drive OAuth credentials não disponíveis no Secret Manager.");
   }
 
-  let credentials: object;
-  try {
-    credentials = JSON.parse(raw);
-  } catch {
-    throw new Error("DRIVE_SERVICE_ACCOUNT_KEY contém JSON inválido.");
-  }
+  const oauth2Client = new OAuth2Client(clientId, clientSecret);
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
 
-  const authClient = new googleAuthPlus.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/drive"],
-  });
-
-  _driveClient = drive({ version: "v3", auth: authClient });
+  _driveClient = drive({ version: "v3", auth: oauth2Client });
   return _driveClient;
 }
 
@@ -57,10 +53,10 @@ export function getDriveClient(): DriveV3.Drive {
  * @return {Promise<string>} ID da subpasta do ano.
  */
 export async function getYearlyFolderId(baseFolderId: string, year: number): Promise<string> {
-  const drive = getDriveClient();
+  const driveClient = getDriveClient();
   const folderName = String(year);
 
-  const res = await drive.files.list({
+  const res = await driveClient.files.list({
     q: [
       `'${baseFolderId}' in parents`,
       `name = '${folderName}'`,
@@ -76,7 +72,7 @@ export async function getYearlyFolderId(baseFolderId: string, year: number): Pro
     return existing.id;
   }
 
-  const created = await drive.files.create({
+  const created = await driveClient.files.create({
     requestBody: {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
@@ -96,8 +92,8 @@ export async function getYearlyFolderId(baseFolderId: string, year: number): Pro
 
 /**
  * Faz upload de um Buffer como PDF no Google Drive e retorna a URL de
- * visualização do arquivo. O arquivo fica visível apenas para quem tem
- * acesso à pasta (não é público).
+ * visualização do arquivo. O arquivo fica na conta upeva.adocoes@gmail.com
+ * e visível apenas para quem tem acesso à pasta (não é público).
  * @param {Buffer} buffer - Conteúdo do arquivo a enviar.
  * @param {string} fileName - Nome do arquivo no Drive.
  * @param {string} folderId - ID da pasta destino no Drive.
@@ -108,7 +104,7 @@ export async function uploadToDrive(
   fileName: string,
   folderId: string
 ): Promise<string> {
-  const drive = getDriveClient();
+  const driveClient = getDriveClient();
   const { Readable } = await import("stream");
 
   const readable = new Readable({
@@ -118,7 +114,7 @@ export async function uploadToDrive(
     },
   });
 
-  const res = await drive.files.create({
+  const res = await driveClient.files.create({
     requestBody: {
       name: fileName,
       parents: [folderId],
@@ -128,18 +124,17 @@ export async function uploadToDrive(
       mimeType: "application/pdf",
       body: readable,
     },
-    fields: "id, webViewLink",
+    fields: "id",
   });
 
   const fileId = res.data.id;
-  const webViewLink = res.data.webViewLink;
-
-  if (!fileId || !webViewLink) {
-    throw new Error(`Falha ao obter ID/URL do arquivo após upload: ${fileName}`);
+  if (!fileId) {
+    throw new Error(`Falha ao obter ID do arquivo após upload: ${fileName}`);
   }
 
+  const webViewLink = `https://drive.google.com/file/d/${fileId}/view`;
   logger.info("drive: arquivo enviado", { fileName, fileId });
   return webViewLink;
 }
 
-export { driveSecret };
+export { driveClientId, driveClientSecret, driveRefreshToken };

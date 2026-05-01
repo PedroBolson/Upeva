@@ -12,7 +12,7 @@ import {
   uploadToDrive,
   getYearlyFolderId,
   DRIVE_FOLDERS,
-  driveSecret,
+  driveSecrets,
 } from "./lib/drive.helper.js";
 
 initializeApp();
@@ -1666,7 +1666,7 @@ export const archiveAndCleanup = onSchedule(
     schedule: "0 2 * * 0",
     timeZone: "America/Sao_Paulo",
     region: "southamerica-east1",
-    secrets: [piiEncryptionKey, hmacSecretKey, driveSecret],
+    secrets: [piiEncryptionKey, hmacSecretKey, ...driveSecrets],
   },
   async () => {
     const now = Date.now();
@@ -1845,30 +1845,8 @@ export const archiveAndCleanup = onSchedule(
       await docSnap.ref.update({ driveUrl });
       await docSnap.ref.delete();
     }
-
-    // ── 5. Recalibrar contadores após deleções ───────────────────────────────
-    const animalStatuses = ["available", "under_review", "adopted", "archived"] as const;
-    const appStatuses = ["pending", "in_review", "approved", "rejected", "withdrawn"] as const;
-
-    const [animalTotalSnap, ...animalStatusSnaps] = await Promise.all([
-      db.collection("animals").count().get(),
-      ...animalStatuses.map((s) => db.collection("animals").where("status", "==", s).count().get()),
-    ]);
-    const [appTotalSnap, ...appStatusSnaps] = await Promise.all([
-      db.collection("applications").count().get(),
-      ...appStatuses.map((s) => db.collection("applications").where("status", "==", s).count().get()),
-    ]);
-
-    const animalCounts: Record<string, number> = { total: animalTotalSnap.data().count };
-    animalStatuses.forEach((s, i) => {
-      animalCounts[s] = animalStatusSnaps[i].data().count;
-    });
-
-    const appCounts: Record<string, number> = { total: appTotalSnap.data().count };
-    appStatuses.forEach((s, i) => {
-      appCounts[s] = appStatusSnaps[i].data().count;
-    });
-
-    await db.collection("metadata").doc("counts").set({ animals: animalCounts, applications: appCounts });
+    // onAnimalChanged e onApplicationStatusChanged mantêm metadata/counts via FieldValue.increment.
+    // Não recalibrar aqui — o cron rodar count() antes dos triggers concluírem causaria race condition
+    // que deixa os contadores negativos. Use recalibrateCounts() manualmente se houver drift.
   }
 );
