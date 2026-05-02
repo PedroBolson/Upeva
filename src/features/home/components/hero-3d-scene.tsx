@@ -100,10 +100,11 @@ export function Hero3DScene({ compact = false, copyRevealTarget }: Hero3DScenePr
   }
 
   return (
-    <div className={compact ? 'pointer-events-none relative h-full min-h-80 overflow-hidden' : 'pointer-events-none absolute inset-0 z-20 overflow-hidden'}>
+    <div className={compact ? 'pointer-events-none relative h-full min-h-52 overflow-hidden' : 'pointer-events-none absolute inset-0 z-20 overflow-hidden'}>
       <Canvas
         aria-hidden="true"
-        camera={{ position: [0, compact ? 1 : 1.15, compact ? 9.2 : 8.7], fov: compact ? 45 : 43 }}
+        style={{ pointerEvents: 'none' }}
+        camera={{ position: [0, compact ? 1.6 : 1.15, compact ? 7.8 : 8.7], fov: compact ? 50 : 43 }}
         dpr={[1, 1.35]}
         gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
@@ -117,7 +118,7 @@ export function Hero3DScene({ compact = false, copyRevealTarget }: Hero3DScenePr
         aria-hidden="true"
         className={
           compact
-            ? 'absolute left-1/2 bottom-[41%] flex -translate-x-1/2 origin-center select-none items-center gap-0 font-black leading-none opacity-0'
+            ? 'absolute left-1/2 bottom-[30%] sm:bottom-[41%] flex -translate-x-1/2 origin-center select-none items-center gap-0 font-black leading-none opacity-0'
             : 'absolute left-[69%] top-[67%] hidden -translate-x-1/2 origin-center select-none items-center gap-0 font-black leading-none opacity-0 sm:flex'
         }
         style={{ perspective: '900px' }}

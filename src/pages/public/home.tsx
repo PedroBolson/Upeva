@@ -44,37 +44,44 @@ export function HomePage() {
             </Suspense>
           </div>
 
-          <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pt-24 pb-16 sm:px-6 sm:pt-32 sm:pb-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,1fr)] lg:px-8 lg:pt-36 lg:pb-24">
-            <motion.div
-              ref={heroCopyRef}
-              variants={stagger}
-              initial="hidden"
-              animate="show"
-              className="hero-copy-reveal flex max-w-2xl flex-col items-start gap-5 opacity-0"
-              style={{ '--hero-copy-reveal': '0%' } as React.CSSProperties}
-            >
-
-              <motion.h1
-                variants={fadeUp}
-                className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight"
+          <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-4 px-4 pt-24 pb-0 sm:px-6 sm:pt-32 sm:gap-10 sm:pb-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,1fr)] lg:px-8 lg:pt-36 lg:pb-24">
+            <div className="flex max-w-2xl flex-col items-start gap-5">
+              <motion.div
+                ref={heroCopyRef}
+                variants={stagger}
+                initial="hidden"
+                animate="show"
+                className="hero-copy-reveal flex flex-col items-start gap-5 opacity-0"
+                style={{ '--hero-copy-reveal': '0%' } as React.CSSProperties}
               >
-                Todo animal merece{' '}
-                <span className="text-primary">um lar</span>
-                {' '}com amor
-              </motion.h1>
+                <motion.h1
+                  variants={fadeUp}
+                  className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight"
+                >
+                  Todo animal merece{' '}
+                  <span className="text-primary">um lar</span>
+                  {' '}com amor
+                </motion.h1>
 
-              <motion.p
+                <motion.p
+                  variants={fadeUp}
+                  className="text-lg text-muted-foreground leading-relaxed max-w-lg"
+                >
+                  A Upeva conecta cães e gatos resgatados com famílias que querem dar amor.
+                  Adote um companheiro e transforme duas vidas ao mesmo tempo.
+                </motion.p>
+              </motion.div>
+
+              <motion.div
                 variants={fadeUp}
-                className="text-lg text-muted-foreground leading-relaxed max-w-lg"
+                initial="hidden"
+                animate="show"
+                transition={{ delay: 0.7 }}
+                className="flex flex-wrap gap-3"
               >
-                A Upeva conecta cães e gatos resgatados com famílias que querem dar amor.
-                Adote um companheiro e transforme duas vidas ao mesmo tempo.
-              </motion.p>
-
-              <motion.div variants={fadeUp} className="flex flex-wrap gap-3">
                 <Link to="/animais">
                   <Button size="lg" className="gap-2">
-                    <PawPrint size={20} className='mb-1.6' />
+                    <PawPrint size={20} className="mb-1.5" />
                     Vitrine virtual
                   </Button>
                 </Link>
@@ -84,13 +91,13 @@ export function HomePage() {
                   </Button>
                 </Link>
               </motion.div>
-            </motion.div>
+            </div>
 
             <motion.div
               variants={fadeUp}
               initial="hidden"
               animate="show"
-              className="relative min-h-[290px] w-full sm:min-h-[420px] lg:min-h-[520px]"
+              className="relative min-h-52 w-full sm:min-h-105 lg:min-h-130"
               aria-hidden="true"
             >
               <div className="lg:hidden">

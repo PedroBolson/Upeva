@@ -13,7 +13,7 @@ export function FeaturedAnimalRail() {
   const { data: featured = [], isLoading, error, refetch } = useFeaturedAnimals(4)
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8 w-full">
+    <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8 w-full">
       <motion.div
         initial="hidden"
         whileInView="show"
