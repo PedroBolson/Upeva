@@ -148,3 +148,8 @@ body {
 button {
   cursor: pointer;
 }
+
+.hero-copy-reveal {
+  clip-path: inset(0 calc(100% - var(--hero-copy-reveal, 100%)) 0 0);
+  will-change: clip-path, opacity;
+}

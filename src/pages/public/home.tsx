@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ClipboardList, PawPrint, Shield, Users } from 'lucide-react'
@@ -32,22 +32,26 @@ function HeroVisualFallback() {
 
 export function HomePage() {
   useDocumentTitle(buildPublicTitle())
+  const heroCopyRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="flex flex-col">
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
         <section className="relative overflow-hidden">
           <div className="hidden lg:block">
             <Suspense fallback={<HeroVisualFallback />}>
-              <Hero3DScene />
+              <Hero3DScene copyRevealTarget={heroCopyRef} />
             </Suspense>
           </div>
 
           <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pt-24 pb-16 sm:px-6 sm:pt-32 sm:pb-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,1fr)] lg:px-8 lg:pt-36 lg:pb-24">
             <motion.div
+              ref={heroCopyRef}
               variants={stagger}
               initial="hidden"
               animate="show"
-              className="flex max-w-2xl flex-col items-start gap-5"
+              className="hero-copy-reveal flex max-w-2xl flex-col items-start gap-5 opacity-0"
+              style={{ '--hero-copy-reveal': '0%' } as React.CSSProperties}
             >
 
               <motion.h1
@@ -91,7 +95,7 @@ export function HomePage() {
             >
               <div className="lg:hidden">
                 <Suspense fallback={<HeroVisualFallback />}>
-                  <Hero3DScene compact />
+                  <Hero3DScene compact copyRevealTarget={heroCopyRef} />
                 </Suspense>
               </div>
             </motion.div>

@@ -63,12 +63,25 @@ export function Hero3DFallback() {
 
 interface Hero3DSceneProps {
   compact?: boolean
+  copyRevealTarget?: React.RefObject<HTMLDivElement | null>
 }
 
-export function Hero3DScene({ compact = false }: Hero3DSceneProps) {
+export function Hero3DScene({ compact = false, copyRevealTarget }: Hero3DSceneProps) {
   const prefersReducedMotion = usePrefersReducedMotion()
   const supportsWebGL = useSupportsWebGL()
   const logoRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!prefersReducedMotion && supportsWebGL) {
+      return
+    }
+
+    const target = copyRevealTarget?.current
+
+    if (target) {
+      gsap.set(target, { '--hero-copy-reveal': '100%', opacity: 1 })
+    }
+  }, [copyRevealTarget, prefersReducedMotion, supportsWebGL])
 
   useGSAP(() => {
     if (!logoRef.current || prefersReducedMotion || !supportsWebGL) {
@@ -87,7 +100,7 @@ export function Hero3DScene({ compact = false }: Hero3DSceneProps) {
   }
 
   return (
-    <div className={compact ? 'pointer-events-none relative h-full min-h-80 overflow-hidden' : 'pointer-events-none absolute inset-0 z-0 overflow-hidden'}>
+    <div className={compact ? 'pointer-events-none relative h-full min-h-80 overflow-hidden' : 'pointer-events-none absolute inset-0 z-20 overflow-hidden'}>
       <Canvas
         aria-hidden="true"
         camera={{ position: [0, compact ? 1 : 1.15, compact ? 9.2 : 8.7], fov: compact ? 45 : 43 }}
@@ -97,7 +110,7 @@ export function Hero3DScene({ compact = false }: Hero3DSceneProps) {
           gl.setClearColor(0x000000, 0)
         }}
       >
-        <HeroSceneContent compact={compact} />
+        <HeroSceneContent compact={compact} copyRevealTarget={copyRevealTarget} />
       </Canvas>
       <div
         ref={logoRef}
@@ -120,7 +133,13 @@ export function Hero3DScene({ compact = false }: Hero3DSceneProps) {
   )
 }
 
-function HeroSceneContent({ compact }: { compact: boolean }) {
+function HeroSceneContent({
+  compact,
+  copyRevealTarget,
+}: {
+  compact: boolean
+  copyRevealTarget?: React.RefObject<HTMLDivElement | null>
+}) {
   const dogRef = useRef<THREE.Group>(null)
   const catRef = useRef<THREE.Group>(null)
   const dogAnimationRef = useRef<PetAnimationController>(null)
@@ -139,10 +158,15 @@ function HeroSceneContent({ compact }: { compact: boolean }) {
     const catFinalX = compact ? 1.68 : 3.04
     const baseY = compact ? -0.7 : -0.98
 
+    const copyTarget = copyRevealTarget?.current
+
     gsap.set(dogRef.current.position, { x: dogStartX, y: baseY - 0.12, z: 0.25 })
     gsap.set(catRef.current.position, { x: catStartX, y: baseY - 0.12, z: 0.18 })
     gsap.set(dogRef.current.rotation, { x: 0, y: 1.08, z: 0.03 })
     gsap.set(catRef.current.rotation, { x: 0, y: -1.08, z: -0.03 })
+    if (copyTarget) {
+      gsap.set(copyTarget, { '--hero-copy-reveal': '0%', opacity: 0 })
+    }
 
     const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
 
@@ -171,6 +195,19 @@ function HeroSceneContent({ compact }: { compact: boolean }) {
         dogAnimationRef.current?.play('Idle', 0.24)
         catAnimationRef.current?.play('Idle', 0.24)
       })
+
+    if (copyTarget) {
+      timeline.to(
+        copyTarget,
+        {
+          '--hero-copy-reveal': '100%',
+          opacity: 1,
+          duration: compact ? 0.9 : 1.05,
+          ease: 'power2.out',
+        },
+        compact ? 0.18 : 0.58,
+      )
+    }
 
     return () => timeline.kill()
   }, [])
