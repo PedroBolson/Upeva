@@ -1,0 +1,14 @@
+<svg width="520" height="150" viewBox="0 0 520 150" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Upeva">
+  <defs>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="124%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#412d1d" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)" font-family="Arial Rounded MT Bold, Nunito, Arial, sans-serif" font-size="106" font-weight="900" letter-spacing="-6">
+    <text x="24" y="108" fill="#c2247a" stroke="#17110f" stroke-width="14" stroke-linejoin="round" paint-order="stroke fill">u</text>
+    <text x="111" y="108" fill="#e72c85" stroke="#17110f" stroke-width="14" stroke-linejoin="round" paint-order="stroke fill">p</text>
+    <text x="198" y="108" fill="#f05a48" stroke="#17110f" stroke-width="14" stroke-linejoin="round" paint-order="stroke fill">e</text>
+    <text x="285" y="108" fill="#00a7a0" stroke="#17110f" stroke-width="14" stroke-linejoin="round" paint-order="stroke fill">v</text>
+    <text x="370" y="108" fill="#4fb760" stroke="#17110f" stroke-width="14" stroke-linejoin="round" paint-order="stroke fill">a</text>
+  </g>
+</svg>

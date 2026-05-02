@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Shield, Lock, Eye, Trash2, Mail, UserCheck } from 'lucide-react'
+import { Shield, Lock, Eye, Trash2, Mail, UserCheck, type LucideIcon } from 'lucide-react'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 import { APPROVED_RETENTION_DAYS, ARCHIVED_ANIMAL_RETENTION_DAYS } from '@/types/common'
@@ -8,7 +8,7 @@ import { APPROVED_RETENTION_DAYS, ARCHIVED_ANIMAL_RETENTION_DAYS } from '@/types
 const DPO_EMAIL = 'upeva.adocoes@gmail.com'
 const DPO_RESPONSE_DAYS = 15
 
-function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+function Section({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <motion.section variants={fadeUp} className="flex flex-col gap-3">
       <div className="flex items-center gap-2">

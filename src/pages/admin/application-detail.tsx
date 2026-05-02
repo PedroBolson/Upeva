@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint } from 'lucide-react'
+import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
 import { AnimalQuickViewModal } from '@/features/animals/components/animal-quick-view-modal'
@@ -767,7 +767,7 @@ function SummaryCard({
   valueIcon,
   helperIcon,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   label: string
   value: string
   helper?: string

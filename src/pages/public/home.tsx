@@ -1,8 +1,10 @@
+import { Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ClipboardList, PawPrint, Shield, Users } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { FeaturedAnimalRail } from '@/features/animals/components/featured-animal-rail'
+import { Hero3DScene } from '@/features/home/components/hero-3d-scene'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -24,22 +26,23 @@ const steps = [
   },
 ]
 
+function HeroVisualFallback() {
+  return null
+}
+
 export function HomePage() {
   useDocumentTitle(buildPublicTitle())
   return (
     <div className="flex flex-col">
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-primary/10 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-primary/8 blur-2xl"
-        />
+        <section className="relative overflow-hidden">
+          <div className="hidden lg:block">
+            <Suspense fallback={<HeroVisualFallback />}>
+              <Hero3DScene />
+            </Suspense>
+          </div>
 
-        <section className="relative">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 pb-20 sm:pt-36 sm:pb-28">
+          <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pt-24 pb-16 sm:px-6 sm:pt-32 sm:pb-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,1fr)] lg:px-8 lg:pt-36 lg:pb-24">
             <motion.div
               variants={stagger}
               initial="hidden"
@@ -77,6 +80,20 @@ export function HomePage() {
                   </Button>
                 </Link>
               </motion.div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeUp}
+              initial="hidden"
+              animate="show"
+              className="relative min-h-[290px] w-full sm:min-h-[420px] lg:min-h-[520px]"
+              aria-hidden="true"
+            >
+              <div className="lg:hidden">
+                <Suspense fallback={<HeroVisualFallback />}>
+                  <Hero3DScene compact />
+                </Suspense>
+              </div>
             </motion.div>
           </div>
         </section>

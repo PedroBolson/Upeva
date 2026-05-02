@@ -6,19 +6,20 @@ import {
   Instagram,
   Music2,
   ShoppingBag,
+  type LucideIcon,
 } from 'lucide-react'
 
 export interface ContactSocialLink {
   label: string
   href: string
-  icon: React.ElementType
+  icon: LucideIcon
 }
 
 export interface ContactHubLink {
   label: string
   href: string
   description: string
-  icon: React.ElementType
+  icon: LucideIcon
   external?: boolean
 }
 

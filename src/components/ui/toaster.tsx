@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react'
+import { X, CheckCircle2, AlertCircle, AlertTriangle, Info, type LucideIcon } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useToastItems, type ToastItem } from './toast'
 
 const VARIANT_CONFIG: Record<
   ToastItem['variant'],
-  { borderClass: string; Icon: React.ElementType; iconClass: string }
+  { borderClass: string; Icon: LucideIcon; iconClass: string }
 > = {
   success: { borderClass: 'border-success/40', Icon: CheckCircle2, iconClass: 'text-success' },
   error:   { borderClass: 'border-danger/40',  Icon: AlertCircle,   iconClass: 'text-danger'  },

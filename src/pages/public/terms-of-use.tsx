@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { FileText, AlertCircle, ShieldCheck, Scale, Mail } from 'lucide-react'
+import { FileText, AlertCircle, ShieldCheck, Scale, Mail, type LucideIcon } from 'lucide-react'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
 const DPO_EMAIL = 'upeva.adocoes@gmail.com'
 
-function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+function Section({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <motion.section variants={fadeUp} className="flex flex-col gap-3">
       <div className="flex items-center gap-2">

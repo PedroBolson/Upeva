@@ -7,6 +7,7 @@ import {
   Scissors,
   AlertCircle,
   PawPrint,
+  type LucideIcon,
 } from 'lucide-react'
 import {
   Button,
@@ -281,7 +282,7 @@ function HealthItem({
   positive,
   neutral = false,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   label: string
   positive: boolean
   neutral?: boolean

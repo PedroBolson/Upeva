@@ -79,6 +79,16 @@ export default defineConfig({
             return 'motion'
           }
 
+          if (
+            id.includes('three') ||
+            id.includes('@react-three') ||
+            id.includes('gsap') ||
+            id.includes('troika-three') ||
+            id.includes('maath')
+          ) {
+            return 'hero-3d'
+          }
+
           if (id.includes('react') || id.includes('scheduler')) {
             return 'react-vendor'
           }

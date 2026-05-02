@@ -1,4 +1,4 @@
-import { AlertCircle, ExternalLink, Scissors, Syringe } from 'lucide-react'
+import { AlertCircle, ExternalLink, Scissors, Syringe, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/modal'
 import { Badge, AnimalStatusBadge } from '@/components/ui/badge'
@@ -150,7 +150,7 @@ function HealthItem({
   positive,
   neutral = false,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   label: string
   positive: boolean
   neutral?: boolean
