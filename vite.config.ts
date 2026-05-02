@@ -59,6 +59,15 @@ export default defineConfig({
             return 'firebase'
           }
 
+          if (
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/scheduler/') ||
+            id.includes('/node_modules/react-is/')
+          ) {
+            return 'react-vendor'
+          }
+
           if (id.includes('react-router') || id.includes('@remix-run')) {
             return 'router'
           }
@@ -87,10 +96,6 @@ export default defineConfig({
             id.includes('maath')
           ) {
             return 'hero-3d'
-          }
-
-          if (id.includes('react') || id.includes('scheduler')) {
-            return 'react-vendor'
           }
 
           return 'vendor'
