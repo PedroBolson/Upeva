@@ -52,6 +52,67 @@ type AnimalStatus = "available" | "under_review" | "adopted" | "archived";
 type Species = "dog" | "cat";
 type Sex = "male" | "female";
 type Size = "small" | "medium" | "large";
+type HousingType =
+  | "house_open_yard"
+  | "house_closed_yard"
+  | "house_no_yard"
+  | "apartment_no_screens"
+  | "apartment_with_screens"
+  | "apartment";
+type PreferredSex = Sex | "any";
+type PreferredSize = Size | "any";
+
+type ApplicationAddressInput = {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+};
+
+type ValidatedApplicationInput = {
+  animalId?: string;
+  animalName?: string;
+  species: Species;
+  fullName: string;
+  email: string;
+  cpf: string;
+  phone: string;
+  birthDate: string;
+  cep: string;
+  address: ApplicationAddressInput;
+  preferredSex?: PreferredSex;
+  preferredSize?: PreferredSize;
+  jointAdoption?: boolean;
+  adultsCount: number;
+  childrenCount: number;
+  childrenAges?: string;
+  adoptionReason: string;
+  isGift?: boolean;
+  hoursHomePeoplePerDay: number;
+  housingType: HousingType;
+  isRented: boolean;
+  landlordAllowsPets?: boolean;
+  hadPetsBefore: boolean;
+  previousPets?: string;
+  hasCurrentPets: boolean;
+  currentPetsCount?: number;
+  currentPetsVaccinated?: boolean;
+  currentPetsVaccinationReason?: string;
+  canAffordCosts: boolean;
+  scratchBehaviorResponse: string;
+  escapeResponse: string;
+  cannotKeepResponse: string;
+  longTermCommitment: boolean;
+  acceptsReturnPolicy: boolean;
+  acceptsCastrationPolicy: boolean;
+  acceptsFollowUp: boolean;
+  acceptsNoResale: boolean;
+  acceptsLiabilityTerms: boolean;
+  acceptsResponsibility: boolean;
+  comments?: string;
+};
 
 type ApplicationRecord = {
   status: ApplicationStatus;
@@ -99,6 +160,17 @@ const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 const PHONE_REGEX = /^\(\d{2}\)\s\d{5}-\d{4}$/;
 const CEP_REGEX = /^\d{5}-\d{3}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const VALID_SPECIES = new Set<Species>(["dog", "cat"]);
+const VALID_PREFERRED_SEX = new Set<PreferredSex>(["male", "female", "any"]);
+const VALID_PREFERRED_SIZE = new Set<PreferredSize>(["small", "medium", "large", "any"]);
+const VALID_HOUSING_TYPES = new Set<HousingType>([
+  "house_open_yard",
+  "house_closed_yard",
+  "house_no_yard",
+  "apartment_no_screens",
+  "apartment_with_screens",
+  "apartment",
+]);
 
 const VALID_STATES = new Set([
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -127,6 +199,330 @@ function assertMaxLength(value: string, max: number, field: string): void {
   if (value.length > max) {
     throw new HttpsError("invalid-argument", `${field} excede o limite de ${max} caracteres.`);
   }
+}
+
+function assertMinLength(value: string, min: number, field: string): void {
+  if (value.length < min) {
+    throw new HttpsError("invalid-argument", `${field} deve ter ao menos ${min} caracteres.`);
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(
+  data: Record<string, unknown>,
+  field: string,
+  options: { min?: number; max?: number } = {},
+): string {
+  const value = data[field];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new HttpsError("invalid-argument", `Campo obrigatório ausente ou inválido: ${field}`);
+  }
+
+  const trimmed = value.trim();
+  if (options.min !== undefined) assertMinLength(trimmed, options.min, field);
+  if (options.max !== undefined) assertMaxLength(trimmed, options.max, field);
+  return trimmed;
+}
+
+function optionalString(
+  data: Record<string, unknown>,
+  field: string,
+  options: { max?: number } = {},
+): string | undefined {
+  const value = data[field];
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `Campo inválido: ${field}`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (options.max !== undefined) assertMaxLength(trimmed, options.max, field);
+  return trimmed;
+}
+
+function requiredBoolean(data: Record<string, unknown>, field: string): boolean {
+  const value = data[field];
+  if (typeof value !== "boolean") {
+    throw new HttpsError("invalid-argument", `Campo obrigatório ausente ou inválido: ${field}`);
+  }
+  return value;
+}
+
+function optionalBoolean(data: Record<string, unknown>, field: string): boolean | undefined {
+  const value = data[field];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "boolean") {
+    throw new HttpsError("invalid-argument", `Campo inválido: ${field}`);
+  }
+  return value;
+}
+
+function coerceInteger(value: unknown, field: string): number {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isInteger(numeric)) {
+    throw new HttpsError("invalid-argument", `Campo obrigatório ausente ou inválido: ${field}`);
+  }
+  return numeric;
+}
+
+function requiredInteger(
+  data: Record<string, unknown>,
+  field: string,
+  options: { min?: number; max?: number } = {},
+): number {
+  const numeric = coerceInteger(data[field], field);
+  if (options.min !== undefined && numeric < options.min) {
+    throw new HttpsError("invalid-argument", `${field} deve ser no mínimo ${options.min}.`);
+  }
+  if (options.max !== undefined && numeric > options.max) {
+    throw new HttpsError("invalid-argument", `${field} deve ser no máximo ${options.max}.`);
+  }
+  return numeric;
+}
+
+function optionalInteger(
+  data: Record<string, unknown>,
+  field: string,
+  options: { min?: number; max?: number } = {},
+): number | undefined {
+  const value = data[field];
+  if (value === undefined || value === null || value === "") return undefined;
+  const numeric = coerceInteger(value, field);
+  if (options.min !== undefined && numeric < options.min) {
+    throw new HttpsError("invalid-argument", `${field} deve ser no mínimo ${options.min}.`);
+  }
+  if (options.max !== undefined && numeric > options.max) {
+    throw new HttpsError("invalid-argument", `${field} deve ser no máximo ${options.max}.`);
+  }
+  return numeric;
+}
+
+function assertTrue(value: boolean, field: string, message: string): void {
+  if (value !== true) {
+    throw new HttpsError("invalid-argument", message || `Confirme o campo ${field}.`);
+  }
+}
+
+function isValidISODate(value: string): boolean {
+  if (!ISO_DATE_REGEX.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function validateApplicationInput(rawData: unknown): ValidatedApplicationInput {
+  if (!isPlainObject(rawData)) {
+    throw new HttpsError("invalid-argument", "Dados da candidatura inválidos.");
+  }
+
+  const data = rawData;
+  const species = requiredString(data, "species");
+  if (!VALID_SPECIES.has(species as Species)) {
+    throw new HttpsError("invalid-argument", "Espécie inválida.");
+  }
+
+  const rawAnimalId = optionalString(data, "animalId", { max: 160 });
+  const rawAnimalName = optionalString(data, "animalName", { max: 100 });
+  if (Boolean(rawAnimalId) !== Boolean(rawAnimalName)) {
+    throw new HttpsError("invalid-argument", "animalId e animalName devem ser enviados juntos.");
+  }
+  const hasSpecificAnimal = Boolean(rawAnimalId);
+
+  const fullName = requiredString(data, "fullName", { min: 3, max: 100 });
+  const email = requiredString(data, "email", { max: 254 }).toLowerCase();
+  const cpf = requiredString(data, "cpf");
+  const phone = requiredString(data, "phone");
+  const birthDate = requiredString(data, "birthDate");
+  const cep = requiredString(data, "cep");
+
+  if (!isValidEmail(email)) {
+    throw new HttpsError("invalid-argument", "Formato de e-mail inválido.");
+  }
+  if (!CPF_REGEX.test(cpf) || !isValidCPF(cpf)) {
+    throw new HttpsError("invalid-argument", "CPF inválido.");
+  }
+  if (!PHONE_REGEX.test(phone)) {
+    throw new HttpsError("invalid-argument", "Formato de telefone inválido.");
+  }
+  if (!isValidISODate(birthDate)) {
+    throw new HttpsError("invalid-argument", "Data de nascimento inválida.");
+  }
+  if (!CEP_REGEX.test(cep)) {
+    throw new HttpsError("invalid-argument", "Formato de CEP inválido.");
+  }
+
+  const rawAddress = data.address;
+  if (!isPlainObject(rawAddress)) {
+    throw new HttpsError("invalid-argument", "Endereço inválido.");
+  }
+
+  const address: ApplicationAddressInput = {
+    street: requiredString(rawAddress, "street", { max: 150 }),
+    number: requiredString(rawAddress, "number", { max: 20 }),
+    neighborhood: requiredString(rawAddress, "neighborhood", { max: 100 }),
+    city: requiredString(rawAddress, "city", { max: 100 }),
+    state: requiredString(rawAddress, "state").toUpperCase(),
+  };
+  if (!VALID_STATES.has(address.state)) {
+    throw new HttpsError("invalid-argument", "UF inválida no endereço.");
+  }
+  const complement = optionalString(rawAddress, "complement", { max: 50 });
+  if (complement) address.complement = complement;
+
+  const preferredSex = optionalString(data, "preferredSex") as PreferredSex | undefined;
+  if (preferredSex && !VALID_PREFERRED_SEX.has(preferredSex)) {
+    throw new HttpsError("invalid-argument", "Preferência de sexo inválida.");
+  }
+
+  const preferredSize = optionalString(data, "preferredSize") as PreferredSize | undefined;
+  if (preferredSize && !VALID_PREFERRED_SIZE.has(preferredSize)) {
+    throw new HttpsError("invalid-argument", "Preferência de porte inválida.");
+  }
+
+  const jointAdoption = optionalBoolean(data, "jointAdoption");
+  if (!hasSpecificAnimal) {
+    if (!preferredSex) {
+      throw new HttpsError("invalid-argument", "Selecione uma preferência de sexo.");
+    }
+    if (species === "dog" && !preferredSize) {
+      throw new HttpsError("invalid-argument", "Selecione uma preferência de porte.");
+    }
+    if (species === "cat" && jointAdoption === undefined) {
+      throw new HttpsError("invalid-argument", "Informe se deseja adoção conjunta.");
+    }
+  }
+
+  const adultsCount = requiredInteger(data, "adultsCount", { min: 1 });
+  const childrenCount = requiredInteger(data, "childrenCount", { min: 0 });
+  const childrenAges = optionalString(data, "childrenAges", { max: 200 });
+  if (childrenCount > 0 && !childrenAges) {
+    throw new HttpsError("invalid-argument", "Informe as idades das crianças.");
+  }
+
+  const adoptionReason = requiredString(data, "adoptionReason", { min: 10, max: 2000 });
+  const hoursHomePeoplePerDay = requiredInteger(data, "hoursHomePeoplePerDay", {
+    min: 0,
+    max: 24,
+  });
+  const isGift = optionalBoolean(data, "isGift");
+  if (species === "cat" && isGift === undefined) {
+    throw new HttpsError("invalid-argument", "Informe se a adoção é um presente.");
+  }
+
+  const housingType = requiredString(data, "housingType") as HousingType;
+  if (!VALID_HOUSING_TYPES.has(housingType)) {
+    throw new HttpsError("invalid-argument", "Tipo de moradia inválido.");
+  }
+  const isRented = requiredBoolean(data, "isRented");
+  const landlordAllowsPets = optionalBoolean(data, "landlordAllowsPets");
+  if (isRented && landlordAllowsPets === undefined) {
+    throw new HttpsError("invalid-argument", "Informe se o proprietário permite animais.");
+  }
+
+  const hadPetsBefore = requiredBoolean(data, "hadPetsBefore");
+  const previousPets = optionalString(data, "previousPets", { max: 1000 });
+  if (hadPetsBefore && !previousPets) {
+    throw new HttpsError("invalid-argument", "Descreva os animais que já teve.");
+  }
+
+  const hasCurrentPets = requiredBoolean(data, "hasCurrentPets");
+  const currentPetsCount = optionalInteger(data, "currentPetsCount", { min: 1 });
+  const currentPetsVaccinated = optionalBoolean(data, "currentPetsVaccinated");
+  const currentPetsVaccinationReason = optionalString(data, "currentPetsVaccinationReason", {
+    max: 500,
+  });
+  if (hasCurrentPets) {
+    if (!currentPetsCount) {
+      throw new HttpsError("invalid-argument", "Informe quantos animais tem.");
+    }
+    if (species === "cat" && currentPetsVaccinated === undefined) {
+      throw new HttpsError("invalid-argument", "Informe se os animais são vacinados.");
+    }
+    if (currentPetsVaccinated === false && !currentPetsVaccinationReason) {
+      throw new HttpsError("invalid-argument", "Explique por que os animais não são vacinados.");
+    }
+  }
+
+  const canAffordCosts = requiredBoolean(data, "canAffordCosts");
+  assertTrue(
+    canAffordCosts,
+    "canAffordCosts",
+    "Confirme que pode arcar com os custos de veterinário e alimentação.",
+  );
+  const scratchBehaviorResponse = requiredString(data, "scratchBehaviorResponse", {
+    min: 5,
+    max: 1000,
+  });
+  const escapeResponse = requiredString(data, "escapeResponse", { min: 5, max: 1000 });
+  const cannotKeepResponse = requiredString(data, "cannotKeepResponse", { min: 5, max: 1000 });
+  const longTermCommitment = requiredBoolean(data, "longTermCommitment");
+  assertTrue(
+    longTermCommitment,
+    "longTermCommitment",
+    "Confirme o compromisso de cuidar do animal por toda a vida.",
+  );
+
+  const acceptsReturnPolicy = requiredBoolean(data, "acceptsReturnPolicy");
+  const acceptsCastrationPolicy = requiredBoolean(data, "acceptsCastrationPolicy");
+  const acceptsFollowUp = requiredBoolean(data, "acceptsFollowUp");
+  const acceptsNoResale = requiredBoolean(data, "acceptsNoResale");
+  const acceptsLiabilityTerms = requiredBoolean(data, "acceptsLiabilityTerms");
+  const acceptsResponsibility = requiredBoolean(data, "acceptsResponsibility");
+  assertTrue(acceptsReturnPolicy, "acceptsReturnPolicy", "Aceite a política de devolução.");
+  assertTrue(acceptsCastrationPolicy, "acceptsCastrationPolicy", "Aceite o compromisso de castração.");
+  assertTrue(acceptsFollowUp, "acceptsFollowUp", "Aceite o acompanhamento pós-adoção.");
+  assertTrue(acceptsNoResale, "acceptsNoResale", "Aceite não repassar o animal.");
+  assertTrue(acceptsLiabilityTerms, "acceptsLiabilityTerms", "Aceite os termos de responsabilidade.");
+  assertTrue(acceptsResponsibility, "acceptsResponsibility", "Confirme sua responsabilidade.");
+
+  return {
+    animalId: rawAnimalId,
+    animalName: rawAnimalName,
+    species: species as Species,
+    fullName,
+    email,
+    cpf,
+    phone,
+    birthDate,
+    cep,
+    address,
+    preferredSex,
+    preferredSize,
+    jointAdoption,
+    adultsCount,
+    childrenCount,
+    childrenAges,
+    adoptionReason,
+    isGift,
+    hoursHomePeoplePerDay,
+    housingType,
+    isRented,
+    landlordAllowsPets,
+    hadPetsBefore,
+    previousPets,
+    hasCurrentPets,
+    currentPetsCount,
+    currentPetsVaccinated,
+    currentPetsVaccinationReason,
+    canAffordCosts,
+    scratchBehaviorResponse,
+    escapeResponse,
+    cannotKeepResponse,
+    longTermCommitment,
+    acceptsReturnPolicy,
+    acceptsCastrationPolicy,
+    acceptsFollowUp,
+    acceptsNoResale,
+    acceptsLiabilityTerms,
+    acceptsResponsibility,
+    comments: optionalString(data, "comments", { max: 1000 }),
+  };
 }
 
 async function runTransactionWithRetry<T>(
@@ -195,6 +591,36 @@ async function buildAndCacheSimilarAnimals(
   await db.collection("animalSimilarityCache").doc(animalId).set({
     items: matches,
     updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+async function removeFromFeaturedAnimalsCache(animalId: string): Promise<void> {
+  const featuredRef = db.collection("metadata").doc("featuredAnimals");
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(featuredRef);
+    if (!snap.exists) return;
+
+    const data = snap.data() as {
+      animalIds?: unknown;
+      items?: unknown;
+    };
+    const animalIds = Array.isArray(data.animalIds) ?
+      data.animalIds.filter((id): id is string => typeof id === "string" && id !== animalId) :
+      [];
+    const items = Array.isArray(data.items) ?
+      data.items.filter((item) => {
+        if (!isPlainObject(item)) return false;
+        return item.id !== animalId &&
+          (item.status === "available" || item.status === "under_review");
+      }) :
+      [];
+
+    tx.set(featuredRef, {
+      animalIds,
+      items,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
   });
 }
 
@@ -539,108 +965,19 @@ export const updateUserRole = onCall(
 export const createApplication = onCall(
   { region: "southamerica-east1", maxInstances: 10, secrets: [piiEncryptionKey, hmacSecretKey] },
   async (request) => {
-    const data = request.data as Record<string, unknown>;
-
-    // Validate required string fields
-    const requiredStrings = [
-      "species",
-      "fullName",
-      "email",
-      "cpf",
-      "phone",
-      "birthDate",
-      "cep",
-    ];
-    for (const field of requiredStrings) {
-      if (typeof data[field] !== "string" || !(data[field] as string).trim()) {
-        throw new HttpsError(
-          "invalid-argument",
-          `Campo obrigatório ausente ou inválido: ${field}`
-        );
-      }
-    }
-
-    const rawAnimalId =
-      typeof data.animalId === "string" ? (data.animalId as string).trim() : "";
-    const rawAnimalName =
-      typeof data.animalName === "string" ? (data.animalName as string).trim() : "";
-    if (Boolean(rawAnimalId) !== Boolean(rawAnimalName)) {
-      throw new HttpsError(
-        "invalid-argument",
-        "animalId e animalName devem ser enviados juntos."
-      );
-    }
-    const animalId = rawAnimalId || undefined;
-    const animalName = rawAnimalName || undefined;
-    const fullName = (data.fullName as string).trim();
-    assertMaxLength(fullName, 100, "fullName");
-    const email = (data.email as string).toLowerCase().trim();
-    assertMaxLength(email, 254, "email");
-    const cpf = (data.cpf as string).trim();
-    const phone = (data.phone as string).trim();
-    const birthDate = (data.birthDate as string).trim();
-    const cep = (data.cep as string).trim();
-
-    if (!isValidEmail(email)) {
-      throw new HttpsError("invalid-argument", "Formato de e-mail inválido.");
-    }
-    if (!CPF_REGEX.test(cpf)) {
-      throw new HttpsError("invalid-argument", "Formato de CPF inválido.");
-    }
-    if (!isValidCPF(cpf)) {
-      throw new HttpsError("invalid-argument", "CPF inválido.");
-    }
-    if (!PHONE_REGEX.test(phone)) {
-      throw new HttpsError("invalid-argument", "Formato de telefone inválido.");
-    }
-    if (!ISO_DATE_REGEX.test(birthDate)) {
-      throw new HttpsError("invalid-argument", "Formato de data de nascimento inválido.");
-    }
-    if (!CEP_REGEX.test(cep)) {
-      throw new HttpsError("invalid-argument", "Formato de CEP inválido.");
-    }
-
-    const species = data.species as string;
-    if (species !== "dog" && species !== "cat") {
-      throw new HttpsError("invalid-argument", "Espécie inválida.");
-    }
-
-    const rawAddress = data.address;
-    if (!rawAddress || typeof rawAddress !== "object" || Array.isArray(rawAddress)) {
-      throw new HttpsError("invalid-argument", "Endereço inválido.");
-    }
-
-    const addressData = rawAddress as Record<string, unknown>;
-    const requiredAddressFields = ["street", "number", "neighborhood", "city", "state"];
-    for (const field of requiredAddressFields) {
-      if (typeof addressData[field] !== "string" || !(addressData[field] as string).trim()) {
-        throw new HttpsError(
-          "invalid-argument",
-          `Campo obrigatório ausente ou inválido no endereço: ${field}`
-        );
-      }
-    }
-
-    const address: Record<string, unknown> = {
-      street: (addressData.street as string).trim(),
-      number: (addressData.number as string).trim(),
-      neighborhood: (addressData.neighborhood as string).trim(),
-      city: (addressData.city as string).trim(),
-      state: (addressData.state as string).trim().toUpperCase(),
-    };
-    if (!VALID_STATES.has(address.state as string)) {
-      throw new HttpsError("invalid-argument", "UF inválida no endereço.");
-    }
-
-    assertMaxLength(address.street as string, 150, "address.street");
-    assertMaxLength(address.number as string, 20, "address.number");
-    assertMaxLength(address.neighborhood as string, 100, "address.neighborhood");
-    assertMaxLength(address.city as string, 100, "address.city");
-
-    if (typeof addressData.complement === "string" && addressData.complement.trim()) {
-      address.complement = addressData.complement.trim();
-      assertMaxLength(address.complement as string, 50, "address.complement");
-    }
+    const data = validateApplicationInput(request.data);
+    const {
+      animalId,
+      animalName,
+      species,
+      fullName,
+      email,
+      cpf,
+      phone,
+      birthDate,
+      cep,
+      address,
+    } = data;
 
     // Rate limiting — max 5 applications per email per 24h
     const emailHash = hmac(email).slice(0, 32);
@@ -1433,6 +1770,7 @@ export const onAnimalChanged = onDocumentWritten(
       // Animal deleted or no longer accessible — remove stale cache entry
       try {
         await db.collection("animalSimilarityCache").doc(animalId).delete();
+        await removeFromFeaturedAnimalsCache(animalId);
       } catch {
         // Cache entry may not exist — safe to ignore
       }

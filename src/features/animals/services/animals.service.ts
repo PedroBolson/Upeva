@@ -33,9 +33,14 @@ export interface AnimalPage {
 const PUBLIC_PAGE_SIZE = 12
 const ADMIN_PAGE_SIZE = 25
 const LINKABLE_ANIMALS_LIMIT = 25
+const PUBLIC_SAFE_ANIMAL_STATUSES = new Set<AnimalStatus>(['available', 'under_review'])
 
 function docToAnimal(id: string, data: Record<string, unknown>): Animal {
   return { id, ...(data as Omit<Animal, 'id'>) }
+}
+
+function isPublicSafeAnimal(animal: Animal): boolean {
+  return PUBLIC_SAFE_ANIMAL_STATUSES.has(animal.status)
 }
 
 function stripUndefinedFields<T extends Record<string, unknown>>(data: T): Partial<T> {
@@ -169,7 +174,8 @@ export async function getSimilarAnimals(
   const cacheSnap = await getDoc(doc(db, 'animalSimilarityCache', animal.id))
   if (cacheSnap.exists()) {
     const items = (cacheSnap.data().items as Animal[]) ?? []
-    if (items.length > 0) return items.slice(0, count)
+    const publicSafeItems = items.filter(isPublicSafeAnimal)
+    if (publicSafeItems.length > 0) return publicSafeItems.slice(0, count)
   }
 
   const matches: Animal[] = []

@@ -40,12 +40,17 @@ service cloud.firestore {
         && request.resource.data.status == 'archived';
     }
 
+    function isPublicSafeAnimal() {
+      return resource.data.status in ['available', 'under_review'];
+    }
+
     // ── Animals ────────────────────────────────────────────────────────────────
-    // Public read; staff create/edit/delete.
+    // Public read only for public-safe statuses; staff can read all and
+    // create/edit/delete.
     // Create validates required fields and enum values (Melhoria 5).
 
     match /animals/{animalId} {
-      allow read: if true;
+      allow read: if isStaff() || isPublicSafeAnimal();
 
       allow create: if isStaff()
         && request.resource.data.keys().hasAll(['name', 'species', 'status', 'sex', 'description'])
