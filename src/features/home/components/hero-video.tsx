@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 import { PawPrint } from 'lucide-react'
 import { Button } from '@/components/ui'
 
-const HERO_BG     = '#fdf8f0'
+const HERO_BG = '#fdf8f0'
 const DESKTOP_SRC = '/hero/upeva-hero.mp4'
-const MOBILE_SRC  = '/hero/upeva-hero-mobile.mp4'
-const MOBILE_MQ   = '(max-width: 767px)'
+const MOBILE_SRC = '/hero/upeva-hero-mobile.mp4'
+const MOBILE_MQ = '(max-width: 767px)'
 
 function getIsMobile(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches
@@ -17,7 +17,7 @@ export function HeroVideo() {
   // the very first render — no flicker, no wrong-video flash.
   const [isMobile, setIsMobile] = useState<boolean>(getIsMobile)
 
-  const videoRef    = useRef<HTMLVideoElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   // Mirrors the last isMobile value we acted on. When isMobile === isMobileRef
   // the breakpoint hasn't actually changed — skip reload. This correctly
   // handles both the initial mount and React Strict Mode's double-invoke.
@@ -120,8 +120,11 @@ export function HeroVideo() {
             className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight hero-animate-h1"
             style={{ color: '#1c1410' }}
           >
-            Todo animal merece{' '}
-            <span className="text-primary">um lar</span>
+            <span className="lg:whitespace-nowrap">
+              Todo animal merece{' '}
+              <span className="text-primary">um lar</span>
+            </span>
+            <br className="hidden lg:block" />
             {' '}com amor
           </h1>
 
@@ -134,7 +137,7 @@ export function HeroVideo() {
             tempo.
           </p>
 
-          <div className="mt-7 flex flex-wrap gap-3 hero-animate-ctas">
+          <div className="mt-3 flex flex-wrap gap-3 hero-animate-ctas">
             <Link to="/animais">
               <Button size="lg" className="gap-2">
                 <PawPrint size={20} className="mb-1" />
