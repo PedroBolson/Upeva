@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { PublicLayout } from '@/layouts/public-layout'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { ProtectedRoute } from '@/features/auth/components/protected-route'
+import { STAFF_ROLES } from '@/features/auth/utils/roles'
 
 import { SmartEntry } from '@/features/auth/components/smart-entry'
 import { AnimalsPage } from '@/pages/public/animals'
@@ -52,7 +53,11 @@ const router = createBrowserRouter([
     element: <ResetPasswordPage />,
   },
   {
-    element: <AdminLayout />,
+    element: (
+      <ProtectedRoute allowedRoles={STAFF_ROLES}>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { path: '/admin', element: <DashboardPage /> },
       { path: '/admin/animais', element: <AdminAnimalsPage /> },
@@ -60,9 +65,16 @@ const router = createBrowserRouter([
       { path: '/admin/animais/:id/editar', element: <AnimalFormPage /> },
       { path: '/admin/candidaturas', element: <ApplicationsPage /> },
       { path: '/admin/candidaturas/:id', element: <ApplicationDetailPage /> },
-      { path: '/admin/usuarios', element: <ProtectedRoute requiredRole="admin"><UsersPage /></ProtectedRoute> },
+      {
+        path: '/admin/usuarios',
+        element: (
+          <ProtectedRoute requiredRole="admin" redirectDeniedTo="/admin">
+            <UsersPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: '/admin/destaques', element: <FeaturedAnimalsPage /> },
-      { path: '/admin/alertas', element: <ProtectedRoute requiredRole="admin"><RejectionFlagsPage /></ProtectedRoute> },
+      { path: '/admin/alertas', element: <RejectionFlagsPage /> },
       { path: '/admin/configuracoes', element: <SettingsPage /> },
     ],
   },

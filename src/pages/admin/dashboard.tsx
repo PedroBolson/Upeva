@@ -34,6 +34,7 @@ import {
 import { AnimalPhotoThumbnail } from '@/features/animals/components/animal-photo-thumbnail'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useCounts } from '@/features/admin/hooks/use-counts'
+import { useAuth } from '@/features/auth/hooks/use-auth'
 import { db } from '@/lib/firebase'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
@@ -326,6 +327,7 @@ function RecentAnimalsPanel({ items, isLoading, error, onRetry }: RecentListStat
 export function DashboardPage() {
   useDocumentTitle(buildAdminTitle('Dashboard'))
 
+  const { userProfile } = useAuth()
   const { data: counts, isLoading: countsLoading } = useCounts()
   const {
     data: recentApplications = [],
@@ -375,15 +377,17 @@ export function DashboardPage() {
             Cadastrar animal
           </Button>
         </Link>
-        <Link to="/admin/usuarios?novo=true" className="shrink-0">
-          <Button variant="outline" size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
-            <UserPlus size={16} />
-            Novo usuário
-          </Button>
-        </Link>
+        {userProfile?.role === 'admin' && (
+          <Link to="/admin/usuarios?novo=true" className="shrink-0">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 whitespace-nowrap px-3">
+              <UserPlus size={16} />
+              Novo usuário
+            </Button>
+          </Link>
+        )}
       </div>
     ),
-    [],
+    [userProfile?.role],
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))

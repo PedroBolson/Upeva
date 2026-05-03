@@ -15,23 +15,34 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
-import { Button, ThemeToggleButton, UniversityBadge } from '@/components/ui'
+import { Button, ErrorState, PageSpinner, ThemeToggleButton, UniversityBadge } from '@/components/ui'
 import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { AdminHeaderProvider } from '@/features/admin/admin-header.provider'
 import { useAdminHeader } from '@/features/admin/hooks/use-admin-header'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { useAuthContext } from '@/features/auth/contexts/auth.context'
-import { AdminListSkeleton, DashboardSkeleton } from '@/components/ui/skeleton'
+import { isStaffRole } from '@/features/auth/utils/roles'
 import { isStandalone } from '@/utils/pwa'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
 
-function getAuthLoadingSkeleton(pathname: string): React.ReactNode {
-  if (pathname === '/admin') return <DashboardSkeleton />
-  if (pathname === '/admin/animais') return <AdminListSkeleton columns={4} />
-  if (pathname === '/admin/candidaturas') return <AdminListSkeleton columns={6} />
-  if (pathname === '/admin/usuarios') return <AdminListSkeleton columns={3} />
-  return null
+function AdminAuthLoadingState() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background text-foreground">
+      <PageSpinner />
+    </div>
+  )
+}
+
+function AdminAccessDeniedState() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4 text-foreground">
+      <ErrorState
+        title="Acesso negado"
+        description="Sua conta não tem permissão para acessar esta área administrativa."
+      />
+    </div>
+  )
 }
 
 const navItems = [
@@ -186,21 +197,29 @@ function AdminSidebar({
 }
 
 export function AdminLayout() {
-  const { user, authLoading } = useAuthContext()
+  const { user, userProfile, authLoading, profileLoading } = useAuthContext()
   const location = useLocation()
+
+  if (authLoading || (user && profileLoading)) {
+    return <AdminAuthLoadingState />
+  }
 
   if (!authLoading && !user) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />
   }
 
+  if (!isStaffRole(userProfile?.role)) {
+    return <AdminAccessDeniedState />
+  }
+
   return (
     <AdminHeaderProvider>
-      <AdminLayoutContent authLoading={authLoading} />
+      <AdminLayoutContent />
     </AdminHeaderProvider>
   )
 }
 
-function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
+function AdminLayoutContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const location = useLocation()
@@ -329,7 +348,7 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
               <ScrollRestoration />
-              {authLoading ? getAuthLoadingSkeleton(location.pathname) : <Outlet />}
+              <Outlet />
             </motion.div>
           </div>
         </main>
