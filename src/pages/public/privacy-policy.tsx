@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Shield, Lock, Eye, Trash2, Mail, UserCheck, type LucideIcon } from 'lucide-react'
 import { fadeUp, stagger } from '@/utils/animations'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 import { APPROVED_RETENTION_DAYS, ARCHIVED_ANIMAL_RETENTION_DAYS } from '@/types/common'
 
 const DPO_EMAIL = 'upeva.adocoes@gmail.com'
@@ -34,7 +34,12 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function PrivacyPolicyPage() {
-  useDocumentTitle(buildPublicTitle('Política de Privacidade'))
+  usePageSeo({
+    title: buildPublicTitle('Política de Privacidade'),
+    description:
+      'Entenda como a Upeva coleta, protege e trata dados pessoais no processo de candidatura à adoção.',
+    path: '/politica-de-privacidade',
+  })
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-16 sm:pt-28">

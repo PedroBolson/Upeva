@@ -7,7 +7,7 @@ import { AdoptionForm } from '@/features/adoption/components/adoption-form'
 import { ConsentModal } from '@/features/adoption/components/consent-modal'
 import type { Animal } from '@/features/animals/types/animal.types'
 import type { Species } from '@/types/common'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 const SPECIES_OPTIONS: { value: Species; label: string; icon: typeof Dog; description: string }[] = [
   { value: 'dog', label: 'Cachorro', icon: Dog, description: 'Quero adotar um cão' },
@@ -34,7 +34,12 @@ function buildMockAnimal(species: Species): Animal {
 }
 
 export function AdoptionGeneralPage() {
-  useDocumentTitle(buildPublicTitle('Quero adotar'))
+  usePageSeo({
+    title: buildPublicTitle('Quero adotar'),
+    description:
+      'Inicie sua candidatura para adoção responsável de cães e gatos resgatados pela Upeva.',
+    path: '/adotar',
+  })
   const [searchParams] = useSearchParams()
   const [species, setSpecies] = useState<Species | null>(() => {
     const initialSpecies = searchParams.get('especie')

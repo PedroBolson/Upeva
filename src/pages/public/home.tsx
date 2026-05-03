@@ -5,7 +5,7 @@ import { Button } from '@/components/ui'
 import { FeaturedAnimalRail } from '@/features/animals/components/featured-animal-rail'
 import { HeroVideo } from '@/features/home/components/hero-video'
 import { fadeUp, stagger } from '@/utils/animations'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 const steps = [
   {
@@ -26,7 +26,12 @@ const steps = [
 ]
 
 export function HomePage() {
-  useDocumentTitle(buildPublicTitle())
+  usePageSeo({
+    title: buildPublicTitle(),
+    description:
+      'Conheça a Upeva, ONG de Flores da Cunha que resgata cães e gatos e promove adoção responsável.',
+    path: '/',
+  })
 
   return (
     <div className="flex flex-col">

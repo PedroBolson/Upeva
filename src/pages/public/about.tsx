@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { fadeUp, stagger } from '@/utils/animations'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 const WHATSAPP_NUMBER = '54984030187'
 const PIX_KEY = '54984030187'
@@ -76,7 +76,12 @@ const adoptionSteps = [
 ]
 
 export function AboutPage() {
-  useDocumentTitle(buildPublicTitle('Sobre a Upeva'))
+  usePageSeo({
+    title: buildPublicTitle('Sobre a Upeva'),
+    description:
+      'Saiba mais sobre a história, missão e trabalho voluntário da Upeva no resgate e cuidado de cães e gatos.',
+    path: '/sobre',
+  })
   const [pixCopied, setPixCopied] = useState(false)
 
   function copyPix() {

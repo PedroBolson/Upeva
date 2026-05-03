@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { FileText, AlertCircle, ShieldCheck, Scale, Mail, type LucideIcon } from 'lucide-react'
 import { fadeUp, stagger } from '@/utils/animations'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 const DPO_EMAIL = 'upeva.adocoes@gmail.com'
 
@@ -23,7 +23,12 @@ function Section({ title, icon: Icon, children }: { title: string; icon: LucideI
 }
 
 export function TermsOfUsePage() {
-  useDocumentTitle(buildPublicTitle('Termos de Uso'))
+  usePageSeo({
+    title: buildPublicTitle('Termos de Uso'),
+    description:
+      'Leia os termos de uso da plataforma da Upeva para candidaturas de adoção responsável.',
+    path: '/termos-de-uso',
+  })
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-20 pb-16 sm:pt-28">

@@ -4,7 +4,7 @@ import { PawPrint } from 'lucide-react'
 import { AnimalCardSkeleton, EmptyState, ErrorState, Button } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/utils/cn'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 import { AnimalCard } from '@/features/animals/components/animal-card'
 import { AnimalFilters } from '@/features/animals/components/animal-filters'
 import { useAnimals } from '@/features/animals/hooks/use-animals'
@@ -30,7 +30,12 @@ function paramsFromFilters(f: Filters): Record<string, string> {
 }
 
 export function AnimalsPage() {
-  useDocumentTitle(buildPublicTitle('Animais disponíveis'))
+  usePageSeo({
+    title: buildPublicTitle('Animais disponíveis'),
+    description:
+      'Veja cães e gatos disponíveis para adoção responsável pela Upeva e encontre seu novo companheiro.',
+    path: '/animais',
+  })
   const [searchParams, setSearchParams] = useSearchParams()
 
   const filters = filtersFromParams(searchParams)

@@ -24,8 +24,9 @@ import {
   SPECIES_LABELS,
   SEX_LABELS,
   SIZE_LABELS,
+  type Animal,
 } from '@/features/animals/types/animal.types'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } }
@@ -36,7 +37,16 @@ export function AnimalDetailPage() {
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
   const { data: similar = [] } = useSimilarAnimals(animal ?? undefined)
 
-  useDocumentTitle(buildPublicTitle(animal?.name ?? 'Animal'))
+  usePageSeo({
+    title: buildPublicTitle(animal?.name ? `${animal.name} para adoção` : 'Animal para adoção'),
+    description: animal
+      ? buildAnimalDescription(animal)
+      : 'Conheça este animal resgatado pela Upeva e veja como iniciar uma adoção responsável.',
+    path: id ? `/animais/${id}` : '/animais',
+    image: animal?.photos[animal.coverPhotoIndex] ?? animal?.photos[0] ?? '/upeva.jpg',
+    imageAlt: animal ? `${animal.name}, animal para adoção pela Upeva` : undefined,
+    noindex: animal === null,
+  })
 
   if (isLoading) return <DetailSkeleton />
 
@@ -253,6 +263,17 @@ export function AnimalDetailPage() {
       )}
     </div>
   )
+}
+
+function buildAnimalDescription(animal: Animal) {
+  const details = [
+    SPECIES_LABELS[animal.species].toLowerCase(),
+    SEX_LABELS[animal.sex].toLowerCase(),
+    animal.size ? `porte ${SIZE_LABELS[animal.size].toLowerCase()}` : undefined,
+    animal.estimatedAge,
+  ].filter(Boolean)
+
+  return `Conheça ${animal.name}, ${details.join(', ')}, e veja como iniciar uma adoção responsável pela Upeva.`
 }
 
 function InfoChip({

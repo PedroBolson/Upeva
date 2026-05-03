@@ -4,10 +4,15 @@ import { contactHubLinks } from '@/features/contact/config/contact-links'
 import { ContactLinkCard } from '@/features/contact/components/contact-link-card'
 import { ContactSocialRow } from '@/features/contact/components/contact-social-row'
 import { fadeUp, stagger } from '@/utils/animations'
-import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
+import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
 export function ContactPage() {
-  useDocumentTitle(buildPublicTitle('Contato'))
+  usePageSeo({
+    title: buildPublicTitle('Contato'),
+    description:
+      'Fale com a Upeva, acompanhe os canais oficiais e veja formas de apoiar o resgate e a adoção responsável.',
+    path: '/contato',
+  })
   return (
     <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
       <div
