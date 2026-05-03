@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { PawPrint } from 'lucide-react'
 import { Button } from '@/components/ui'
 
-const HERO_BG    = '#fdf8f0'
+const HERO_BG     = '#fdf8f0'
 const DESKTOP_SRC = '/hero/upeva-hero.mp4'
 const MOBILE_SRC  = '/hero/upeva-hero-mobile.mp4'
 const MOBILE_MQ   = '(max-width: 767px)'
@@ -11,17 +12,19 @@ function getIsMobile(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches
 }
 
-function handleVideoEnded(e: React.SyntheticEvent<HTMLVideoElement>) {
-  e.currentTarget.pause()
-}
-
 export function HeroVideo() {
   // Initialised synchronously from matchMedia so the correct src is used on
   // the very first render — no flicker, no wrong-video flash.
   const [isMobile, setIsMobile] = useState<boolean>(getIsMobile)
 
-  const videoRef      = useRef<HTMLVideoElement>(null)
-  const isFirstRender = useRef(true)
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  // Mirrors the last isMobile value we acted on. When isMobile === isMobileRef
+  // the breakpoint hasn't actually changed — skip reload. This correctly
+  // handles both the initial mount and React Strict Mode's double-invoke.
+  const isMobileRef = useRef(isMobile)
+  // Prevents the onEnded handler from firing twice (Safari sometimes fires the
+  // ended event more than once on the same playback).
+  const hasEndedRef = useRef(false)
 
   // Track real breakpoint crossings only. Scroll, touch, theme changes, and
   // React re-renders never fire this listener.
@@ -33,12 +36,12 @@ export function HeroVideo() {
   }, [])
 
   // When the breakpoint genuinely changes at runtime, reload the new source and
-  // restart playback. Skipped on initial mount — autoPlay handles that.
+  // restart playback. No-ops on initial mount (same value) and on Strict Mode
+  // remount (ref survived cleanup, value still matches).
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
+    if (isMobileRef.current === isMobile) return
+    isMobileRef.current = isMobile
+    hasEndedRef.current = false
     const video = videoRef.current
     if (!video) return
     video.load()
@@ -47,6 +50,18 @@ export function HeroVideo() {
       // frame remains visible.
     })
   }, [isMobile])
+
+  // Safari resets currentTime to 0 after a non-looping video ends, causing a
+  // visible first-frame flash. We clamp it to just before the last frame.
+  // hasEndedRef guards against the ended event firing more than once.
+  const handleVideoEnded = useCallback(() => {
+    if (hasEndedRef.current) return
+    hasEndedRef.current = true
+    const video = videoRef.current
+    if (!video) return
+    video.pause()
+    video.currentTime = Math.max(video.duration - 0.05, 0)
+  }, [])
 
   return (
     <section
@@ -60,7 +75,7 @@ export function HeroVideo() {
         autoPlay
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         aria-hidden="true"
         onEnded={handleVideoEnded}
         className="absolute inset-0 h-full w-full object-cover object-center"
@@ -120,13 +135,13 @@ export function HeroVideo() {
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3 hero-animate-ctas">
-            <a href="#animais">
+            <Link to="/animais">
               <Button size="lg" className="gap-2">
                 <PawPrint size={20} className="mb-1" />
                 Vitrine virtual
               </Button>
-            </a>
-            <a href="#sobre">
+            </Link>
+            <Link to="/sobre">
               <Button
                 variant="outline"
                 size="lg"
@@ -139,7 +154,7 @@ export function HeroVideo() {
               >
                 Conheça a Upeva
               </Button>
-            </a>
+            </Link>
           </div>
 
         </div>
