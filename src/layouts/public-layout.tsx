@@ -22,18 +22,22 @@ const heroSystemBarPaths = new Set(['/', '/sobre', '/contato'])
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(() =>
-    typeof window !== 'undefined' ? window.scrollY > 12 : false,
+    typeof window !== 'undefined' ? window.scrollY > 8 : false,
   )
   const location = useLocation()
 
   useEffect(() => {
     function handleScroll() {
-      setScrolled(window.scrollY > 12)
+      setScrolled(window.scrollY > 8)
     }
     handleScroll()
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  // Light/cream navbar only when the user is on the home page AND exactly at the top.
+  // Any scroll immediately returns to normal theme-aware behavior.
+  const isHeroNavbar = location.pathname === '/' && !scrolled
 
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
@@ -77,7 +81,11 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                   className={({ isActive }) =>
                     cn(
                       'px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                      isActive
+                      isHeroNavbar
+                        ? isActive
+                          ? 'text-primary bg-[#f0e4d0]'
+                          : 'text-[#2d1f0e] hover:text-[#1c1208] hover:bg-[#ede0cc]'
+                        : isActive
                         ? 'text-primary bg-accent'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent',
                     )
@@ -89,7 +97,14 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             </nav>
 
             <div className="flex items-center gap-2">
-              <ThemeToggleButton />
+              {/* Force dark icon color in hero mode so it stays visible on the cream background */}
+              <span
+                className={cn(
+                  isHeroNavbar && '[&_button]:text-[#2d1f0e] [&_button:hover]:bg-[#ede0cc]',
+                )}
+              >
+                <ThemeToggleButton />
+              </span>
 
               <Link to="/adotar" className="hidden md:block">
                 <Button size="sm" className="gap-1.5">
@@ -102,7 +117,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden"
+                className={cn(
+                  'md:hidden',
+                  isHeroNavbar && 'text-[#2d1f0e] hover:bg-[#ede0cc]',
+                )}
                 onClick={() => setMenuOpen((o) => !o)}
                 aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
                 aria-expanded={menuOpen}
@@ -121,7 +139,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="md:hidden overflow-hidden border-t border-border bg-background"
+              className={cn(
+                'md:hidden overflow-hidden border-t',
+                isHeroNavbar ? 'border-[#d4b896] bg-[#fdf8f0]' : 'border-border bg-background',
+              )}
             >
               <nav
                 aria-label="Menu mobile"
@@ -136,7 +157,11 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                     className={({ isActive }) =>
                       cn(
                         'px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                        isActive
+                        isHeroNavbar
+                          ? isActive
+                            ? 'text-primary bg-[#f0e4d0]'
+                            : 'text-[#2d1f0e] hover:bg-[#ede0cc]'
+                          : isActive
                           ? 'text-primary bg-accent'
                           : 'text-foreground hover:bg-accent',
                       )

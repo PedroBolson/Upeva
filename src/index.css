@@ -149,7 +149,17 @@ button {
   cursor: pointer;
 }
 
-.hero-copy-reveal {
-  clip-path: inset(0 calc(100% - var(--hero-copy-reveal, 100%)) 0 0);
-  will-change: clip-path, opacity;
+@keyframes hero-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
+.hero-animate-h1   { animation: hero-fade-in-up 0.7s ease-out 1.0s  both; }
+.hero-animate-body { animation: hero-fade-in-up 0.7s ease-out 1.35s both; }
+.hero-animate-ctas { animation: hero-fade-in-up 0.7s ease-out 1.7s  both; }
