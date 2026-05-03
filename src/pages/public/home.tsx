@@ -1,10 +1,12 @@
-import { Suspense, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import gsap from 'gsap'
 import { ClipboardList, PawPrint, Shield, Users } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { FeaturedAnimalRail } from '@/features/animals/components/featured-animal-rail'
 import { Hero3DScene } from '@/features/home/components/hero-3d-scene'
+import { HeroSceneErrorBoundary } from '@/features/home/components/hero-error-boundary'
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -22,7 +24,7 @@ const steps = [
   {
     icon: Shield,
     title: 'Conclua a adoção',
-    description: 'Após a análise e visita, assine o contrato e leve seu novo companheiro para casa.',
+    description: 'Após a análise, assine o contrato e leve seu novo companheiro para casa.',
   },
 ]
 
@@ -34,14 +36,26 @@ export function HomePage() {
   useDocumentTitle(buildPublicTitle())
   const heroCopyRef = useRef<HTMLDivElement>(null)
 
+  // Safety net: if models take too long or fail to load, reveal text after 3.5s
+  useEffect(() => {
+    const target = heroCopyRef.current
+    if (!target) return
+    const timer = setTimeout(() => {
+      gsap.to(target, { '--hero-copy-reveal': '100%', opacity: 1, duration: 0.6, ease: 'power2.out', overwrite: true })
+    }, 3500)
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
     <div className="flex flex-col">
       <div className="relative overflow-hidden bg-linear-to-br from-accent via-background to-background">
         <section className="relative overflow-hidden">
           <div className="hidden lg:block">
-            <Suspense fallback={<HeroVisualFallback />}>
-              <Hero3DScene copyRevealTarget={heroCopyRef} />
-            </Suspense>
+            <HeroSceneErrorBoundary>
+              <Suspense fallback={<HeroVisualFallback />}>
+                <Hero3DScene copyRevealTarget={heroCopyRef} />
+              </Suspense>
+            </HeroSceneErrorBoundary>
           </div>
 
           <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-4 px-4 pt-24 pb-0 sm:px-6 sm:pt-32 sm:gap-10 sm:pb-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,1fr)] lg:px-8 lg:pt-36 lg:pb-24">
@@ -101,9 +115,11 @@ export function HomePage() {
               aria-hidden="true"
             >
               <div className="lg:hidden">
-                <Suspense fallback={<HeroVisualFallback />}>
-                  <Hero3DScene compact copyRevealTarget={heroCopyRef} />
-                </Suspense>
+                <HeroSceneErrorBoundary>
+                  <Suspense fallback={<HeroVisualFallback />}>
+                    <Hero3DScene compact copyRevealTarget={heroCopyRef} />
+                  </Suspense>
+                </HeroSceneErrorBoundary>
               </div>
             </motion.div>
           </div>

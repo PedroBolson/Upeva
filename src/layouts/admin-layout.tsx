@@ -212,8 +212,29 @@ function AdminLayoutContent({ authLoading }: { authLoading: boolean }) {
     closeSidebar()
   }, [location.pathname])
 
+  // iOS Safari phantom-scrolls window.scrollY when keyboard opens (even inside overflow:hidden layouts).
+  // When the keyboard dismisses, scrollY stays stuck — causing a blank space at the bottom.
+  // Fix: reset window scroll whenever the visual viewport grows (keyboard closed).
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+
+    let prevHeight = vv.height
+
+    function onResize() {
+      const newHeight = vv!.height
+      if (newHeight > prevHeight && window.scrollY !== 0) {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      }
+      prevHeight = newHeight
+    }
+
+    vv.addEventListener('resize', onResize)
+    return () => vv.removeEventListener('resize', onResize)
+  }, [])
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <SystemBarTint tone="surface" />
       <a
         href="#main-content"
