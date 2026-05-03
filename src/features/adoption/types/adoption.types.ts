@@ -75,9 +75,15 @@ export interface AdoptionApplication extends AdoptionFormData {
   adminNotes?: string
   rejectionReason?: RejectionReason
   rejectionDetails?: string
+  reviewedBy?: string
+  reviewedByLabel?: string
+  reviewedAt?: Timestamp
+  reviewAction?: ApplicationStatus
   pendingExport?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
+  updatedBy?: string
+  updatedByLabel?: string
 }
 
 export type CreateApplicationPayload = Omit<

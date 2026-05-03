@@ -22,8 +22,12 @@ export interface Animal {
   archiveDetails?: string
   archiveDate?: string
   archivedAt?: Timestamp
+  archivedBy?: string
+  archivedByLabel?: string
   createdAt: Timestamp
   updatedAt: Timestamp
+  updatedBy?: string
+  updatedByLabel?: string
 }
 
 export interface AnimalFilters {

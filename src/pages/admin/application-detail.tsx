@@ -14,6 +14,8 @@ import { useApplication } from '@/features/adoption/hooks/use-application'
 import { useApplicationPII } from '@/features/adoption/hooks/use-application-pii'
 import { useRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
+import { TraceabilityCard } from '@/features/admin/components/traceability-card'
+import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
@@ -39,6 +41,15 @@ const HOUSING_LABELS: Record<string, string> = {
   apartment_no_screens: 'Apartamento sem telas',
   apartment_with_screens: 'Apartamento com telas',
   apartment: 'Apartamento',
+}
+
+const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  pending: 'Pendente',
+  in_review: 'Em análise',
+  approved: 'Aprovada',
+  rejected: 'Rejeitada',
+  withdrawn: 'Retirada',
+  declined: 'Declinada',
 }
 
 function tsToDate(ts: Timestamp | undefined): string {
@@ -750,6 +761,21 @@ export function ApplicationDetailPage() {
               <SidebarField label="Contato" value={`${app.email} · ${piiLoading ? '•••' : (pii?.phone ?? '—')}`} />
             </div>
           </Card>
+
+          <TraceabilityCard
+            title="Rastreabilidade da revisão"
+            rows={[
+              { label: 'Status atual', value: <ApplicationStatusBadge status={app.status} /> },
+              {
+                label: 'Ação da revisão',
+                value: app.reviewAction ? APPLICATION_STATUS_LABELS[app.reviewAction] : undefined,
+              },
+              { label: 'Revisado em', value: formatTraceDate(app.reviewedAt) },
+              { label: 'Revisado por', value: formatActorLabel(app.reviewedByLabel) },
+              { label: 'Última atualização', value: formatTraceDate(app.updatedAt) },
+              { label: 'Atualizado por', value: formatActorLabel(app.updatedByLabel) },
+            ]}
+          />
         </div>
       </div>
     </div>

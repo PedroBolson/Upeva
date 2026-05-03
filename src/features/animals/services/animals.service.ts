@@ -280,7 +280,11 @@ export async function updateAnimal(id: string, data: Partial<AnimalPayload>): Pr
 }
 
 export async function updateAnimalStatus(id: string, status: AnimalStatus): Promise<void> {
-  await updateDoc(doc(db, 'animals', id), { status, updatedAt: serverTimestamp() })
+  const fn = httpsCallable<
+    { animalId: string; status: AnimalStatus },
+    { success: true }
+  >(functions, 'updateAnimalStatus')
+  await fn({ animalId: id, status })
 }
 
 export type ArchiveAnimalInput = {

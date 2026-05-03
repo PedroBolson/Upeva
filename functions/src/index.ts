@@ -123,6 +123,8 @@ type ApplicationRecord = {
   preferredSize?: Size | "any";
   jointAdoption?: boolean;
   adminNotes?: string;
+  reviewedBy?: string;
+  reviewedByLabel?: string;
 };
 
 type AnimalRecord = {
@@ -148,6 +150,10 @@ function isApplicationStatus(value: unknown): value is ApplicationStatus {
   );
 }
 
+function isAnimalStatus(value: unknown): value is AnimalStatus {
+  return ["available", "under_review", "adopted", "archived"].includes(String(value));
+}
+
 function isRejectionReason(value: unknown): value is RejectionReason {
   return VALID_REJECTION_REASONS.has(value as RejectionReason);
 }
@@ -171,6 +177,24 @@ const VALID_HOUSING_TYPES = new Set<HousingType>([
   "apartment_with_screens",
   "apartment",
 ]);
+
+const INTERNAL_TRACEABILITY_FIELDS = [
+  "createdBy",
+  "updatedBy",
+  "updatedByLabel",
+  "reviewedBy",
+  "reviewedByLabel",
+  "reviewedAt",
+  "reviewAction",
+  "archiveReason",
+  "archiveDetails",
+  "archiveDate",
+  "archivedBy",
+  "archivedByLabel",
+  "roleUpdatedBy",
+  "roleUpdatedByLabel",
+  "roleUpdatedAt",
+];
 
 const VALID_STATES = new Set([
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -209,6 +233,22 @@ function assertMinLength(value: string, min: number, field: string): void {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripInternalTraceability(data: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = { ...data };
+  for (const field of INTERNAL_TRACEABILITY_FIELDS) {
+    delete sanitized[field];
+  }
+  return sanitized;
+}
+
+function getActorLabel(auth: { token?: { name?: unknown; email?: unknown } }): string | undefined {
+  const name = typeof auth.token?.name === "string" ? auth.token.name.trim() : "";
+  if (name) return name;
+
+  const email = typeof auth.token?.email === "string" ? auth.token.email.trim() : "";
+  return email || undefined;
 }
 
 function requiredString(
@@ -583,7 +623,7 @@ async function buildAndCacheSimilarAnimals(
     for (const docSnap of snap.docs) {
       if (seenIds.has(docSnap.id)) continue;
       seenIds.add(docSnap.id);
-      matches.push({ id: docSnap.id, ...docSnap.data() });
+      matches.push({ id: docSnap.id, ...stripInternalTraceability(docSnap.data()) });
       if (matches.length >= COUNT) break;
     }
   }
@@ -689,24 +729,30 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
     approvedApps.find((app) => app.id === animal.adoptedApplicationId) ?? approvedApps[0] ?? null;
 
   if (winner) {
-    await animalRef.update({
+    const update: Record<string, unknown> = {
       status: "adopted",
       activeApplicationCount: 0,
       adoptedApplicationId: winner.id,
       adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (winner.reviewedBy) update.updatedBy = winner.reviewedBy;
+    if (winner.reviewedByLabel) update.updatedByLabel = winner.reviewedByLabel;
+    await animalRef.update(update);
     return;
   }
 
   if (withdrawnWinner) {
-    await animalRef.update({
+    const update: Record<string, unknown> = {
       status: "adopted",
       activeApplicationCount: 0,
       adoptedApplicationId: withdrawnWinner.id,
       adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (withdrawnWinner.reviewedBy) update.updatedBy = withdrawnWinner.reviewedBy;
+    if (withdrawnWinner.reviewedByLabel) update.updatedByLabel = withdrawnWinner.reviewedByLabel;
+    await animalRef.update(update);
     return;
   }
 
@@ -716,6 +762,8 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
       activeApplicationCount,
       adoptedApplicationId: FieldValue.delete(),
       adoptedAt: FieldValue.delete(),
+      updatedBy: FieldValue.delete(),
+      updatedByLabel: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     return;
@@ -726,6 +774,8 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
     activeApplicationCount,
     adoptedApplicationId: FieldValue.delete(),
     adoptedAt: FieldValue.delete(),
+    updatedBy: FieldValue.delete(),
+    updatedByLabel: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 }
@@ -845,6 +895,9 @@ export const onUserCreated = functionsV1
         role: "admin",
         createdAt: FieldValue.serverTimestamp(),
         createdBy: "system",
+        roleUpdatedAt: FieldValue.serverTimestamp(),
+        roleUpdatedBy: "system",
+        roleUpdatedByLabel: "Sistema",
       });
       roleToSet = "admin";
     });
@@ -897,17 +950,27 @@ export const createUser = onCall(
       throw new HttpsError("invalid-argument", "Senha deve conter ao menos um número.");
     }
 
+    const actorLabel = getActorLabel(request.auth);
     const newUser = await adminAuth.createUser({ email, password, displayName });
+    const userPayload: Record<string, unknown> = {
+      uid: newUser.uid,
+      email,
+      displayName,
+      role,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: request.auth.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: request.auth.uid,
+      roleUpdatedAt: FieldValue.serverTimestamp(),
+      roleUpdatedBy: request.auth.uid,
+    };
+    if (actorLabel) {
+      userPayload.updatedByLabel = actorLabel;
+      userPayload.roleUpdatedByLabel = actorLabel;
+    }
 
     try {
-      await db.collection("users").doc(newUser.uid).set({
-        uid: newUser.uid,
-        email,
-        displayName,
-        role,
-        createdAt: FieldValue.serverTimestamp(),
-        createdBy: request.auth.uid,
-      });
+      await db.collection("users").doc(newUser.uid).set(userPayload);
 
       await adminAuth.setCustomUserClaims(newUser.uid, { role });
     } catch (err) {
@@ -950,10 +1013,20 @@ export const updateUserRole = onCall(
     // Update Custom Claims first so Auth rules are consistent immediately
     await adminAuth.setCustomUserClaims(uid, { role });
 
-    await db.collection("users").doc(uid).update({
+    const actorLabel = getActorLabel(request.auth);
+    const payload: Record<string, unknown> = {
       role,
       updatedAt: FieldValue.serverTimestamp(),
-    });
+      updatedBy: request.auth.uid,
+      roleUpdatedAt: FieldValue.serverTimestamp(),
+      roleUpdatedBy: request.auth.uid,
+    };
+    if (actorLabel) {
+      payload.updatedByLabel = actorLabel;
+      payload.roleUpdatedByLabel = actorLabel;
+    }
+
+    await db.collection("users").doc(uid).update(payload);
 
     return { success: true };
   }
@@ -1134,6 +1207,8 @@ export const updateApplicationReview = onCall(
     if (callerRole !== "admin" && callerRole !== "reviewer") {
       throw new HttpsError("permission-denied", "Only staff can review applications.");
     }
+    const actorUid = request.auth.uid;
+    const actorLabel = getActorLabel(request.auth);
 
     const { id, status } = request.data as {
       id?: string;
@@ -1303,7 +1378,16 @@ export const updateApplicationReview = onCall(
       const payload: Record<string, unknown> = {
         status,
         updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actorUid,
       };
+      if (actorLabel) payload.updatedByLabel = actorLabel;
+
+      if (status === "approved" || status === "rejected" || status === "withdrawn") {
+        payload.reviewedBy = actorUid;
+        payload.reviewedAt = FieldValue.serverTimestamp();
+        payload.reviewAction = status;
+        if (actorLabel) payload.reviewedByLabel = actorLabel;
+      }
 
       if (status === "rejected") {
         payload.rejectionReason = request.data.rejectionReason;
@@ -1353,7 +1437,9 @@ export const updateApplicationReview = onCall(
             queuePosition: FieldValue.delete(),
             waitlistEntry: FieldValue.delete(),
             updatedAt: FieldValue.serverTimestamp(),
+            updatedBy: actorUid,
           };
+          if (actorLabel) update.updatedByLabel = actorLabel;
           if (animal && !appData.preferredSex) {
             if (animal.sex) update.preferredSex = animal.sex;
           }
@@ -1613,7 +1699,7 @@ export const updateFeaturedAnimals = onCall(
           `Animal "${ids[i]}" is not available for adoption.`
         );
       }
-      items.push({ id: snap.id, ...data });
+      items.push({ id: snap.id, ...stripInternalTraceability(data) });
     }
 
     // updatedBy is intentionally omitted — this document is publicly readable
@@ -1880,15 +1966,88 @@ export const archiveAnimal = onCall(
       );
     }
 
-    await animalRef.update({
+    const actorLabel = getActorLabel(request.auth);
+    const payload: Record<string, unknown> = {
       status: "archived",
       archiveReason,
       archiveDetails: details,
       archiveDate,
       archivedAt: FieldValue.serverTimestamp(),
+      archivedBy: request.auth.uid,
       updatedAt: FieldValue.serverTimestamp(),
-    });
+      updatedBy: request.auth.uid,
+    };
+    if (actorLabel) {
+      payload.archivedByLabel = actorLabel;
+      payload.updatedByLabel = actorLabel;
+    }
 
+    await animalRef.update(payload);
+
+    return { success: true };
+  }
+);
+
+// ── updateAnimalStatus: status changes that need server-side cleanup ─────────
+// Public-readable statuses must not retain staff UID traceability from previous
+// archived/adopted states.
+export const updateAnimalStatus = onCall(
+  { region: "southamerica-east1", maxInstances: 5 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      throw new HttpsError("permission-denied", "Only staff can update animal status.");
+    }
+
+    const { animalId, status } = request.data as {
+      animalId?: string;
+      status?: AnimalStatus;
+    };
+
+    if (typeof animalId !== "string" || !animalId.trim()) {
+      throw new HttpsError("invalid-argument", "ID do animal inválido.");
+    }
+    if (!isAnimalStatus(status)) {
+      throw new HttpsError("invalid-argument", "Status do animal inválido.");
+    }
+    if (status === "archived") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Use archiveAnimal para arquivar animais com motivo obrigatório."
+      );
+    }
+
+    const animalRef = db.collection("animals").doc(animalId.trim());
+    const animalSnap = await animalRef.get();
+    if (!animalSnap.exists) {
+      throw new HttpsError("not-found", "Animal não encontrado.");
+    }
+
+    const update: Record<string, unknown> = {
+      status,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (status === "adopted") {
+      const actorLabel = getActorLabel(request.auth);
+      update.updatedBy = request.auth.uid;
+      if (actorLabel) update.updatedByLabel = actorLabel;
+    } else {
+      update.updatedBy = FieldValue.delete();
+      update.updatedByLabel = FieldValue.delete();
+      update.archiveReason = FieldValue.delete();
+      update.archiveDetails = FieldValue.delete();
+      update.archiveDate = FieldValue.delete();
+      update.archivedBy = FieldValue.delete();
+      update.archivedByLabel = FieldValue.delete();
+      update.archivedAt = FieldValue.delete();
+    }
+
+    await animalRef.update(update);
     return { success: true };
   }
 );
@@ -1946,7 +2105,8 @@ export const checkRejectionFlag = onCall(
 );
 
 // ── deleteRejectionFlag: remove flag (LGPD Art. 18 — direito ao esquecimento) ──
-// Exclusivo para role admin. Registra a deleção no audit log (fase 3.3).
+// Exclusivo para role admin. Não grava rastreabilidade porque o documento é
+// removido e a fase 3.3 não cria auditLog nem writes extras.
 export const deleteRejectionFlag = onCall(
   { region: "southamerica-east1", maxInstances: 3 },
   async (request) => {
@@ -2064,6 +2224,9 @@ export const archiveAndCleanup = onSchedule(
       const data = docSnap.data() as Record<string, unknown>;
       const pii = readPII(data);
       const folderId = await getYearlyFolderId(DRIVE_FOLDERS.contracts, year);
+      const approvedAt = data.reviewedAt instanceof Timestamp ?
+        data.reviewedAt.toDate() :
+        (data.updatedAt as Timestamp).toDate();
       const pdfBuffer = await generatePdf("contract", {
         applicationId: docSnap.id,
         fullName: data.fullName as string,
@@ -2075,7 +2238,8 @@ export const archiveAndCleanup = onSchedule(
         animalId: (data.animalId as string) ?? "",
         animalName: (data.animalName as string) ?? "Animal",
         species: (data.species as string) ?? "dog",
-        approvedAt: (data.updatedAt as Timestamp).toDate(),
+        approvedAt,
+        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
         ongName: ONG_NAME,
       });
       const driveUrl = await uploadToDrive(
@@ -2109,6 +2273,9 @@ export const archiveAndCleanup = onSchedule(
       const data = docSnap.data() as Record<string, unknown>;
       const pii = readPII(data);
       const folderId = await getYearlyFolderId(DRIVE_FOLDERS.rejections, year);
+      const rejectedAt = data.reviewedAt instanceof Timestamp ?
+        data.reviewedAt.toDate() :
+        (data.updatedAt as Timestamp).toDate();
       const pdfBuffer = await generatePdf("rejection", {
         applicationId: docSnap.id,
         fullName: data.fullName as string,
@@ -2118,8 +2285,8 @@ export const archiveAndCleanup = onSchedule(
         species: (data.species as string) ?? "dog",
         rejectionReason: data.rejectionReason as string,
         rejectionDetails: data.rejectionDetails as string,
-        reviewerName: "Equipe Upeva",
-        rejectedAt: (data.updatedAt as Timestamp).toDate(),
+        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
+        rejectedAt,
         ongName: ONG_NAME,
       });
       const driveUrl = await uploadToDrive(
@@ -2191,6 +2358,7 @@ export const archiveAndCleanup = onSchedule(
         archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
         archiveDate: new Date(archiveDate),
         archivedAt,
+        archivedBy: data.archivedByLabel as string | undefined,
         ongName: ONG_NAME,
       });
 

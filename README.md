@@ -155,6 +155,14 @@ Flags de rejeição não armazenam CPF ou email em nenhuma forma — apenas **HM
 
 Mutações de review (status, notas, animal vinculado) só podem ser feitas via Cloud Function, que valida regras de negócio no servidor (exclusividade de aprovação, status de animal, etc.).
 
+### Roadmap de segurança — 3.3 concluída
+
+A fase **3.3 Rastreabilidade Mínima em Ações Críticas** está concluída. A rastreabilidade é gravada nos próprios documentos operacionais, junto com o update da ação crítica, sem coleção `auditLog` e sem writes extras só para auditoria. Os metadados são mínimos (`reviewedBy`, `reviewedAt`, `reviewAction`, `archivedBy`, `archivedAt`, `roleUpdatedBy`, `roleUpdatedAt`, `updatedBy`, `updatedAt`) e não armazenam CPF, telefone, endereço, data de nascimento, tokens, snapshots, respostas brutas do formulário ou detalhes sensíveis do candidato.
+
+O `auditLog` completo continua adiado para evitar custo e complexidade operacional; pode ser reavaliado no futuro se a ONG precisar de trilha histórica completa. Em documentos de animais que podem voltar a ser públicos, UIDs internos são removidos ou bloqueados por rules antes de leitura pública.
+
+Comportamento de dados legados: documentos existentes não recebem backfill. Os campos de rastreabilidade aparecem apenas na próxima operação crítica relevante; registros antigos já revisados, arquivados ou com role alterada podem não ter `reviewedBy`, `archivedBy` ou `roleUpdatedBy`. Isso é intencional e seguro: o sistema não inventa ator histórico retroativamente e evita migração/backfill com dados inferidos.
+
 ---
 
 ## 🛡️ LGPD e Privacidade
@@ -353,10 +361,10 @@ As functions ficam em [`functions/src/index.ts`](functions/src/index.ts). Helper
 Trigger de Auth (1st gen) — faz apenas o bootstrap seguro do primeiro administrador. O primeiro usuário criado recebe `role: "admin"`; usuários criados depois não recebem role automática e devem ser provisionados pela tela `/admin/usuarios`.
 
 ### `createUser`
-Callable — somente `admin`. Cria usuário no Firebase Auth, define Custom Claims e grava o perfil em `users/{uid}`.
+Callable — somente `admin`. Cria usuário no Firebase Auth, define Custom Claims e grava o perfil em `users/{uid}` com rastreabilidade mínima da criação/atribuição de role.
 
 ### `updateUserRole`
-Callable — somente `admin`. Atualiza role de outro usuário (autoalteração bloqueada). Atualiza Custom Claims imediatamente.
+Callable — somente `admin`. Atualiza role de outro usuário (autoalteração bloqueada), registra `roleUpdatedBy`/`roleUpdatedAt` no mesmo update e atualiza Custom Claims imediatamente.
 
 ### `deleteUser`
 Callable — somente `admin`. Remove o usuário do Firebase Auth e do Firestore (autoexclusão bloqueada).
@@ -365,7 +373,7 @@ Callable — somente `admin`. Remove o usuário do Firebase Auth e do Firestore 
 Callable — público. Resolve o animal vinculado do Firestore, valida campos obrigatórios, filtra payload por allowlist, **cifra PII** (CPF, telefone, endereço, data de nascimento) com AES-256-GCM antes de gravar, aplica rate limiting (5/24h por HMAC do e-mail), calcula posição na fila e estado de waitlist.
 
 ### `updateApplicationReview`
-Callable — staff. Centraliza todas as mutações de triagem: atualização de status, notas internas, vinculação/desvinculação de animal. Para `REJECTED` (definitivo): valida campos obrigatórios (`rejectionReason`, `rejectionDetails`, confirmação explícita) e marca `pendingExport: true` para o cron de exportação. Para `DECLINED`: deleção simples sem registro.
+Callable — staff. Centraliza todas as mutações de triagem: atualização de status, notas internas, vinculação/desvinculação de animal. Registra `updatedBy`/`updatedAt` e, para decisões finais mantidas no Firestore, `reviewedBy`/`reviewedAt`/`reviewAction`. Para `REJECTED` (definitivo): valida campos obrigatórios (`rejectionReason`, `rejectionDetails`, confirmação explícita) e marca `pendingExport: true` para o cron de exportação. Para `DECLINED`: deleção simples sem registro operacional remanescente.
 
 ### `getApplicationPII`
 Callable — staff. Decifra os campos sensíveis da candidatura (`cpf`, `phone`, `address`, `birthDate`) server-side e os retorna ao painel admin. O Firestore nunca é lido diretamente pelo cliente para esses campos.
@@ -377,7 +385,10 @@ Callable — staff. Verifica se o CPF de uma candidatura tem flag ativa em `reje
 Callable — somente `admin`. Remove uma flag de `rejectionFlags` para exercício do direito ao esquecimento (LGPD Art. 18).
 
 ### `archiveAnimal`
-Callable — staff. Arquiva um animal com motivo obrigatório (`archiveReason` enum), detalhes livres e data do ocorrido. O status `archived` só pode ser definido via esta function — garante que o motivo sempre seja registrado.
+Callable — staff. Arquiva um animal com motivo obrigatório (`archiveReason` enum), detalhes livres, data do ocorrido e rastreabilidade mínima (`archivedBy`, `archivedAt`, `updatedBy`, `updatedAt`). O status `archived` só pode ser definido via esta function — garante que o motivo sempre seja registrado.
+
+### `updateAnimalStatus`
+Callable — staff. Atualiza status não arquivado e limpa metadados internos quando um animal volta a status público (`available`/`under_review`), evitando exposição de UIDs de equipe.
 
 ### `updateFeaturedAnimals`
 Callable — staff. Valida e grava o pool de animais em destaque em `metadata/featuredAnimals` (cache denormalizado lido pela home pública).
@@ -438,7 +449,7 @@ Exporta e limpa dados conforme as políticas de retenção LGPD:
 name, species, sex, size?, breed?, estimatedAge?, description,
 photos, coverPhotoIndex, status, vaccines, neutered, specialNeeds?,
 adoptedApplicationId?, adoptedAt?, activeApplicationCount?, queueHead?,
-archiveReason?, archiveDetails?, archiveDate?, archivedAt?,
+archiveReason?, archiveDetails?, archiveDate?, archivedAt?, archivedBy?,
 createdAt, updatedAt
 ```
 
@@ -452,9 +463,10 @@ cpf (AES-256-GCM), phone (AES-256-GCM), birthDate (AES-256-GCM), address (AES-25
 [respostas completas do formulário de 8 etapas],
 status, queuePosition?, isWaitlisted?,
 previousAnimalId?, previousAnimalName?,
-rejectionReason?, rejectionDetails?, rejectedBy?, rejectedAt?,
+rejectionReason?, rejectionDetails?,
+reviewedBy?, reviewedAt?, reviewAction?,
 pendingExport?,
-adminNotes?, createdAt, updatedAt
+adminNotes?, createdAt, updatedAt, updatedBy?
 ```
 
 Status possíveis: `pending` · `in_review` · `approved` · `rejected` · `withdrawn` · `declined`
@@ -472,7 +484,9 @@ Nenhum dado pessoal legível. O documento é identificado e consultado pelo HMAC
 #### `users`
 
 ```
-uid, email, displayName, role, createdAt, createdBy, updatedAt?
+uid, email, displayName, role,
+createdAt, createdBy, updatedAt?, updatedBy?,
+roleUpdatedAt?, roleUpdatedBy?
 ```
 
 ### Storage

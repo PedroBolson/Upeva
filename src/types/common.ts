@@ -11,6 +11,12 @@ export interface UserProfile {
   role: UserRole
   createdAt: Timestamp
   createdBy: string
+  updatedAt?: Timestamp
+  updatedBy?: string
+  updatedByLabel?: string
+  roleUpdatedAt?: Timestamp
+  roleUpdatedBy?: string
+  roleUpdatedByLabel?: string
 }
 
 export type Species = 'dog' | 'cat'

@@ -23,6 +23,7 @@ export type ContractPdfData = {
   animalName: string;
   species: string;
   approvedAt: Date;
+  reviewerName?: string;
   ongName: string;
 };
 
@@ -50,6 +51,7 @@ export type ArchivedAnimalPdfData = {
   archiveDetails: string;
   archiveDate: Date;
   archivedAt: Date;
+  archivedBy?: string;
   ongName: string;
 };
 
@@ -275,6 +277,9 @@ export async function generateContractPdf(data: ContractPdfData): Promise<Buffer
 
   ctx.y -= SECTION_GAP;
   drawSection(ctx, "Registro");
+  if (data.reviewerName) {
+    drawField(ctx, "Responsável pela aprovação", data.reviewerName);
+  }
   drawField(ctx, "Data de aprovação", formatDate(data.approvedAt));
   drawField(ctx, "Gerado em", generatedAt);
 
@@ -364,6 +369,9 @@ export async function generateArchivedAnimalPdf(data: ArchivedAnimalPdfData): Pr
 
   ctx.y -= SECTION_GAP;
   drawSection(ctx, "Registro");
+  if (data.archivedBy) {
+    drawField(ctx, "Responsável pelo arquivamento", data.archivedBy);
+  }
   drawField(ctx, "Data de arquivamento no sistema", formatDate(data.archivedAt));
   drawField(ctx, "Gerado em", generatedAt);
 

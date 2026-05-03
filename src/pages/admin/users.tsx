@@ -11,6 +11,8 @@ import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
+import { MetadataRow } from '@/features/admin/components/traceability-card'
+import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from '@/features/users/hooks/use-users'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import type { UserProfile, UserRole } from '@/types/common'
@@ -173,6 +175,17 @@ export function UsersPage() {
       header: 'Papel',
       sortKey: SORT_KEYS.role,
       cell: (u) => <UserRoleBadge role={u.role} />,
+    },
+    {
+      key: 'traceability',
+      header: 'Rastreabilidade',
+      cell: (u) => (
+        <div className="grid min-w-56 grid-cols-1 gap-2">
+          <MetadataRow label="Permissão atual" value={ROLE_LABELS[u.role]} />
+          <MetadataRow label="Permissão atualizada em" value={formatTraceDate(u.roleUpdatedAt)} />
+          <MetadataRow label="Permissão atualizada por" value={formatActorLabel(u.roleUpdatedByLabel)} />
+        </div>
+      ),
     },
     {
       key: 'actions',
@@ -394,6 +407,8 @@ export function UsersPage() {
                   user={user}
                   isSelf={user.uid === currentUser?.uid}
                   isAdmin={isAdmin}
+                  roleUpdatedAt={formatTraceDate(user.roleUpdatedAt)}
+                  roleUpdatedBy={formatActorLabel(user.roleUpdatedByLabel)}
                   onRoleChange={(role) => updateRole({ uid: user.uid, role })}
                   onDelete={() => setDeleteTarget(user)}
                 />
@@ -453,12 +468,16 @@ function UserMobileCard({
   user,
   isSelf,
   isAdmin,
+  roleUpdatedAt,
+  roleUpdatedBy,
   onRoleChange,
   onDelete,
 }: {
   user: UserProfile
   isSelf: boolean
   isAdmin: boolean
+  roleUpdatedAt: string
+  roleUpdatedBy: string
   onRoleChange: (role: UserRole) => void
   onDelete: () => void
 }) {
@@ -471,6 +490,12 @@ function UserMobileCard({
         </div>
 
         <UserRoleBadge role={user.role} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-border/70 bg-muted/20 p-3">
+        <MetadataRow label="Permissão atual" value={ROLE_LABELS[user.role]} />
+        <MetadataRow label="Permissão atualizada em" value={roleUpdatedAt} />
+        <MetadataRow label="Permissão atualizada por" value={roleUpdatedBy} />
       </div>
 
       <div className="mt-4 rounded-xl bg-muted/35 p-3 flex items-center gap-2">

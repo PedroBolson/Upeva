@@ -10,12 +10,14 @@ import { FileUpload } from '@/components/ui/file-upload'
 import { PageSpinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
-import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal } from '@/features/animals/hooks/use-animal-mutations'
+import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal, useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
 import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
+import { TraceabilityCard } from '@/features/admin/components/traceability-card'
+import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
-import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS } from '@/features/animals/types/animal.types'
+import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS, STATUS_LABELS } from '@/features/animals/types/animal.types'
 import type { ArchiveReason } from '@/types/common'
 import { cn } from '@/utils/cn'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
@@ -36,6 +38,13 @@ const SIZE_OPTIONS = [
   { value: 'large', label: 'Grande' },
 ]
 
+const ARCHIVE_REASON_LABELS: Record<ArchiveReason, string> = {
+  death: 'Falecimento',
+  serious_illness: 'Doença grave',
+  transfer: 'Transferência para outro lar/ONG',
+  other: 'Outro',
+}
+
 export function AnimalFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -44,6 +53,7 @@ export function AnimalFormPage() {
   const { data: animal, isLoading, error } = useAnimal(id)
   const { mutateAsync: createAnimal } = useCreateAnimal()
   const { mutateAsync: updateAnimal } = useUpdateAnimal()
+  const { mutateAsync: updateAnimalStatus } = useUpdateAnimalStatus()
   const { mutateAsync: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
   const { mutate: archiveAnimal, isPending: isArchiving } = useArchiveAnimal()
 
@@ -168,12 +178,15 @@ export function AnimalFormPage() {
             description: data.description,
             neutered: data.neutered,
             specialNeeds: data.specialNeeds || undefined,
-            status: data.status,
             vaccines: cleanedVaccines,
             photos: allPhotos,
             coverPhotoIndex: safeCoverIndex,
           },
         })
+
+        if (data.status !== animal.status) {
+          await updateAnimalStatus({ id: animal.id, status: data.status })
+        }
       } else {
         // Create first to get ID, then upload photos
         const animalId = await createAnimal({
@@ -636,6 +649,25 @@ export function AnimalFormPage() {
               <SidebarField label="Saúde" value={`${neutered ? 'Castrado' : 'Não castrado'} · ${healthHelper}`} />
             </div>
           </Card>
+
+          {isEditing && animal && (
+            <TraceabilityCard
+              title="Rastreabilidade"
+              rows={[
+                { label: 'Status atual', value: STATUS_LABELS[animal.status] },
+                { label: 'Última atualização', value: formatTraceDate(animal.updatedAt) },
+                { label: 'Atualizado por', value: formatActorLabel(animal.updatedByLabel) },
+                { label: 'Arquivado em', value: formatTraceDate(animal.archivedAt) },
+                { label: 'Arquivado por', value: formatActorLabel(animal.archivedByLabel) },
+                { label: 'Data informada do arquivamento', value: formatTraceDate(animal.archiveDate) },
+                {
+                  label: 'Motivo do arquivamento',
+                  value: animal.archiveReason ? ARCHIVE_REASON_LABELS[animal.archiveReason] : undefined,
+                },
+                { label: 'Detalhes do arquivamento', value: animal.archiveDetails },
+              ]}
+            />
+          )}
 
           <Card className="border-border/80 p-5">
             <h2 className="text-sm font-semibold text-foreground">Ações</h2>

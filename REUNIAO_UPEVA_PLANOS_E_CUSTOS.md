@@ -597,7 +597,7 @@ Para o volume esperado da UPEVA, isso é melhor porque:
 3. guardar contratos no Drive e só indexar na planilha
 4. adicionar motivo estruturado de rejeição
 5. adicionar motivo estruturado de arquivamento de animal
-6. adicionar log/auditoria de ações administrativas
+6. ✅ 3.3 Rastreabilidade Mínima em Ações Críticas concluída: metadados mínimos ficam nos documentos operacionais, sem coleção `auditLog`, sem writes extras só para auditoria e sem PII; audit log completo fica adiado para reavaliação futura
 7. limpar `rateLimits` e `_processedEvents`
 
 ---

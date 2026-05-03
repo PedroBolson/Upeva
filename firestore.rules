@@ -44,20 +44,44 @@ service cloud.firestore {
       return resource.data.status in ['available', 'under_review'];
     }
 
+    function hasInternalAnimalTraceability() {
+      return resource.data.keys().hasAny([
+        'createdBy', 'updatedBy', 'updatedByLabel',
+        'archiveReason', 'archiveDetails', 'archiveDate', 'archivedBy', 'archivedByLabel'
+      ]);
+    }
+
+    function hasTraceabilityWrite(keys) {
+      return keys.hasAny([
+        'createdBy', 'updatedBy', 'updatedByLabel',
+        'reviewedBy', 'reviewedByLabel', 'reviewedAt', 'reviewAction',
+        'archiveReason', 'archiveDetails', 'archiveDate', 'archivedBy', 'archivedByLabel', 'archivedAt',
+        'roleUpdatedBy', 'roleUpdatedByLabel', 'roleUpdatedAt'
+      ]);
+    }
+
+    function hasAnimalStatusWrite(keys) {
+      return keys.hasAny(['status']);
+    }
+
     // ── Animals ────────────────────────────────────────────────────────────────
     // Public read only for public-safe statuses; staff can read all and
     // create/edit/delete.
     // Create validates required fields and enum values (Melhoria 5).
 
     match /animals/{animalId} {
-      allow read: if isStaff() || isPublicSafeAnimal();
+      allow read: if isStaff() || (isPublicSafeAnimal() && !hasInternalAnimalTraceability());
 
       allow create: if isStaff()
         && request.resource.data.keys().hasAll(['name', 'species', 'status', 'sex', 'description'])
+        && !hasTraceabilityWrite(request.resource.data.keys())
         && request.resource.data.status in ['available', 'under_review']
         && request.resource.data.species in ['dog', 'cat'];
 
-      allow update: if isStaff() && !isArchivedTransition();
+      allow update: if isStaff()
+        && !isArchivedTransition()
+        && !hasTraceabilityWrite(request.resource.data.diff(resource.data).affectedKeys())
+        && !hasAnimalStatusWrite(request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if isStaff();
     }
 
@@ -92,7 +116,9 @@ service cloud.firestore {
           'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy'
         ])
         && request.resource.data.keys().hasOnly([
-          'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy', 'updatedAt'
+          'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy',
+          'updatedAt', 'updatedBy', 'updatedByLabel',
+          'roleUpdatedAt', 'roleUpdatedBy', 'roleUpdatedByLabel'
         ])
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.email == resource.data.email
