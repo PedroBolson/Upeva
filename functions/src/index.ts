@@ -8,6 +8,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions/v2";
 import * as functionsV1 from "firebase-functions/v1";
 import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./lib/crypto.util.js";
+import { assertAdminRateLimit } from "./lib/rate-limit.util.js";
 import { generatePdf, type AddressData } from "./lib/pdf.helper.js";
 import {
   uploadToDrive,
@@ -1010,6 +1011,8 @@ export const createUser = onCall(
       throw new HttpsError("permission-denied", "Only admins can create users.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "user.create");
+
     const { email, password, displayName, role } = request.data as {
       email: string;
       password: string;
@@ -1115,6 +1118,8 @@ export const updateUserRole = onCall(
         "Only admins can update roles."
       );
     }
+
+    await assertAdminRateLimit(request.auth.uid, "user.role.update");
 
     const { uid, role } = request.data as { uid: string; role: UserRole };
 
@@ -1353,6 +1358,9 @@ export const updateApplicationReview = onCall(
       logPermissionDenied("application.review.update", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can review applications.");
     }
+
+    await assertAdminRateLimit(request.auth.uid, "application.review.update");
+
     const actorUid = request.auth.uid;
     const actorLabel = getActorLabel(request.auth);
 
@@ -1651,6 +1659,8 @@ export const deleteUser = onCall(
       throw new HttpsError("permission-denied", "Only admins can delete users.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "user.delete");
+
     const { uid } = request.data as { uid: string };
 
     if (!uid || typeof uid !== "string") {
@@ -1735,6 +1745,8 @@ export const recalibrateCounts = onCall(
       throw new HttpsError("permission-denied", "Only admins can recalibrate counts.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "metadata.counts.recalibrate");
+
     const animalStatuses: AnimalStatus[] = ["available", "under_review", "adopted", "archived"];
     const appStatuses: ApplicationStatus[] = ["pending", "in_review", "approved", "rejected", "withdrawn"];
 
@@ -1792,6 +1804,8 @@ export const recalibrateQueuePositions = onCall(
       logPermissionDenied("application.queue.recalibrate", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can recalibrate queue positions.");
     }
+
+    await assertAdminRateLimit(request.auth.uid, "application.queue.recalibrate");
 
     // Fetch all applications that are linked to a specific animal
     const appsSnap = await db
@@ -1872,6 +1886,8 @@ export const updateFeaturedAnimals = onCall(
       logPermissionDenied("featured_animals.update", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can update featured animals.");
     }
+
+    await assertAdminRateLimit(request.auth.uid, "featured_animals.update");
 
     const { animalIds } = request.data as { animalIds?: unknown };
 
@@ -2091,6 +2107,8 @@ export const getApplicationPII = onCall(
       throw new HttpsError("permission-denied", "Only staff can access PII.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "application.sensitive_data.read", 200);
+
     const { id } = request.data as { id?: string };
     if (typeof id !== "string" || !id.trim()) {
       throw new HttpsError("invalid-argument", "ID da candidatura inválido.");
@@ -2140,6 +2158,8 @@ export const archiveAnimal = onCall(
       logPermissionDenied("animal.archive", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can archive animals.");
     }
+
+    await assertAdminRateLimit(request.auth.uid, "animal.archive");
 
     const { animalId, archiveReason, archiveDetails, archiveDate } = request.data as {
       animalId?: string;
@@ -2244,6 +2264,8 @@ export const updateAnimalStatus = onCall(
       throw new HttpsError("permission-denied", "Only staff can update animal status.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "animal.status.update");
+
     const { animalId, status } = request.data as {
       animalId?: string;
       status?: AnimalStatus;
@@ -2344,6 +2366,8 @@ export const checkRejectionFlag = onCall(
       throw new HttpsError("permission-denied", "Only staff can check rejection flags.");
     }
 
+    await assertAdminRateLimit(request.auth.uid, "rejection_flag.check", 200);
+
     const { applicationId } = request.data as { applicationId?: string };
     if (typeof applicationId !== "string" || !applicationId.trim()) {
       throw new HttpsError("invalid-argument", "ID da candidatura inválido.");
@@ -2439,6 +2463,8 @@ export const deleteRejectionFlag = onCall(
       logPermissionDenied("rejection_flag.delete", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can delete rejection flags.");
     }
+
+    await assertAdminRateLimit(request.auth.uid, "rejection_flag.delete");
 
     const { flagId } = request.data as { flagId?: string };
     if (typeof flagId !== "string" || !flagId.trim()) {
