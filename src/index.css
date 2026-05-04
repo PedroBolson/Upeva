@@ -175,6 +175,11 @@ button {
   transform-origin: center bottom;
 }
 
+.hero-video-fallback {
+  transition: opacity 0.7s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-wordmark-letter { animation: none; }
+  .hero-video-fallback  { transition: none; }
 }

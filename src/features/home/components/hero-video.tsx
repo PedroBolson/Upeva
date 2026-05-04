@@ -9,11 +9,11 @@ const MOBILE_SRC = '/hero/upeva-hero-mobile.mp4'
 const MOBILE_MQ = '(max-width: 767px)'
 
 const LETTERS = [
-  { x: 24,  char: 'u', fill: '#c2247a', delay: '0s'     },
-  { x: 111, char: 'p', fill: '#e72c85', delay: '0.14s'  },
-  { x: 198, char: 'e', fill: '#f05a48', delay: '0.28s'  },
-  { x: 285, char: 'v', fill: '#00a7a0', delay: '0.42s'  },
-  { x: 370, char: 'a', fill: '#4fb760', delay: '0.56s'  },
+  { x: 24, char: 'u', fill: '#c2247a', delay: '0s' },
+  { x: 111, char: 'p', fill: '#e72c85', delay: '0.14s' },
+  { x: 198, char: 'e', fill: '#f05a48', delay: '0.28s' },
+  { x: 285, char: 'v', fill: '#00a7a0', delay: '0.42s' },
+  { x: 370, char: 'a', fill: '#4fb760', delay: '0.56s' },
 ] as const
 
 function getIsMobile(): boolean {
@@ -136,11 +136,10 @@ export function HeroVideo() {
           below text (z-10) so buttons and headings remain accessible at all times. */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none"
+        className="hero-video-fallback absolute inset-0 z-5 flex items-center justify-center pointer-events-none"
         style={{
           backgroundColor: HERO_BG,
           opacity: isVideoReady ? 0 : 1,
-          transition: 'opacity 0.7s ease',
         }}
       >
         <svg
