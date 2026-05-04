@@ -98,7 +98,7 @@ export function HeroVideo() {
         autoPlay
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
         aria-hidden="true"
         onEnded={handleVideoEnded}
         onCanPlay={handleCanPlay}
