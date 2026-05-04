@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "deploy": "bash deploy.sh",
     "test:rules": "XDG_CONFIG_HOME=.firebase/config FIREBASE_CLI_DISABLE_UPDATE_CHECK=true NO_UPDATE_NOTIFIER=1 firebase emulators:exec --project demo-upeva-test --only firestore,storage \"vitest run tests/rules\"",
-    "test:emulators": "npm run test:rules"
+    "test:emulators": "npm run test:rules",
+    "seed:archive-test": "node functions/scripts/seed-archive-test.cjs",
+    "verify:archive-test": "node functions/scripts/verify-archive-test.cjs",
+    "clean:archive-test": "node functions/scripts/clean-archive-test.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
