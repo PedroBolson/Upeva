@@ -119,6 +119,7 @@ export function AnimalDetailPage() {
       >
         <motion.div variants={fadeUp}>
           <AnimalPhotoGallery
+            key={animal.id}
             photos={animal.photos}
             animalName={animal.name}
             coverPhotoIndex={animal.coverPhotoIndex}

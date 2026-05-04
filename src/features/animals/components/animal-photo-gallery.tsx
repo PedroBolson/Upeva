@@ -17,21 +17,26 @@ export function AnimalPhotoGallery({
   className,
 }: AnimalPhotoGalleryProps) {
   const [selected, setSelected] = useState(
-    Math.min(coverPhotoIndex, photos.length - 1),
+    photos.length > 0 ? Math.min(coverPhotoIndex, photos.length - 1) : 0,
   )
   const [direction, setDirection] = useState(0)
 
+  // Clamp the raw index to a valid range whenever photos.length changes (e.g.
+  // async photo updates). This is also the safety net when key-based remounting
+  // has not yet occurred and props have changed ahead of state.
+  const safeSelected = photos.length > 0 ? Math.min(selected, photos.length - 1) : 0
+
   function goTo(index: number) {
-    setDirection(index > selected ? 1 : -1)
+    setDirection(index > safeSelected ? 1 : -1)
     setSelected(index)
   }
 
   function prev() {
-    goTo(selected > 0 ? selected - 1 : photos.length - 1)
+    goTo(safeSelected > 0 ? safeSelected - 1 : photos.length - 1)
   }
 
   function next() {
-    goTo(selected < photos.length - 1 ? selected + 1 : 0)
+    goTo(safeSelected < photos.length - 1 ? safeSelected + 1 : 0)
   }
 
   if (photos.length === 0) {
@@ -71,15 +76,15 @@ export function AnimalPhotoGallery({
       >
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
           <motion.img
-            key={selected}
+            key={safeSelected}
             custom={direction}
             variants={variants}
             initial="enter"
             animate="center"
             exit="exit"
             transition={{ duration: 0.3, ease: 'easeInOut' }}
-            src={photos[selected]}
-            alt={`${animalName} — foto ${selected + 1} de ${photos.length}`}
+            src={photos[safeSelected]}
+            alt={`${animalName} — foto ${safeSelected + 1} de ${photos.length}`}
             className="absolute inset-0 h-full w-full object-cover"
           />
         </AnimatePresence>
@@ -127,7 +132,7 @@ export function AnimalPhotoGallery({
                 aria-label={`Ir para foto ${i + 1}`}
                 className={cn(
                   'h-1.5 rounded-full transition-all duration-200',
-                  i === selected
+                  i === safeSelected
                     ? 'w-4 bg-primary-foreground'
                     : 'w-1.5 bg-primary-foreground/50',
                 )}
@@ -151,10 +156,10 @@ export function AnimalPhotoGallery({
               role="listitem"
               onClick={() => goTo(i)}
               aria-label={`Foto ${i + 1}`}
-              aria-pressed={i === selected}
+              aria-pressed={i === safeSelected}
               className={cn(
                 'h-16 w-16 shrink-0 rounded-lg overflow-hidden border-2 transition-all duration-150',
-                i === selected
+                i === safeSelected
                   ? 'border-primary'
                   : 'border-transparent hover:border-border',
               )}
