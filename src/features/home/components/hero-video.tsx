@@ -8,6 +8,14 @@ const DESKTOP_SRC = '/hero/upeva-hero.mp4'
 const MOBILE_SRC = '/hero/upeva-hero-mobile.mp4'
 const MOBILE_MQ = '(max-width: 767px)'
 
+const LETTERS = [
+  { x: 24,  char: 'u', fill: '#c2247a', delay: '0s'     },
+  { x: 111, char: 'p', fill: '#e72c85', delay: '0.14s'  },
+  { x: 198, char: 'e', fill: '#f05a48', delay: '0.28s'  },
+  { x: 285, char: 'v', fill: '#00a7a0', delay: '0.42s'  },
+  { x: 370, char: 'a', fill: '#4fb760', delay: '0.56s'  },
+] as const
+
 function getIsMobile(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches
 }
@@ -16,6 +24,13 @@ export function HeroVideo() {
   // Initialised synchronously from matchMedia so the correct src is used on
   // the very first render — no flicker, no wrong-video flash.
   const [isMobile, setIsMobile] = useState<boolean>(getIsMobile)
+
+  // Readiness is tracked as "which src string is currently ready to play".
+  // Comparing readySrc === currentSrc naturally resets to false whenever the
+  // breakpoint switches source — no setState in an effect body required.
+  const currentSrc = isMobile ? MOBILE_SRC : DESKTOP_SRC
+  const [readySrc, setReadySrc] = useState<string | null>(null)
+  const isVideoReady = readySrc === currentSrc
 
   const videoRef = useRef<HTMLVideoElement>(null)
   // Mirrors the last isMobile value we acted on. When isMobile === isMobileRef
@@ -63,6 +78,14 @@ export function HeroVideo() {
     video.currentTime = Math.max(video.duration - 0.05, 0)
   }, [])
 
+  // canplay fires when the browser has buffered enough to begin playback —
+  // earlier than canplaythrough (full buffer) so the fallback doesn't linger.
+  // Marking the exact src as ready handles breakpoint changes safely without
+  // reading any ref during render.
+  const handleCanPlay = useCallback(() => {
+    setReadySrc(isMobile ? MOBILE_SRC : DESKTOP_SRC)
+  }, [isMobile])
+
   return (
     <section
       className="relative overflow-hidden min-h-screen"
@@ -78,8 +101,9 @@ export function HeroVideo() {
         preload="metadata"
         aria-hidden="true"
         onEnded={handleVideoEnded}
+        onCanPlay={handleCanPlay}
         className="absolute inset-0 h-full w-full object-cover object-center"
-        src={isMobile ? MOBILE_SRC : DESKTOP_SRC}
+        src={currentSrc}
       />
 
       {/* Mobile overlay — uniform cream tint so text stays readable */}
@@ -106,6 +130,76 @@ export function HeroVideo() {
         className="absolute bottom-0 left-0 right-0 h-20 md:h-28 pointer-events-none"
         style={{ background: 'linear-gradient(to bottom, transparent, var(--background))' }}
       />
+
+      {/* Loading fallback — covers the Hero visual area while the video buffers.
+          Fades out smoothly once canplay fires. Sits above overlays (z-[5]) but
+          below text (z-10) so buttons and headings remain accessible at all times. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none"
+        style={{
+          backgroundColor: HERO_BG,
+          opacity: isVideoReady ? 0 : 1,
+          transition: 'opacity 0.7s ease',
+        }}
+      >
+        <svg
+          width="260"
+          height="75"
+          viewBox="0 0 520 150"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <defs>
+            <filter
+              id="hero-wm-shadow"
+              x="-8%"
+              y="-8%"
+              width="116%"
+              height="124%"
+              colorInterpolationFilters="sRGB"
+            >
+              <feDropShadow
+                dx="0"
+                dy="10"
+                stdDeviation="8"
+                floodColor="#412d1d"
+                floodOpacity="0.22"
+              />
+            </filter>
+          </defs>
+          <g
+            filter="url(#hero-wm-shadow)"
+            fontFamily="Arial Rounded MT Bold, Nunito, Arial, sans-serif"
+            fontSize="106"
+            fontWeight="900"
+            letterSpacing="-6"
+          >
+            {LETTERS.map(({ x, char, fill, delay }) => (
+              <text
+                key={char}
+                x={x}
+                y={108}
+                fill={fill}
+                stroke="#17110f"
+                strokeWidth="14"
+                strokeLinejoin="round"
+                paintOrder="stroke fill"
+                className="hero-wordmark-letter"
+                style={{ animationDelay: delay }}
+              >
+                {char}
+              </text>
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      {/* Screen-reader live region — announces while loading, clears when ready */}
+      <p role="status" className="sr-only">
+        {isVideoReady ? '' : 'Carregando animação da Upeva'}
+      </p>
 
       {/* Text content — z-10 above all overlays.
           pt-20 clears the fixed 64 px header on mobile.

@@ -163,3 +163,18 @@ button {
 .hero-animate-h1   { animation: hero-fade-in-up 0.7s ease-out 1.0s  both; }
 .hero-animate-body { animation: hero-fade-in-up 0.7s ease-out 1.35s both; }
 .hero-animate-ctas { animation: hero-fade-in-up 0.7s ease-out 1.7s  both; }
+
+@keyframes hero-letter-bounce {
+  0%, 100% { transform: translateY(0); }
+  45%       { transform: translateY(-10px); }
+}
+
+.hero-wordmark-letter {
+  animation: hero-letter-bounce 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-wordmark-letter { animation: none; }
+}
