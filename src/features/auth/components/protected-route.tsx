@@ -28,7 +28,7 @@ export function ProtectedRoute({
   allowedRoles,
   redirectDeniedTo,
 }: ProtectedRouteProps) {
-  const { user, userProfile, authLoading, profileLoading } = useAuthContext()
+  const { user, userProfile, authLoading, profileLoading, profileResolved } = useAuthContext()
   const location = useLocation()
   const routeRoles = allowedRoles ?? (requiredRole ? [requiredRole] : undefined)
 
@@ -38,7 +38,7 @@ export function ProtectedRoute({
     return <Navigate to="/admin/login" state={{ from: location }} replace />
   }
 
-  if (routeRoles && profileLoading) {
+  if (routeRoles && (profileLoading || !profileResolved)) {
     return <PageSpinner />
   }
 

@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { Input, Button } from '@/components/ui'
 import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { useAuth } from '@/features/auth/hooks/use-auth'
+import { isStaffRole } from '@/features/auth/utils/roles'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const loginSchema = z.object({
@@ -23,7 +24,7 @@ type LoginForm = z.infer<typeof loginSchema>
 type ResetForm = z.infer<typeof resetSchema>
 
 export function LoginPage() {
-  const { user, login, signingIn, error, sendPasswordReset } = useAuth()
+  const { user, userProfile, profileResolved, login, signingIn, error, sendPasswordReset } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/admin'
@@ -36,8 +37,10 @@ export function LoginPage() {
   useDocumentTitle(buildAdminTitle(mode === 'login' ? 'Entrar' : 'Recuperar senha'))
 
   useEffect(() => {
-    if (user) navigate(from, { replace: true })
-  }, [user, from, navigate])
+    if (user && profileResolved && isStaffRole(userProfile?.role)) {
+      navigate(from, { replace: true })
+    }
+  }, [user, userProfile?.role, profileResolved, from, navigate])
 
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
   const resetForm = useForm<ResetForm>({ resolver: zodResolver(resetSchema) })

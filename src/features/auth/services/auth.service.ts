@@ -9,10 +9,22 @@ import { doc, getDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '@/lib/firebase'
 import type { UserProfile } from '@/types/common'
+import { isStaffRole } from '../utils/roles'
+
+const profileResolutionPromises = new Map<
+  string,
+  { user: User; promise: Promise<UserProfile | null> }
+>()
 
 export async function signIn(email: string, password: string): Promise<User> {
   const { user } = await signInWithEmailAndPassword(auth, email, password)
-  await assertIsStaff(user.uid)
+  const profile = await resolveUserProfile(user)
+
+  if (!profile || !isStaffRole(profile.role)) {
+    await firebaseSignOut(auth)
+    throw new Error('Acesso não autorizado.')
+  }
+
   return user
 }
 
@@ -39,10 +51,44 @@ export async function refreshUserClaims(): Promise<void> {
   await fn({})
 }
 
-async function assertIsStaff(uid: string): Promise<void> {
-  const profile = await getUserProfile(uid)
-  if (!profile || !['admin', 'reviewer'].includes(profile.role)) {
-    await firebaseSignOut(auth)
-    throw new Error('Acesso não autorizado.')
+export async function resolveUserProfile(user: User): Promise<UserProfile | null> {
+  const existingResolution = profileResolutionPromises.get(user.uid)
+  if (existingResolution?.user === user) return existingResolution.promise
+
+  const resolutionPromise = resolveUserProfileAndClaims(user)
+  profileResolutionPromises.set(user.uid, { user, promise: resolutionPromise })
+
+  try {
+    return await resolutionPromise
+  } finally {
+    if (profileResolutionPromises.get(user.uid)?.promise === resolutionPromise) {
+      profileResolutionPromises.delete(user.uid)
+    }
+  }
+}
+
+async function resolveUserProfileAndClaims(user: User): Promise<UserProfile | null> {
+  const profile = await getUserProfile(user.uid)
+
+  if (profile && isStaffRole(profile.role)) {
+    await ensureRoleClaim(user, profile.role)
+  }
+
+  return profile
+}
+
+async function ensureRoleClaim(user: User, role: UserProfile['role']): Promise<void> {
+  const tokenResult = await user.getIdTokenResult()
+
+  if (tokenResult.claims.role === role) {
+    return
+  }
+
+  await refreshUserClaims()
+  await user.getIdToken(true)
+
+  const refreshedTokenResult = await user.getIdTokenResult(true)
+  if (refreshedTokenResult.claims.role !== role) {
+    throw new Error('Não foi possível atualizar as permissões da sessão.')
   }
 }

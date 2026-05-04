@@ -3,7 +3,7 @@ import { signIn, signOut, resetPassword } from '../services/auth.service'
 import { useAuthContext } from '../contexts/auth.context'
 
 export function useAuth() {
-  const { user, userProfile, authLoading, profileLoading } = useAuthContext()
+  const { user, userProfile, authLoading, profileLoading, profileResolved } = useAuthContext()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,7 +29,18 @@ export function useAuth() {
     await resetPassword(email)
   }
 
-  return { user, userProfile, authLoading, profileLoading, signingIn, error, login, logout, sendPasswordReset }
+  return {
+    user,
+    userProfile,
+    authLoading,
+    profileLoading,
+    profileResolved,
+    signingIn,
+    error,
+    login,
+    logout,
+    sendPasswordReset,
+  }
 }
 
 function getAuthErrorMessage(err: unknown): string {

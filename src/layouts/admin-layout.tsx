@@ -197,10 +197,10 @@ function AdminSidebar({
 }
 
 export function AdminLayout() {
-  const { user, userProfile, authLoading, profileLoading } = useAuthContext()
+  const { user, userProfile, authLoading, profileLoading, profileResolved } = useAuthContext()
   const location = useLocation()
 
-  if (authLoading || (user && profileLoading)) {
+  if (authLoading || (user && (profileLoading || !profileResolved))) {
     return <AdminAuthLoadingState />
   }
 

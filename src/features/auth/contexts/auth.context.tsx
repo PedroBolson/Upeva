@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
-import { getUserProfile, refreshUserClaims } from '../services/auth.service'
+import { resolveUserProfile } from '../services/auth.service'
 import type { UserProfile } from '@/types/common'
 
 interface AuthContextValue {
@@ -9,6 +9,7 @@ interface AuthContextValue {
   userProfile: UserProfile | null
   authLoading: boolean
   profileLoading: boolean
+  profileResolved: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -18,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [profileResolved, setProfileResolved] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -31,23 +33,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!firebaseUser) {
         setUserProfile(null)
         setProfileLoading(false)
+        setProfileResolved(true)
         setAuthLoading(false)
         return
       }
 
       setUserProfile(null)
       setProfileLoading(true)
+      setProfileResolved(false)
       setAuthLoading(false)
 
       void (async () => {
         try {
-          const tokenResult = await firebaseUser.getIdTokenResult()
-          if (!tokenResult.claims['role']) {
-            await refreshUserClaims()
-            await firebaseUser.getIdToken(true)
-          }
-
-          const profile = await getUserProfile(firebaseUser.uid)
+          const profile = await resolveUserProfile(firebaseUser)
 
           if (!active || currentRequestId !== requestId) {
             return
@@ -65,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
           if (active && currentRequestId === requestId) {
             setProfileLoading(false)
+            setProfileResolved(true)
           }
         }
       })()
@@ -78,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, authLoading, profileLoading }}>
+    <AuthContext.Provider value={{ user, userProfile, authLoading, profileLoading, profileResolved }}>
       {children}
     </AuthContext.Provider>
   )
