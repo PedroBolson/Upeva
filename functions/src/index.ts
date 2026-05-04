@@ -5,6 +5,7 @@ import { FieldValue, getFirestore, Timestamp, type Transaction } from "firebase-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { logger } from "firebase-functions/v2";
 import * as functionsV1 from "firebase-functions/v1";
 import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./lib/crypto.util.js";
 import { generatePdf, type AddressData } from "./lib/pdf.helper.js";
@@ -140,6 +141,82 @@ type AnimalRecord = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+type SafeLogValue = string | number | boolean | null | undefined;
+
+type SafeLogContext = {
+  operation: string;
+  uid?: string;
+  actorRole?: string;
+  targetId?: string;
+  status?: string;
+  result?: string;
+  errorCode?: string;
+  stack?: string;
+  [key: string]: SafeLogValue;
+};
+
+function safeLogContext(context: SafeLogContext): Record<string, SafeLogValue> {
+  return Object.fromEntries(
+    Object.entries(context).filter(([, value]) =>
+      value === null || ["string", "number", "boolean"].includes(typeof value)
+    )
+  ) as Record<string, SafeLogValue>;
+}
+
+function safeRole(role: unknown): string | undefined {
+  return typeof role === "string" ? role : undefined;
+}
+
+function errorCodeOf(err: unknown): string {
+  if (err instanceof HttpsError) return err.code;
+
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : "unknown";
+}
+
+function logOperationStart(context: SafeLogContext): void {
+  logger.info("cloud_function_operation_started", safeLogContext({
+    ...context,
+    result: "started",
+  }));
+}
+
+function logOperationSuccess(context: SafeLogContext): void {
+  logger.info("cloud_function_operation_succeeded", safeLogContext({
+    ...context,
+    result: context.result ?? "success",
+  }));
+}
+
+function logPermissionDenied(
+  operation: string,
+  uid: string | undefined,
+  actorRole: unknown,
+  targetId?: string,
+): void {
+  logger.warn("cloud_function_permission_denied", safeLogContext({
+    operation,
+    uid,
+    actorRole: safeRole(actorRole),
+    targetId,
+    result: "permission_denied",
+    errorCode: "permission-denied",
+  }));
+}
+
+function logOperationError(
+  err: unknown,
+  context: SafeLogContext,
+): void {
+  const stack = err instanceof Error ? err.stack : undefined;
+  logger.error("cloud_function_operation_failed", safeLogContext({
+    ...context,
+    result: "error",
+    errorCode: errorCodeOf(err),
+    stack,
+  }));
+}
+
 function isUserRole(value: unknown): value is UserRole {
   return value === "admin" || value === "reviewer";
 }
@@ -189,8 +266,10 @@ const INTERNAL_TRACEABILITY_FIELDS = [
   "archiveReason",
   "archiveDetails",
   "archiveDate",
+  "archivedAt",
   "archivedBy",
   "archivedByLabel",
+  "driveUrl",
   "roleUpdatedBy",
   "roleUpdatedByLabel",
   "roleUpdatedAt",
@@ -857,6 +936,15 @@ async function deleteStorageFilesFromUrls(urls: unknown): Promise<void> {
   );
 }
 
+function readApplicationPIIForArchive(data: Record<string, unknown>) {
+  return {
+    cpf: decrypt(data.cpf as string),
+    phone: decrypt(data.phone as string),
+    birthDate: decrypt(data.birthDate as string),
+    address: JSON.parse(decrypt(data.address as string)),
+  };
+}
+
 // ── onUserCreated: mirror Firebase Auth user → Firestore users/{uid} ──────────
 // The first mirrored user becomes admin for bootstrap. Later users do not receive
 // an automatic staff role; they must be created through createUser by an admin.
@@ -918,6 +1006,7 @@ export const createUser = onCall(
     // Melhoria 3: use token claim instead of a Firestore read
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("user.create", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can create users.");
     }
 
@@ -950,35 +1039,63 @@ export const createUser = onCall(
       throw new HttpsError("invalid-argument", "Senha deve conter ao menos um número.");
     }
 
-    const actorLabel = getActorLabel(request.auth);
-    const newUser = await adminAuth.createUser({ email, password, displayName });
-    const userPayload: Record<string, unknown> = {
-      uid: newUser.uid,
-      email,
-      displayName,
-      role,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy: request.auth.uid,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: request.auth.uid,
-      roleUpdatedAt: FieldValue.serverTimestamp(),
-      roleUpdatedBy: request.auth.uid,
-    };
-    if (actorLabel) {
-      userPayload.updatedByLabel = actorLabel;
-      userPayload.roleUpdatedByLabel = actorLabel;
-    }
+    logOperationStart({
+      operation: "user.create",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      status: role,
+    });
 
+    let newUserUid: string | undefined;
     try {
-      await db.collection("users").doc(newUser.uid).set(userPayload);
+      const actorLabel = getActorLabel(request.auth);
+      const newUser = await adminAuth.createUser({ email, password, displayName });
+      newUserUid = newUser.uid;
+      const userPayload: Record<string, unknown> = {
+        uid: newUser.uid,
+        email,
+        displayName,
+        role,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: request.auth.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.auth.uid,
+        roleUpdatedAt: FieldValue.serverTimestamp(),
+        roleUpdatedBy: request.auth.uid,
+      };
+      if (actorLabel) {
+        userPayload.updatedByLabel = actorLabel;
+        userPayload.roleUpdatedByLabel = actorLabel;
+      }
 
-      await adminAuth.setCustomUserClaims(newUser.uid, { role });
+      try {
+        await db.collection("users").doc(newUser.uid).set(userPayload);
+
+        await adminAuth.setCustomUserClaims(newUser.uid, { role });
+      } catch (err) {
+        await adminAuth.deleteUser(newUser.uid).catch(() => undefined);
+        throw err;
+      }
+
+      logOperationSuccess({
+        operation: "user.create",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: newUser.uid,
+        status: role,
+      });
+
+      return { uid: newUser.uid };
     } catch (err) {
-      await adminAuth.deleteUser(newUser.uid).catch(() => undefined);
+      logOperationError(err, {
+        operation: "user.create",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: newUserUid,
+        status: role,
+      });
       throw err;
     }
-
-    return { uid: newUser.uid };
   }
 );
 
@@ -992,6 +1109,7 @@ export const updateUserRole = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("user.role.update", request.auth.uid, callerRole);
       throw new HttpsError(
         "permission-denied",
         "Only admins can update roles."
@@ -1010,25 +1128,52 @@ export const updateUserRole = onCall(
       );
     }
 
-    // Update Custom Claims first so Auth rules are consistent immediately
-    await adminAuth.setCustomUserClaims(uid, { role });
+    logOperationStart({
+      operation: "user.role.update",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId: uid,
+      status: role,
+    });
 
-    const actorLabel = getActorLabel(request.auth);
-    const payload: Record<string, unknown> = {
-      role,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: request.auth.uid,
-      roleUpdatedAt: FieldValue.serverTimestamp(),
-      roleUpdatedBy: request.auth.uid,
-    };
-    if (actorLabel) {
-      payload.updatedByLabel = actorLabel;
-      payload.roleUpdatedByLabel = actorLabel;
+    try {
+      // Update Custom Claims first so Auth rules are consistent immediately
+      await adminAuth.setCustomUserClaims(uid, { role });
+
+      const actorLabel = getActorLabel(request.auth);
+      const payload: Record<string, unknown> = {
+        role,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.auth.uid,
+        roleUpdatedAt: FieldValue.serverTimestamp(),
+        roleUpdatedBy: request.auth.uid,
+      };
+      if (actorLabel) {
+        payload.updatedByLabel = actorLabel;
+        payload.roleUpdatedByLabel = actorLabel;
+      }
+
+      await db.collection("users").doc(uid).update(payload);
+
+      logOperationSuccess({
+        operation: "user.role.update",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: uid,
+        status: role,
+      });
+
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "user.role.update",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: uid,
+        status: role,
+      });
+      throw err;
     }
-
-    await db.collection("users").doc(uid).update(payload);
-
-    return { success: true };
   }
 );
 
@@ -1205,6 +1350,7 @@ export const updateApplicationReview = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("application.review.update", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can review applications.");
     }
     const actorUid = request.auth.uid;
@@ -1228,231 +1374,266 @@ export const updateApplicationReview = onCall(
       throw new HttpsError("invalid-argument", "Status da candidatura inválido.");
     }
 
-    const appRef = db.collection("applications").doc(id.trim());
-
-    // DECLINED: delete immediately — no PDF, no flag, no further processing
-    if (status === "declined") {
-      const snap = await appRef.get();
-      if (!snap.exists) {
-        throw new HttpsError("not-found", "Candidatura não encontrada.");
-      }
-      await appRef.delete();
-      return { success: true };
-    }
-
-    // REJECTED: validate required fields before proceeding
-    if (status === "rejected") {
-      if (!isRejectionReason(request.data.rejectionReason)) {
-        throw new HttpsError("invalid-argument", "Motivo de rejeição inválido.");
-      }
-      const details = typeof request.data.rejectionDetails === "string" ?
-        request.data.rejectionDetails.trim() :
-        "";
-      if (details.length < REJECTION_DETAILS_MIN_LENGTH) {
-        throw new HttpsError(
-          "invalid-argument",
-          `Descrição deve ter no mínimo ${REJECTION_DETAILS_MIN_LENGTH} caracteres.`
-        );
-      }
-    }
-
-    const requestedAnimalId = typeof request.data.animalId === "string" &&
-      request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
-    const adminNotes = typeof request.data.adminNotes === "string" ?
-      request.data.adminNotes.trim() : undefined;
-    if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
-
-    let resolvedAnimalId: string | undefined;
-    let resolvedAnimalName: string | undefined;
-
-    await db.runTransaction(async (transaction) => {
-      const appSnap = await transaction.get(appRef);
-      if (!appSnap.exists) {
-        throw new HttpsError("not-found", "Candidatura não encontrada.");
-      }
-
-      const application = appSnap.data() as ApplicationRecord;
-      const isGeneralInterest = isGeneralInterestApplication(application);
-      const currentAnimalId = application.animalId;
-      let nextAnimalId = currentAnimalId;
-      let nextAnimalName = application.animalName;
-      let linkedAnimal: AnimalRecord | null = null;
-
-      if (requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
-        throw new HttpsError(
-          "failed-precondition",
-          "Apenas candidaturas gerais podem trocar de animal."
-        );
-      }
-
-      if (isGeneralInterest && requestedAnimalId) {
-        const animalRef = db.collection("animals").doc(requestedAnimalId);
-        const animalSnap = await transaction.get(animalRef);
-
-        if (!animalSnap.exists) {
-          throw new HttpsError("not-found", "Animal não encontrado.");
-        }
-
-        const animal = animalSnap.data() as AnimalRecord;
-        if (animal.species !== application.species) {
-          throw new HttpsError(
-            "failed-precondition",
-            "A espécie do animal não corresponde à candidatura."
-          );
-        }
-
-        const isSameCurrentAnimal = requestedAnimalId === currentAnimalId;
-        if (!isSameCurrentAnimal && animal.status !== "available" && animal.status !== "under_review") {
-          throw new HttpsError(
-            "failed-precondition",
-            "Só é possível vincular animais disponíveis ou em análise a uma candidatura geral."
-          );
-        }
-
-        if (!animalMatchesGeneralApplication(application, animal)) {
-          throw new HttpsError(
-            "failed-precondition",
-            "O animal selecionado não corresponde às preferências desta candidatura."
-          );
-        }
-
-        nextAnimalId = requestedAnimalId;
-        nextAnimalName = typeof animal.name === "string" ? animal.name.trim() : undefined;
-        linkedAnimal = animal;
-      }
-
-      if (status === "approved") {
-        if (!nextAnimalId) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Aprovações exigem um animal vinculado."
-          );
-        }
-
-        const animalRef = db.collection("animals").doc(nextAnimalId);
-        const animalSnap = linkedAnimal ? null : await transaction.get(animalRef);
-        const animal = linkedAnimal ?? (animalSnap?.data() as AnimalRecord | undefined);
-
-        if (!animal) {
-          throw new HttpsError("not-found", "Animal não encontrado.");
-        }
-
-        if (
-          typeof animal.adoptedApplicationId === "string" &&
-          animal.adoptedApplicationId !== id.trim()
-        ) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Este animal já está vinculado a outra adoção concluída."
-          );
-        }
-
-        const approvedSnap = await transaction.get(
-          db.collection("applications")
-            .where("animalId", "==", nextAnimalId)
-            .where("status", "==", "approved")
-        );
-
-        const conflictingApproved = approvedSnap.docs.find((doc) => doc.id !== id.trim());
-        if (conflictingApproved) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Já existe outra candidatura aprovada para este animal."
-          );
-        }
-      }
-
-      // Recompute queue position when a new animal is linked to a general interest application
-      let newQueuePosition: number | undefined;
-      const animalLinkChanged = isGeneralInterest && nextAnimalId && nextAnimalId !== currentAnimalId;
-      if (animalLinkChanged) {
-        const activeSnap = await transaction.get(
-          db.collection("applications")
-            .where("animalId", "==", nextAnimalId)
-            .where("status", "in", ["pending", "in_review"])
-        );
-        const activeCount = activeSnap.docs.filter((d) => d.id !== id.trim()).length;
-        newQueuePosition = activeCount + 1;
-      }
-
-      const payload: Record<string, unknown> = {
-        status,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: actorUid,
-      };
-      if (actorLabel) payload.updatedByLabel = actorLabel;
-
-      if (status === "approved" || status === "rejected" || status === "withdrawn") {
-        payload.reviewedBy = actorUid;
-        payload.reviewedAt = FieldValue.serverTimestamp();
-        payload.reviewAction = status;
-        if (actorLabel) payload.reviewedByLabel = actorLabel;
-      }
-
-      if (status === "rejected") {
-        payload.rejectionReason = request.data.rejectionReason;
-        payload.rejectionDetails = (request.data.rejectionDetails as string).trim();
-        payload.pendingExport = true;
-      }
-
-      if (adminNotes !== undefined) {
-        payload.adminNotes = adminNotes;
-      }
-
-      if (isGeneralInterest && nextAnimalId && nextAnimalName) {
-        payload.animalId = nextAnimalId;
-        payload.animalName = nextAnimalName;
-      }
-
-      if (newQueuePosition !== undefined) {
-        payload.queuePosition = newQueuePosition;
-        payload.waitlistEntry = newQueuePosition > 1;
-      }
-
-      resolvedAnimalId = nextAnimalId;
-      resolvedAnimalName = nextAnimalName;
-      transaction.update(appRef, payload);
+    const targetId = id.trim();
+    logOperationStart({
+      operation: "application.review.update",
+      uid: actorUid,
+      actorRole: safeRole(callerRole),
+      targetId,
+      status,
     });
 
-    // When approved, convert other active candidates for the same animal to general interest
-    if (status === "approved" && resolvedAnimalId) {
-      const [activeSnap, animalSnap] = await Promise.all([
-        db.collection("applications")
-          .where("animalId", "==", resolvedAnimalId)
-          .where("status", "in", ["pending", "in_review"])
-          .get(),
-        db.collection("animals").doc(resolvedAnimalId).get(),
-      ]);
-      const animal = animalSnap.data() as AnimalRecord | undefined;
-      const others = activeSnap.docs.filter((d) => d.id !== id.trim());
-      if (others.length > 0) {
-        const batch = db.batch();
-        for (const docSnap of others) {
-          const appData = docSnap.data() as ApplicationRecord;
-          const update: Record<string, unknown> = {
-            previousAnimalId: resolvedAnimalId,
-            previousAnimalName: resolvedAnimalName ?? null,
-            animalId: FieldValue.delete(),
-            animalName: FieldValue.delete(),
-            queuePosition: FieldValue.delete(),
-            waitlistEntry: FieldValue.delete(),
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedBy: actorUid,
-          };
-          if (actorLabel) update.updatedByLabel = actorLabel;
-          if (animal && !appData.preferredSex) {
-            if (animal.sex) update.preferredSex = animal.sex;
-          }
-          if (animal && appData.species === "dog" && !appData.preferredSize) {
-            if (animal.size) update.preferredSize = animal.size;
-          }
-          batch.update(docSnap.ref, update);
-        }
-        await batch.commit();
-      }
-    }
+    try {
+      const appRef = db.collection("applications").doc(targetId);
 
-    return { success: true };
+      // DECLINED: delete immediately — no PDF, no flag, no further processing
+      if (status === "declined") {
+        const snap = await appRef.get();
+        if (!snap.exists) {
+          throw new HttpsError("not-found", "Candidatura não encontrada.");
+        }
+        await appRef.delete();
+        logOperationSuccess({
+          operation: "application.review.update",
+          uid: actorUid,
+          actorRole: safeRole(callerRole),
+          targetId,
+          status,
+        });
+        return { success: true };
+      }
+
+      // REJECTED: validate required fields before proceeding
+      if (status === "rejected") {
+        if (!isRejectionReason(request.data.rejectionReason)) {
+          throw new HttpsError("invalid-argument", "Motivo de rejeição inválido.");
+        }
+        const details = typeof request.data.rejectionDetails === "string" ?
+          request.data.rejectionDetails.trim() :
+          "";
+        if (details.length < REJECTION_DETAILS_MIN_LENGTH) {
+          throw new HttpsError(
+            "invalid-argument",
+            `Descrição deve ter no mínimo ${REJECTION_DETAILS_MIN_LENGTH} caracteres.`
+          );
+        }
+      }
+
+      const requestedAnimalId = typeof request.data.animalId === "string" &&
+      request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
+      const adminNotes = typeof request.data.adminNotes === "string" ?
+        request.data.adminNotes.trim() : undefined;
+      if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
+
+      let resolvedAnimalId: string | undefined;
+      let resolvedAnimalName: string | undefined;
+
+      await db.runTransaction(async (transaction) => {
+        const appSnap = await transaction.get(appRef);
+        if (!appSnap.exists) {
+          throw new HttpsError("not-found", "Candidatura não encontrada.");
+        }
+
+        const application = appSnap.data() as ApplicationRecord;
+        const isGeneralInterest = isGeneralInterestApplication(application);
+        const currentAnimalId = application.animalId;
+        let nextAnimalId = currentAnimalId;
+        let nextAnimalName = application.animalName;
+        let linkedAnimal: AnimalRecord | null = null;
+
+        if (requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Apenas candidaturas gerais podem trocar de animal."
+          );
+        }
+
+        if (isGeneralInterest && requestedAnimalId) {
+          const animalRef = db.collection("animals").doc(requestedAnimalId);
+          const animalSnap = await transaction.get(animalRef);
+
+          if (!animalSnap.exists) {
+            throw new HttpsError("not-found", "Animal não encontrado.");
+          }
+
+          const animal = animalSnap.data() as AnimalRecord;
+          if (animal.species !== application.species) {
+            throw new HttpsError(
+              "failed-precondition",
+              "A espécie do animal não corresponde à candidatura."
+            );
+          }
+
+          const isSameCurrentAnimal = requestedAnimalId === currentAnimalId;
+          if (!isSameCurrentAnimal && animal.status !== "available" && animal.status !== "under_review") {
+            throw new HttpsError(
+              "failed-precondition",
+              "Só é possível vincular animais disponíveis ou em análise a uma candidatura geral."
+            );
+          }
+
+          if (!animalMatchesGeneralApplication(application, animal)) {
+            throw new HttpsError(
+              "failed-precondition",
+              "O animal selecionado não corresponde às preferências desta candidatura."
+            );
+          }
+
+          nextAnimalId = requestedAnimalId;
+          nextAnimalName = typeof animal.name === "string" ? animal.name.trim() : undefined;
+          linkedAnimal = animal;
+        }
+
+        if (status === "approved") {
+          if (!nextAnimalId) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Aprovações exigem um animal vinculado."
+            );
+          }
+
+          const animalRef = db.collection("animals").doc(nextAnimalId);
+          const animalSnap = linkedAnimal ? null : await transaction.get(animalRef);
+          const animal = linkedAnimal ?? (animalSnap?.data() as AnimalRecord | undefined);
+
+          if (!animal) {
+            throw new HttpsError("not-found", "Animal não encontrado.");
+          }
+
+          if (
+            typeof animal.adoptedApplicationId === "string" &&
+          animal.adoptedApplicationId !== targetId
+          ) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Este animal já está vinculado a outra adoção concluída."
+            );
+          }
+
+          const approvedSnap = await transaction.get(
+            db.collection("applications")
+              .where("animalId", "==", nextAnimalId)
+              .where("status", "==", "approved")
+          );
+
+          const conflictingApproved = approvedSnap.docs.find((doc) => doc.id !== targetId);
+          if (conflictingApproved) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Já existe outra candidatura aprovada para este animal."
+            );
+          }
+        }
+
+        // Recompute queue position when a new animal is linked to a general interest application
+        let newQueuePosition: number | undefined;
+        const animalLinkChanged = isGeneralInterest && nextAnimalId && nextAnimalId !== currentAnimalId;
+        if (animalLinkChanged) {
+          const activeSnap = await transaction.get(
+            db.collection("applications")
+              .where("animalId", "==", nextAnimalId)
+              .where("status", "in", ["pending", "in_review"])
+          );
+          const activeCount = activeSnap.docs.filter((d) => d.id !== targetId).length;
+          newQueuePosition = activeCount + 1;
+        }
+
+        const payload: Record<string, unknown> = {
+          status,
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: actorUid,
+        };
+        if (actorLabel) payload.updatedByLabel = actorLabel;
+
+        if (status === "approved" || status === "rejected" || status === "withdrawn") {
+          payload.reviewedBy = actorUid;
+          payload.reviewedAt = FieldValue.serverTimestamp();
+          payload.reviewAction = status;
+          if (actorLabel) payload.reviewedByLabel = actorLabel;
+        }
+
+        if (status === "rejected") {
+          payload.rejectionReason = request.data.rejectionReason;
+          payload.rejectionDetails = (request.data.rejectionDetails as string).trim();
+          payload.pendingExport = true;
+        }
+
+        if (adminNotes !== undefined) {
+          payload.adminNotes = adminNotes;
+        }
+
+        if (isGeneralInterest && nextAnimalId && nextAnimalName) {
+          payload.animalId = nextAnimalId;
+          payload.animalName = nextAnimalName;
+        }
+
+        if (newQueuePosition !== undefined) {
+          payload.queuePosition = newQueuePosition;
+          payload.waitlistEntry = newQueuePosition > 1;
+        }
+
+        resolvedAnimalId = nextAnimalId;
+        resolvedAnimalName = nextAnimalName;
+        transaction.update(appRef, payload);
+      });
+
+      // When approved, convert other active candidates for the same animal to general interest
+      if (status === "approved" && resolvedAnimalId) {
+        const [activeSnap, animalSnap] = await Promise.all([
+          db.collection("applications")
+            .where("animalId", "==", resolvedAnimalId)
+            .where("status", "in", ["pending", "in_review"])
+            .get(),
+          db.collection("animals").doc(resolvedAnimalId).get(),
+        ]);
+        const animal = animalSnap.data() as AnimalRecord | undefined;
+        const others = activeSnap.docs.filter((d) => d.id !== targetId);
+        if (others.length > 0) {
+          const batch = db.batch();
+          for (const docSnap of others) {
+            const appData = docSnap.data() as ApplicationRecord;
+            const update: Record<string, unknown> = {
+              previousAnimalId: resolvedAnimalId,
+              previousAnimalName: resolvedAnimalName ?? null,
+              animalId: FieldValue.delete(),
+              animalName: FieldValue.delete(),
+              queuePosition: FieldValue.delete(),
+              waitlistEntry: FieldValue.delete(),
+              updatedAt: FieldValue.serverTimestamp(),
+              updatedBy: actorUid,
+            };
+            if (actorLabel) update.updatedByLabel = actorLabel;
+            if (animal && !appData.preferredSex) {
+              if (animal.sex) update.preferredSex = animal.sex;
+            }
+            if (animal && appData.species === "dog" && !appData.preferredSize) {
+              if (animal.size) update.preferredSize = animal.size;
+            }
+            batch.update(docSnap.ref, update);
+          }
+          await batch.commit();
+        }
+      }
+
+      logOperationSuccess({
+        operation: "application.review.update",
+        uid: actorUid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status,
+      });
+
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "application.review.update",
+        uid: actorUid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status,
+      });
+      throw err;
+    }
   }
 );
 
@@ -1466,6 +1647,7 @@ export const deleteUser = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("user.delete", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can delete users.");
     }
 
@@ -1479,10 +1661,34 @@ export const deleteUser = onCall(
       throw new HttpsError("failed-precondition", "Você não pode excluir sua própria conta.");
     }
 
-    await adminAuth.deleteUser(uid);
-    await db.collection("users").doc(uid).delete();
+    logOperationStart({
+      operation: "user.delete",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId: uid,
+    });
 
-    return { success: true };
+    try {
+      await adminAuth.deleteUser(uid);
+      await db.collection("users").doc(uid).delete();
+
+      logOperationSuccess({
+        operation: "user.delete",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: uid,
+      });
+
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "user.delete",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId: uid,
+      });
+      throw err;
+    }
   }
 );
 
@@ -1503,6 +1709,7 @@ export const refreshUserClaims = onCall(
 
     const role = snap.data()?.role;
     if (!isUserRole(role)) {
+      logPermissionDenied("user.claims.refresh", request.auth.uid, role);
       throw new HttpsError("permission-denied", "Invalid user role.");
     }
 
@@ -1524,6 +1731,7 @@ export const recalibrateCounts = onCall(
     // Melhoria 3: use token claim instead of a Firestore read
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("metadata.counts.recalibrate", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can recalibrate counts.");
     }
 
@@ -1581,6 +1789,7 @@ export const recalibrateQueuePositions = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("application.queue.recalibrate", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can recalibrate queue positions.");
     }
 
@@ -1660,6 +1869,7 @@ export const updateFeaturedAnimals = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("featured_animals.update", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can update featured animals.");
     }
 
@@ -1877,6 +2087,7 @@ export const getApplicationPII = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("application.sensitive_data.read", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can access PII.");
     }
 
@@ -1926,6 +2137,7 @@ export const archiveAnimal = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("animal.archive", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can archive animals.");
     }
 
@@ -1951,40 +2163,68 @@ export const archiveAnimal = onCall(
       throw new HttpsError("invalid-argument", "Data do ocorrido inválida.");
     }
 
-    const animalRef = db.collection("animals").doc(animalId.trim());
-    const animalSnap = await animalRef.get();
-
-    if (!animalSnap.exists) {
-      throw new HttpsError("not-found", "Animal não encontrado.");
-    }
-
-    const animal = animalSnap.data() as AnimalRecord;
-    if (animal.status === "adopted") {
-      throw new HttpsError(
-        "failed-precondition",
-        "Animais adotados não podem ser arquivados diretamente."
-      );
-    }
-
-    const actorLabel = getActorLabel(request.auth);
-    const payload: Record<string, unknown> = {
+    const targetId = animalId.trim();
+    logOperationStart({
+      operation: "animal.archive",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId,
       status: "archived",
-      archiveReason,
-      archiveDetails: details,
-      archiveDate,
-      archivedAt: FieldValue.serverTimestamp(),
-      archivedBy: request.auth.uid,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: request.auth.uid,
-    };
-    if (actorLabel) {
-      payload.archivedByLabel = actorLabel;
-      payload.updatedByLabel = actorLabel;
+    });
+
+    try {
+      const animalRef = db.collection("animals").doc(targetId);
+      const animalSnap = await animalRef.get();
+
+      if (!animalSnap.exists) {
+        throw new HttpsError("not-found", "Animal não encontrado.");
+      }
+
+      const animal = animalSnap.data() as AnimalRecord;
+      if (animal.status === "adopted") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Animais adotados não podem ser arquivados diretamente."
+        );
+      }
+
+      const actorLabel = getActorLabel(request.auth);
+      const payload: Record<string, unknown> = {
+        status: "archived",
+        archiveReason,
+        archiveDetails: details,
+        archiveDate,
+        archivedAt: FieldValue.serverTimestamp(),
+        archivedBy: request.auth.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.auth.uid,
+      };
+      if (actorLabel) {
+        payload.archivedByLabel = actorLabel;
+        payload.updatedByLabel = actorLabel;
+      }
+
+      await animalRef.update(payload);
+
+      logOperationSuccess({
+        operation: "animal.archive",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status: "archived",
+      });
+
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "animal.archive",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status: "archived",
+      });
+      throw err;
     }
-
-    await animalRef.update(payload);
-
-    return { success: true };
   }
 );
 
@@ -2000,6 +2240,7 @@ export const updateAnimalStatus = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("animal.status.update", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can update animal status.");
     }
 
@@ -2021,34 +2262,69 @@ export const updateAnimalStatus = onCall(
       );
     }
 
-    const animalRef = db.collection("animals").doc(animalId.trim());
-    const animalSnap = await animalRef.get();
-    if (!animalSnap.exists) {
-      throw new HttpsError("not-found", "Animal não encontrado.");
+    const targetId = animalId.trim();
+    let operation = "animal.status.update";
+    try {
+      const animalRef = db.collection("animals").doc(targetId);
+      const animalSnap = await animalRef.get();
+      if (!animalSnap.exists) {
+        throw new HttpsError("not-found", "Animal não encontrado.");
+      }
+
+      const animal = animalSnap.data() as AnimalRecord;
+      operation = animal.status === "archived" ?
+        "animal.restore" :
+        "animal.status.update";
+
+      logOperationStart({
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status,
+      });
+
+      const update: Record<string, unknown> = {
+        status,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      if (status === "adopted") {
+        const actorLabel = getActorLabel(request.auth);
+        update.updatedBy = request.auth.uid;
+        if (actorLabel) update.updatedByLabel = actorLabel;
+      } else {
+        update.updatedBy = FieldValue.delete();
+        update.updatedByLabel = FieldValue.delete();
+        update.archiveReason = FieldValue.delete();
+        update.archiveDetails = FieldValue.delete();
+        update.archiveDate = FieldValue.delete();
+        update.archivedBy = FieldValue.delete();
+        update.archivedByLabel = FieldValue.delete();
+        update.archivedAt = FieldValue.delete();
+      }
+
+      await animalRef.update(update);
+
+      logOperationSuccess({
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status,
+      });
+
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        status,
+      });
+      throw err;
     }
-
-    const update: Record<string, unknown> = {
-      status,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    if (status === "adopted") {
-      const actorLabel = getActorLabel(request.auth);
-      update.updatedBy = request.auth.uid;
-      if (actorLabel) update.updatedByLabel = actorLabel;
-    } else {
-      update.updatedBy = FieldValue.delete();
-      update.updatedByLabel = FieldValue.delete();
-      update.archiveReason = FieldValue.delete();
-      update.archiveDetails = FieldValue.delete();
-      update.archiveDate = FieldValue.delete();
-      update.archivedBy = FieldValue.delete();
-      update.archivedByLabel = FieldValue.delete();
-      update.archivedAt = FieldValue.delete();
-    }
-
-    await animalRef.update(update);
-    return { success: true };
   }
 );
 
@@ -2064,6 +2340,7 @@ export const checkRejectionFlag = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("rejection_flag.check", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only staff can check rejection flags.");
     }
 
@@ -2072,35 +2349,78 @@ export const checkRejectionFlag = onCall(
       throw new HttpsError("invalid-argument", "ID da candidatura inválido.");
     }
 
-    const appSnap = await db.collection("applications").doc(applicationId.trim()).get();
-    if (!appSnap.exists) {
-      throw new HttpsError("not-found", "Candidatura não encontrada.");
-    }
+    const targetId = applicationId.trim();
+    logOperationStart({
+      operation: "rejection_flag.check",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId,
+    });
 
-    const data = appSnap.data() as Record<string, unknown>;
-
-    let rawCpf: string;
     try {
-      rawCpf = decrypt(data.cpf as string);
-    } catch {
-      throw new HttpsError("internal", "Falha ao decifrar CPF para verificação de flag.");
+      const appSnap = await db.collection("applications").doc(targetId).get();
+      if (!appSnap.exists) {
+        throw new HttpsError("not-found", "Candidatura não encontrada.");
+      }
+
+      const data = appSnap.data() as Record<string, unknown>;
+
+      let rawCpf: string;
+      try {
+        rawCpf = decrypt(data.cpf as string);
+      } catch {
+        throw new HttpsError("internal", "Falha ao decifrar CPF para verificação de flag.");
+      }
+
+      if (!rawCpf) {
+        logOperationSuccess({
+          operation: "rejection_flag.check",
+          uid: request.auth.uid,
+          actorRole: safeRole(callerRole),
+          targetId,
+          result: "not_flagged",
+        });
+        return { flagged: false };
+      }
+
+      const cpfHash = hmac(rawCpf);
+      const flagSnap = await db.collection("rejectionFlags").doc(cpfHash).get();
+
+      if (!flagSnap.exists) {
+        logOperationSuccess({
+          operation: "rejection_flag.check",
+          uid: request.auth.uid,
+          actorRole: safeRole(callerRole),
+          targetId,
+          result: "not_flagged",
+        });
+        return { flagged: false };
+      }
+
+      const flag = flagSnap.data() as Record<string, unknown>;
+      logOperationSuccess({
+        operation: "rejection_flag.check",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        result: "flagged",
+      });
+      return {
+        flagged: true,
+        flagId: cpfHash,
+        reason: flag.reason ?? null,
+        rejectionCount: flag.rejectionCount ?? 1,
+        rejectedAt: flag.rejectedAt ?? null,
+      };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "rejection_flag.check",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+      });
+      throw err;
     }
-
-    if (!rawCpf) return { flagged: false };
-
-    const cpfHash = hmac(rawCpf);
-    const flagSnap = await db.collection("rejectionFlags").doc(cpfHash).get();
-
-    if (!flagSnap.exists) return { flagged: false };
-
-    const flag = flagSnap.data() as Record<string, unknown>;
-    return {
-      flagged: true,
-      flagId: cpfHash,
-      reason: flag.reason ?? null,
-      rejectionCount: flag.rejectionCount ?? 1,
-      rejectedAt: flag.rejectedAt ?? null,
-    };
   }
 );
 
@@ -2116,6 +2436,7 @@ export const deleteRejectionFlag = onCall(
 
     const callerRole = request.auth.token?.role;
     if (callerRole !== "admin") {
+      logPermissionDenied("rejection_flag.delete", request.auth.uid, callerRole);
       throw new HttpsError("permission-denied", "Only admins can delete rejection flags.");
     }
 
@@ -2124,15 +2445,35 @@ export const deleteRejectionFlag = onCall(
       throw new HttpsError("invalid-argument", "ID da flag inválido.");
     }
 
-    const flagRef = db.collection("rejectionFlags").doc(flagId.trim());
-    const flagSnap = await flagRef.get();
+    logOperationStart({
+      operation: "rejection_flag.delete",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+    });
 
-    if (!flagSnap.exists) {
-      throw new HttpsError("not-found", "Flag não encontrada.");
+    try {
+      const flagRef = db.collection("rejectionFlags").doc(flagId.trim());
+      const flagSnap = await flagRef.get();
+
+      if (!flagSnap.exists) {
+        throw new HttpsError("not-found", "Flag não encontrada.");
+      }
+
+      await flagRef.delete();
+      logOperationSuccess({
+        operation: "rejection_flag.delete",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+      });
+      return { success: true };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "rejection_flag.delete",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+      });
+      throw err;
     }
-
-    await flagRef.delete();
-    return { success: true };
   }
 );
 
@@ -2142,49 +2483,64 @@ export const deleteRejectionFlag = onCall(
 export const cleanOperationalData = onSchedule(
   { schedule: "0 3 * * *", timeZone: "America/Sao_Paulo", region: "southamerica-east1" },
   async () => {
-    const now = Timestamp.now();
-    const BATCH_MAX = 400;
+    const operation = "cleanup.operational_data";
+    logOperationStart({ operation });
 
-    // rateLimits expirados
-    const rateLimitsSnap = await db.collection("rateLimits")
-      .where("expiresAt", "<=", now)
-      .limit(BATCH_MAX)
-      .get();
+    try {
+      const now = Timestamp.now();
+      const BATCH_MAX = 400;
 
-    // _processedEvents expirados
-    const processedEventsSnap = await db.collection("_processedEvents")
-      .where("expiresAt", "<=", now)
-      .limit(BATCH_MAX)
-      .get();
+      // rateLimits expirados
+      const rateLimitsSnap = await db.collection("rateLimits")
+        .where("expiresAt", "<=", now)
+        .limit(BATCH_MAX)
+        .get();
 
-    // animalSimilarityCache órfão — animal não existe mais
-    const cacheSnap = await db.collection("animalSimilarityCache").limit(500).get();
-    const orphanCacheRefs: FirebaseFirestore.DocumentReference[] = [];
-    for (const cacheDoc of cacheSnap.docs) {
-      const animalSnap = await db.collection("animals").doc(cacheDoc.id).get();
-      if (!animalSnap.exists) {
-        orphanCacheRefs.push(cacheDoc.ref);
+      // _processedEvents expirados
+      const processedEventsSnap = await db.collection("_processedEvents")
+        .where("expiresAt", "<=", now)
+        .limit(BATCH_MAX)
+        .get();
+
+      // animalSimilarityCache órfão — animal não existe mais
+      const cacheSnap = await db.collection("animalSimilarityCache").limit(500).get();
+      const orphanCacheRefs: FirebaseFirestore.DocumentReference[] = [];
+      for (const cacheDoc of cacheSnap.docs) {
+        const animalSnap = await db.collection("animals").doc(cacheDoc.id).get();
+        if (!animalSnap.exists) {
+          orphanCacheRefs.push(cacheDoc.ref);
+        }
       }
+
+      let batch = db.batch();
+      let opCount = 0;
+
+      const addToBatch = async (ref: FirebaseFirestore.DocumentReference) => {
+        batch.delete(ref);
+        opCount++;
+        if (opCount >= BATCH_MAX) {
+          await batch.commit();
+          batch = db.batch();
+          opCount = 0;
+        }
+      };
+
+      for (const doc of rateLimitsSnap.docs) await addToBatch(doc.ref);
+      for (const doc of processedEventsSnap.docs) await addToBatch(doc.ref);
+      for (const ref of orphanCacheRefs) await addToBatch(ref);
+
+      if (opCount > 0) await batch.commit();
+
+      logOperationSuccess({
+        operation,
+        rateLimitsDeleted: rateLimitsSnap.size,
+        processedEventsDeleted: processedEventsSnap.size,
+        orphanCacheDeleted: orphanCacheRefs.length,
+      });
+    } catch (err) {
+      logOperationError(err, { operation });
+      throw err;
     }
-
-    let batch = db.batch();
-    let opCount = 0;
-
-    const addToBatch = async (ref: FirebaseFirestore.DocumentReference) => {
-      batch.delete(ref);
-      opCount++;
-      if (opCount >= BATCH_MAX) {
-        await batch.commit();
-        batch = db.batch();
-        opCount = 0;
-      }
-    };
-
-    for (const doc of rateLimitsSnap.docs) await addToBatch(doc.ref);
-    for (const doc of processedEventsSnap.docs) await addToBatch(doc.ref);
-    for (const ref of orphanCacheRefs) await addToBatch(ref);
-
-    if (opCount > 0) await batch.commit();
   }
 );
 
@@ -2198,181 +2554,187 @@ export const archiveAndCleanup = onSchedule(
     secrets: [piiEncryptionKey, hmacSecretKey, ...driveSecrets],
   },
   async () => {
-    const now = Date.now();
-    const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
-    const ONG_NAME = "Upeva Adoções";
-    const year = new Date().getFullYear();
+    const operation = "drive.archive_cleanup";
+    logOperationStart({ operation });
 
-    function readPII(data: Record<string, unknown>) {
-      return {
-        cpf: decrypt(data.cpf as string),
-        phone: decrypt(data.phone as string),
-        birthDate: decrypt(data.birthDate as string),
-        address: JSON.parse(decrypt(data.address as string)),
-      };
-    }
+    try {
+      const now = Date.now();
+      const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
+      const ONG_NAME = "Upeva Adoções";
+      const year = new Date().getFullYear();
 
-    // ── 1. approved > 30 dias → PDF contrato → Drive → deletar ──────────────
-    const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-    const approvedSnap = await db.collection("applications")
-      .where("status", "==", "approved")
-      .where("updatedAt", "<=", approvedCutoff)
-      .limit(400)
-      .get();
+      // ── 1. approved > 30 dias → PDF contrato → Drive → deletar ──────────────
+      const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+      const approvedSnap = await db.collection("applications")
+        .where("status", "==", "approved")
+        .where("updatedAt", "<=", approvedCutoff)
+        .limit(400)
+        .get();
 
-    for (const docSnap of approvedSnap.docs) {
-      const data = docSnap.data() as Record<string, unknown>;
-      const pii = readPII(data);
-      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.contracts, year);
-      const approvedAt = data.reviewedAt instanceof Timestamp ?
-        data.reviewedAt.toDate() :
-        (data.updatedAt as Timestamp).toDate();
-      const pdfBuffer = await generatePdf("contract", {
-        applicationId: docSnap.id,
-        fullName: data.fullName as string,
-        email: data.email as string,
-        cpf: pii.cpf,
-        phone: pii.phone,
-        birthDate: pii.birthDate,
-        address: pii.address as AddressData,
-        animalId: (data.animalId as string) ?? "",
-        animalName: (data.animalName as string) ?? "Animal",
-        species: (data.species as string) ?? "dog",
-        approvedAt,
-        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
-        ongName: ONG_NAME,
-      });
-      const driveUrl = await uploadToDrive(
-        pdfBuffer,
-        `contrato_${docSnap.id}_${year}.pdf`,
-        folderId
-      );
+      for (const docSnap of approvedSnap.docs) {
+        const data = docSnap.data() as Record<string, unknown>;
+        const pii = readApplicationPIIForArchive(data);
+        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.contracts, year);
+        const approvedAt = data.reviewedAt instanceof Timestamp ?
+          data.reviewedAt.toDate() :
+          (data.updatedAt as Timestamp).toDate();
+        const pdfBuffer = await generatePdf("contract", {
+          applicationId: docSnap.id,
+          fullName: data.fullName as string,
+          email: data.email as string,
+          cpf: pii.cpf,
+          phone: pii.phone,
+          birthDate: pii.birthDate,
+          address: pii.address as AddressData,
+          animalId: (data.animalId as string) ?? "",
+          animalName: (data.animalName as string) ?? "Animal",
+          species: (data.species as string) ?? "dog",
+          approvedAt,
+          reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
+          ongName: ONG_NAME,
+        });
+        const driveUrl = await uploadToDrive(
+          pdfBuffer,
+          `contrato_${docSnap.id}_${year}.pdf`,
+          folderId
+        );
 
-      // Deletar animal + fotos do Storage + candidatura (PDF salvo no Drive)
-      const animalId = data.animalId as string | undefined;
-      if (animalId) {
-        const animalSnap = await db.collection("animals").doc(animalId).get();
-        if (animalSnap.exists) {
-          const animalData = animalSnap.data() as Record<string, unknown>;
-          await deleteStorageFilesFromUrls(animalData.photos);
-          await animalSnap.ref.delete();
+        // Deletar animal + fotos do Storage + candidatura (PDF salvo no Drive)
+        const animalId = data.animalId as string | undefined;
+        if (animalId) {
+          const animalSnap = await db.collection("animals").doc(animalId).get();
+          if (animalSnap.exists) {
+            const animalData = animalSnap.data() as Record<string, unknown>;
+            await deleteStorageFilesFromUrls(animalData.photos);
+            await animalSnap.ref.delete();
+          }
         }
-      }
-      void driveUrl; // PDF já está no Drive; não há doc para atualizar
-      await docSnap.ref.delete();
-    }
-
-    // ── 2. rejected + pendingExport → PDF rejeição → Drive → flag → deletar ──
-    const rejectedSnap = await db.collection("applications")
-      .where("status", "==", "rejected")
-      .where("pendingExport", "==", true)
-      .limit(400)
-      .get();
-
-    for (const docSnap of rejectedSnap.docs) {
-      const data = docSnap.data() as Record<string, unknown>;
-      const pii = readPII(data);
-      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.rejections, year);
-      const rejectedAt = data.reviewedAt instanceof Timestamp ?
-        data.reviewedAt.toDate() :
-        (data.updatedAt as Timestamp).toDate();
-      const pdfBuffer = await generatePdf("rejection", {
-        applicationId: docSnap.id,
-        fullName: data.fullName as string,
-        email: data.email as string,
-        cpf: pii.cpf,
-        animalName: data.animalName as string | undefined,
-        species: (data.species as string) ?? "dog",
-        rejectionReason: data.rejectionReason as string,
-        rejectionDetails: data.rejectionDetails as string,
-        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
-        rejectedAt,
-        ongName: ONG_NAME,
-      });
-      const driveUrl = await uploadToDrive(
-        pdfBuffer,
-        `rejeicao_${docSnap.id}_${year}.pdf`,
-        folderId
-      );
-
-      // Criar/atualizar flag com HMAC do CPF
-      const cpfHash = hmac(pii.cpf);
-      const flagRef = db.collection("rejectionFlags").doc(cpfHash);
-      const existingFlag = await flagRef.get();
-      if (existingFlag.exists) {
-        await flagRef.update({
-          rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
-          rejectedAt: FieldValue.serverTimestamp(),
-          reason: data.rejectionReason,
-          driveUrl,
-        });
-      } else {
-        await flagRef.set({
-          emailHash: hmac(data.email as string),
-          rejectionCount: 1,
-          rejectedAt: FieldValue.serverTimestamp(),
-          reason: data.rejectionReason,
-          driveUrl,
-        });
+        void driveUrl; // PDF já está no Drive; não há doc para atualizar
+        await docSnap.ref.delete();
       }
 
-      await docSnap.ref.delete();
-    }
+      // ── 2. rejected + pendingExport → PDF rejeição → Drive → flag → deletar ──
+      const rejectedSnap = await db.collection("applications")
+        .where("status", "==", "rejected")
+        .where("pendingExport", "==", true)
+        .limit(400)
+        .get();
 
-    // ── 3. withdrawn > 30 dias → deletar (sem PDF, sem flag) ────────────────
-    const withdrawnCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-    const withdrawnSnap = await db.collection("applications")
-      .where("status", "==", "withdrawn")
-      .where("updatedAt", "<=", withdrawnCutoff)
-      .limit(400)
-      .get();
+      for (const docSnap of rejectedSnap.docs) {
+        const data = docSnap.data() as Record<string, unknown>;
+        const pii = readApplicationPIIForArchive(data);
+        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.rejections, year);
+        const rejectedAt = data.reviewedAt instanceof Timestamp ?
+          data.reviewedAt.toDate() :
+          (data.updatedAt as Timestamp).toDate();
+        const pdfBuffer = await generatePdf("rejection", {
+          applicationId: docSnap.id,
+          fullName: data.fullName as string,
+          email: data.email as string,
+          cpf: pii.cpf,
+          animalName: data.animalName as string | undefined,
+          species: (data.species as string) ?? "dog",
+          rejectionReason: data.rejectionReason as string,
+          rejectionDetails: data.rejectionDetails as string,
+          reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
+          rejectedAt,
+          ongName: ONG_NAME,
+        });
+        const driveUrl = await uploadToDrive(
+          pdfBuffer,
+          `rejeicao_${docSnap.id}_${year}.pdf`,
+          folderId
+        );
 
-    for (const docSnap of withdrawnSnap.docs) {
-      await docSnap.ref.delete();
-    }
+        // Criar/atualizar flag com HMAC do CPF
+        const cpfHash = hmac(pii.cpf);
+        const flagRef = db.collection("rejectionFlags").doc(cpfHash);
+        const existingFlag = await flagRef.get();
+        if (existingFlag.exists) {
+          await flagRef.update({
+            rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
+            rejectedAt: FieldValue.serverTimestamp(),
+            reason: data.rejectionReason,
+            driveUrl,
+          });
+        } else {
+          await flagRef.set({
+            emailHash: hmac(data.email as string),
+            rejectionCount: 1,
+            rejectedAt: FieldValue.serverTimestamp(),
+            reason: data.rejectionReason,
+            driveUrl,
+          });
+        }
 
-    // ── 4. archived animals > 30 dias → PDF arquivamento → Drive → deletar ──
-    const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-    const archivedAnimalsSnap = await db.collection("animals")
-      .where("status", "==", "archived")
-      .where("archivedAt", "<=", archivedCutoff)
-      .limit(400)
-      .get();
+        await docSnap.ref.delete();
+      }
 
-    for (const docSnap of archivedAnimalsSnap.docs) {
-      const data = docSnap.data() as Record<string, unknown>;
-      const folderId = await getYearlyFolderId(DRIVE_FOLDERS.archivedAnimals, year);
-      const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
-      const archivedAt = data.archivedAt instanceof Timestamp ?
-        (data.archivedAt as Timestamp).toDate() :
-        new Date();
+      // ── 3. withdrawn > 30 dias → deletar (sem PDF, sem flag) ────────────────
+      const withdrawnCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+      const withdrawnSnap = await db.collection("applications")
+        .where("status", "==", "withdrawn")
+        .where("updatedAt", "<=", withdrawnCutoff)
+        .limit(400)
+        .get();
 
-      const pdfBuffer = await generatePdf("archivedAnimal", {
-        animalId: docSnap.id,
-        animalName: (data.name as string) ?? "Animal",
-        species: (data.species as string) ?? "dog",
-        sex: data.sex as string | undefined,
-        size: data.size as string | undefined,
-        // Guard: legado sem motivo usa valor padrão
-        archiveReason: (data.archiveReason as string) ?? "Não informado (registro legado)",
-        archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
-        archiveDate: new Date(archiveDate),
-        archivedAt,
-        archivedBy: data.archivedByLabel as string | undefined,
-        ongName: ONG_NAME,
+      for (const docSnap of withdrawnSnap.docs) {
+        await docSnap.ref.delete();
+      }
+
+      // ── 4. archived animals > 30 dias → PDF arquivamento → Drive → deletar ──
+      const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+      const archivedAnimalsSnap = await db.collection("animals")
+        .where("status", "==", "archived")
+        .where("archivedAt", "<=", archivedCutoff)
+        .limit(400)
+        .get();
+
+      for (const docSnap of archivedAnimalsSnap.docs) {
+        const data = docSnap.data() as Record<string, unknown>;
+        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.archivedAnimals, year);
+        const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
+        const archivedAt = data.archivedAt instanceof Timestamp ?
+          (data.archivedAt as Timestamp).toDate() :
+          new Date();
+
+        const pdfBuffer = await generatePdf("archivedAnimal", {
+          animalId: docSnap.id,
+          animalName: (data.name as string) ?? "Animal",
+          species: (data.species as string) ?? "dog",
+          sex: data.sex as string | undefined,
+          size: data.size as string | undefined,
+          // Guard: legado sem motivo usa valor padrão
+          archiveReason: (data.archiveReason as string) ?? "Não informado (registro legado)",
+          archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
+          archiveDate: new Date(archiveDate),
+          archivedAt,
+          archivedBy: data.archivedByLabel as string | undefined,
+          ongName: ONG_NAME,
+        });
+
+        const driveUrl = await uploadToDrive(
+          pdfBuffer,
+          `animal_${docSnap.id}_${year}.pdf`,
+          folderId
+        );
+        await deleteStorageFilesFromUrls(data.photos);
+        await docSnap.ref.update({ driveUrl });
+        await docSnap.ref.delete();
+      }
+      logOperationSuccess({
+        operation,
+        approvedApplications: approvedSnap.size,
+        rejectedApplications: rejectedSnap.size,
+        withdrawnApplications: withdrawnSnap.size,
+        archivedAnimals: archivedAnimalsSnap.size,
       });
-
-      const driveUrl = await uploadToDrive(
-        pdfBuffer,
-        `animal_${docSnap.id}_${year}.pdf`,
-        folderId
-      );
-      await deleteStorageFilesFromUrls(data.photos);
-      await docSnap.ref.update({ driveUrl });
-      await docSnap.ref.delete();
+      // onAnimalChanged e onApplicationStatusChanged mantêm metadata/counts via FieldValue.increment.
+      // Não recalibrar aqui — o cron rodar count() antes dos triggers concluírem causaria race condition
+      // que deixa os contadores negativos. Use recalibrateCounts() manualmente se houver drift.
+    } catch (err) {
+      logOperationError(err, { operation });
+      throw err;
     }
-    // onAnimalChanged e onApplicationStatusChanged mantêm metadata/counts via FieldValue.increment.
-    // Não recalibrar aqui — o cron rodar count() antes dos triggers concluírem causaria race condition
-    // que deixa os contadores negativos. Use recalibrateCounts() manualmente se houver drift.
   }
 );

@@ -83,10 +83,15 @@ export async function getYearlyFolderId(baseFolderId: string, year: number): Pro
 
   const newId = created.data.id;
   if (!newId) {
-    throw new Error(`Falha ao criar subpasta ${folderName} no Drive.`);
+    throw new Error("Falha ao criar subpasta anual no Drive.");
   }
 
-  logger.info("drive: subpasta de ano criada", { year: folderName, folderId: newId });
+  logger.info("cloud_function_operation_succeeded", {
+    operation: "drive.folder.year.create",
+    targetId: newId,
+    status: /^\d{4}$/.test(folderName) ? folderName : "invalid_year",
+    result: "success",
+  });
   return newId;
 }
 
@@ -129,11 +134,16 @@ export async function uploadToDrive(
 
   const fileId = res.data.id;
   if (!fileId) {
-    throw new Error(`Falha ao obter ID do arquivo após upload: ${fileName}`);
+    throw new Error("Falha ao obter ID do arquivo após upload.");
   }
 
   const webViewLink = `https://drive.google.com/file/d/${fileId}/view`;
-  logger.info("drive: arquivo enviado", { fileName, fileId });
+  logger.info("cloud_function_operation_succeeded", {
+    operation: "drive.file.upload",
+    targetId: fileId,
+    status: "uploaded",
+    result: "success",
+  });
   return webViewLink;
 }
 

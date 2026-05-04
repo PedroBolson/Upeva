@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Controller, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft, ClipboardList, Loader2, Plus, Star, Trash2, X } from 'lucide-react'
-import { AnimalStatusBadge, Button, Card, Checkbox, Input, Select } from '@/components/ui'
+import { AnimalStatusBadge, Button, Card, Checkbox, Input, Select, useToast } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Textarea } from '@/components/ui/textarea'
 import { FileUpload } from '@/components/ui/file-upload'
@@ -49,8 +49,9 @@ export function AnimalFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isEditing = !!id
+  const { toast } = useToast()
 
-  const { data: animal, isLoading, error } = useAnimal(id)
+  const { data: animal, isLoading, error, refetch: refetchAnimal } = useAnimal(id)
   const { mutateAsync: createAnimal } = useCreateAnimal()
   const { mutateAsync: updateAnimal } = useUpdateAnimal()
   const { mutateAsync: updateAnimalStatus } = useUpdateAnimalStatus()
@@ -187,6 +188,13 @@ export function AnimalFormPage() {
         if (data.status !== animal.status) {
           await updateAnimalStatus({ id: animal.id, status: data.status })
         }
+
+        setExistingPhotos(allPhotos)
+        setRemovedPhotos([])
+        setNewFiles([])
+        setCoverIndex(safeCoverIndex)
+        await refetchAnimal()
+        toast.success('Alterações salvas com sucesso.')
       } else {
         // Create first to get ID, then upload photos
         const animalId = await createAnimal({
@@ -214,9 +222,9 @@ export function AnimalFormPage() {
             data: { photos: uploadedUrls, coverPhotoIndex: 0 },
           })
         }
-      }
 
-      navigate('/admin/animais')
+        navigate('/admin/animais')
+      }
     } catch (err) {
       setSubmitError(getAnimalSaveErrorMessage(err))
     } finally {
