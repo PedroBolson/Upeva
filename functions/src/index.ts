@@ -2694,14 +2694,7 @@ export const cleanOperationalData = onSchedule(
 // PDFs ficam em private-pdfs/** no Firebase Storage (Admin SDK); metadados
 // seguros ficam em archiveFiles/{id}. O documento original só é deletado após
 // upload + escrita de metadados bem-sucedidos.
-export const archiveAndCleanup = onSchedule(
-  {
-    schedule: "0 2 * * 0",
-    timeZone: "America/Sao_Paulo",
-    region: "southamerica-east1",
-    secrets: [piiEncryptionKey, hmacSecretKey],
-  },
-  async () => {
+export async function runArchiveAndCleanup(): Promise<void> {
     const operation = "storage.archive_cleanup";
     logOperationStart({ operation });
 
@@ -2963,7 +2956,16 @@ export const archiveAndCleanup = onSchedule(
       logOperationError(err, { operation });
       throw err;
     }
-  }
+}
+
+export const archiveAndCleanup = onSchedule(
+  {
+    schedule: "0 2 * * 0",
+    timeZone: "America/Sao_Paulo",
+    region: "southamerica-east1",
+    secrets: [piiEncryptionKey, hmacSecretKey],
+  },
+  runArchiveAndCleanup
 );
 
 // ── getArchiveFileUrl: gera URL assinada de curta duração para PDF privado ─────
