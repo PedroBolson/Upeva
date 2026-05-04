@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, Link, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -21,6 +21,8 @@ const heroSystemBarPaths = new Set(['/', '/sobre', '/contato'])
 
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  // Frozen so iOS scroll events fired during menu-open animation don't switch styles mid-flight.
+  const heroOnOpenRef = useRef(false)
   const [scrolled, setScrolled] = useState(() =>
     typeof window !== 'undefined' ? window.scrollY > 8 : false,
   )
@@ -39,6 +41,11 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   // Any scroll immediately returns to normal theme-aware behavior.
   const isHeroNavbar = location.pathname === '/' && !scrolled
 
+  // For the mobile hamburger and menu panel, use the state captured at open time so that
+  // spurious scroll events from iOS Safari during the Framer Motion animation don't flip
+  // the styling mid-flight. Desktop nav uses isHeroNavbar directly (hidden on mobile anyway).
+  const mobileMenuIsHero = menuOpen ? heroOnOpenRef.current : isHeroNavbar
+
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
 
@@ -53,10 +60,8 @@ export function PublicLayout({ children }: PublicLayoutProps) {
       </a>
       <header
         className={cn(
-          'fixed top-0 z-40 w-full transition-all duration-300',
-          scrolled
-            ? 'border-b border-border bg-background/80 backdrop-blur-md shadow-sm'
-            : 'bg-transparent',
+          'fixed top-0 z-40 w-full transition-[background-color,backdrop-filter,box-shadow] duration-300',
+          scrolled ? 'bg-background/80 backdrop-blur-md shadow-sm' : 'bg-transparent',
         )}
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
@@ -117,11 +122,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn(
-                  'md:hidden',
-                  isHeroNavbar && 'text-[#2d1f0e] hover:bg-[#ede0cc]',
-                )}
-                onClick={() => setMenuOpen((o) => !o)}
+                className={cn('md:hidden', mobileMenuIsHero && 'hover:bg-[#ede0cc]')}
+                style={mobileMenuIsHero ? { color: '#2d1f0e' } : undefined}
+                onClick={() => setMenuOpen((o) => {
+                  if (!o) heroOnOpenRef.current = isHeroNavbar
+                  return !o
+                })}
                 aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
                 aria-expanded={menuOpen}
               >
@@ -141,7 +147,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className={cn(
                 'md:hidden overflow-hidden border-t',
-                isHeroNavbar ? 'border-[#d4b896] bg-[#fdf8f0]' : 'border-border bg-background',
+                mobileMenuIsHero ? 'border-[#d4b896] bg-[#fdf8f0]' : 'border-border bg-background',
               )}
             >
               <nav
@@ -157,7 +163,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                     className={({ isActive }) =>
                       cn(
                         'px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                        isHeroNavbar
+                        mobileMenuIsHero
                           ? isActive
                             ? 'text-primary bg-[#f0e4d0]'
                             : 'text-[#2d1f0e] hover:bg-[#ede0cc]'
