@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, Link, ScrollRestoration, useLocation } from 'react-router-dom'
 import { Menu, X, PawPrint, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,7 +22,7 @@ const heroSystemBarPaths = new Set(['/', '/sobre', '/contato'])
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   // Frozen so iOS scroll events fired during menu-open animation don't switch styles mid-flight.
-  const heroOnOpenRef = useRef(false)
+  const [heroOnOpen, setHeroOnOpen] = useState(false)
   const [scrolled, setScrolled] = useState(() =>
     typeof window !== 'undefined' ? window.scrollY > 8 : false,
   )
@@ -44,7 +44,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   // For the mobile hamburger and menu panel, use the state captured at open time so that
   // spurious scroll events from iOS Safari during the Framer Motion animation don't flip
   // the styling mid-flight. Desktop nav uses isHeroNavbar directly (hidden on mobile anyway).
-  const mobileMenuIsHero = menuOpen ? heroOnOpenRef.current : isHeroNavbar
+  const mobileMenuIsHero = menuOpen ? heroOnOpen : isHeroNavbar
 
   const systemBarTone: SystemBarTone =
     !scrolled && heroSystemBarPaths.has(location.pathname) ? 'publicHero' : 'background'
@@ -124,10 +124,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 size="icon"
                 className={cn('md:hidden', mobileMenuIsHero && 'hover:bg-[#ede0cc]')}
                 style={mobileMenuIsHero ? { color: '#2d1f0e' } : undefined}
-                onClick={() => setMenuOpen((o) => {
-                  if (!o) heroOnOpenRef.current = isHeroNavbar
-                  return !o
-                })}
+                onClick={() => {
+                  if (!menuOpen) setHeroOnOpen(isHeroNavbar)
+                  setMenuOpen((o) => !o)
+                }}
                 aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
                 aria-expanded={menuOpen}
               >

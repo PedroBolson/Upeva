@@ -4,9 +4,44 @@ import { PawPrint } from 'lucide-react'
 import { Button } from '@/components/ui'
 
 const HERO_BG = '#fdf8f0'
-const DESKTOP_SRC = '/hero/upeva-hero.mp4'
-const MOBILE_SRC = '/hero/upeva-hero-mobile.mp4'
+const DESKTOP_WEBM_SRC = '/hero/upeva-hero-v2.webm'
+const DESKTOP_MP4_SRC = '/hero/upeva-hero-v2.mp4'
+const DESKTOP_POSTER_SRC = '/hero/upeva-hero-poster-v2.webp'
+const MOBILE_WEBM_SRC = '/hero/upeva-hero-mobile-v2.webm'
+const MOBILE_MP4_SRC = '/hero/upeva-hero-mobile-v2.mp4'
+const MOBILE_POSTER_SRC = '/hero/upeva-hero-mobile-poster-v2.webp'
 const MOBILE_MQ = '(max-width: 767px)'
+const REDUCED_MOTION_MQ = '(prefers-reduced-motion: reduce)'
+
+type NetworkInformationWithSaveData = {
+  saveData?: boolean
+  addEventListener?: (type: 'change', listener: () => void) => void
+  removeEventListener?: (type: 'change', listener: () => void) => void
+}
+
+type HeroVideoVariant = {
+  key: 'desktop' | 'mobile'
+  poster: string
+  sources: Array<{ src: string; type: string }>
+}
+
+const DESKTOP_VARIANT: HeroVideoVariant = {
+  key: 'desktop',
+  poster: DESKTOP_POSTER_SRC,
+  sources: [
+    { src: DESKTOP_WEBM_SRC, type: 'video/webm' },
+    { src: DESKTOP_MP4_SRC, type: 'video/mp4' },
+  ],
+}
+
+const MOBILE_VARIANT: HeroVideoVariant = {
+  key: 'mobile',
+  poster: MOBILE_POSTER_SRC,
+  sources: [
+    { src: MOBILE_WEBM_SRC, type: 'video/webm' },
+    { src: MOBILE_MP4_SRC, type: 'video/mp4' },
+  ],
+}
 
 const LETTERS = [
   { x: 24, char: 'u', fill: '#c2247a', delay: '0s' },
@@ -20,23 +55,38 @@ function getIsMobile(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches
 }
 
-export function HeroVideo() {
-  // Initialised synchronously from matchMedia so the correct src is used on
-  // the very first render — no flicker, no wrong-video flash.
-  const [isMobile, setIsMobile] = useState<boolean>(getIsMobile)
+function getSaveDataEnabled(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const connection = (
+    navigator as Navigator & { connection?: NetworkInformationWithSaveData }
+  ).connection
+  return connection?.saveData === true
+}
 
-  // Readiness is tracked as "which src string is currently ready to play".
-  // Comparing readySrc === currentSrc naturally resets to false whenever the
-  // breakpoint switches source — no setState in an effect body required.
-  const currentSrc = isMobile ? MOBILE_SRC : DESKTOP_SRC
-  const [readySrc, setReadySrc] = useState<string | null>(null)
-  const isVideoReady = readySrc === currentSrc
+function getShouldLoadVideo(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !window.matchMedia(REDUCED_MOTION_MQ).matches &&
+    !getSaveDataEnabled()
+  )
+}
+
+export function HeroVideo() {
+  // Initialised synchronously from matchMedia so the correct variant is used on
+  // the very first render: no flicker, no wrong-video flash.
+  const [isMobile, setIsMobile] = useState<boolean>(getIsMobile)
+  const [shouldLoadVideo, setShouldLoadVideo] = useState<boolean>(getShouldLoadVideo)
+
+  // Readiness is tracked by active variant. Switching breakpoint naturally
+  // resets readiness without needing to clear state in the render path.
+  const currentVariant = isMobile ? MOBILE_VARIANT : DESKTOP_VARIANT
+  const [readyVariant, setReadyVariant] = useState<HeroVideoVariant['key'] | null>(null)
+  const isVideoReady = !shouldLoadVideo || readyVariant === currentVariant.key
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  // Mirrors the last isMobile value we acted on. When isMobile === isMobileRef
-  // the breakpoint hasn't actually changed — skip reload. This correctly
-  // handles both the initial mount and React Strict Mode's double-invoke.
-  const isMobileRef = useRef(isMobile)
+  // Mirrors the last variant/loading mode we acted on. When the key is stable,
+  // scroll, theme changes, and React re-renders never trigger a reload.
+  const videoLoadKeyRef = useRef(`${currentVariant.key}:${shouldLoadVideo}`)
   // Prevents the onEnded handler from firing twice (Safari sometimes fires the
   // ended event more than once on the same playback).
   const hasEndedRef = useRef(false)
@@ -50,21 +100,41 @@ export function HeroVideo() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  // When the breakpoint genuinely changes at runtime, reload the new source and
-  // restart playback. No-ops on initial mount (same value) and on Strict Mode
-  // remount (ref survived cleanup, value still matches).
+  // Track user/network preferences that should avoid autoplaying video.
   useEffect(() => {
-    if (isMobileRef.current === isMobile) return
-    isMobileRef.current = isMobile
+    const motionMq = window.matchMedia(REDUCED_MOTION_MQ)
+    const connection = (
+      navigator as Navigator & { connection?: NetworkInformationWithSaveData }
+    ).connection
+    const updateShouldLoadVideo = () => {
+      setShouldLoadVideo(!motionMq.matches && !getSaveDataEnabled())
+    }
+
+    motionMq.addEventListener('change', updateShouldLoadVideo)
+    connection?.addEventListener?.('change', updateShouldLoadVideo)
+    return () => {
+      motionMq.removeEventListener('change', updateShouldLoadVideo)
+      connection?.removeEventListener?.('change', updateShouldLoadVideo)
+    }
+  }, [])
+
+  // When the breakpoint or loading mode genuinely changes at runtime, reload
+  // the active source list and restart playback. If video loading is disabled,
+  // load() applies the source removal and leaves only the poster visible.
+  useEffect(() => {
+    const videoLoadKey = `${currentVariant.key}:${shouldLoadVideo}`
+    if (videoLoadKeyRef.current === videoLoadKey) return
+    videoLoadKeyRef.current = videoLoadKey
     hasEndedRef.current = false
     const video = videoRef.current
     if (!video) return
     video.load()
+    if (!shouldLoadVideo) return
     video.play().catch(() => {
       // Autoplay may be blocked by the browser — acceptable; the poster/first
       // frame remains visible.
     })
-  }, [isMobile])
+  }, [currentVariant.key, shouldLoadVideo])
 
   // Safari resets currentTime to 0 after a non-looping video ends, causing a
   // visible first-frame flash. We clamp it to just before the last frame.
@@ -80,31 +150,34 @@ export function HeroVideo() {
 
   // canplay fires when the browser has buffered enough to begin playback —
   // earlier than canplaythrough (full buffer) so the fallback doesn't linger.
-  // Marking the exact src as ready handles breakpoint changes safely without
-  // reading any ref during render.
+  // Marking the active variant as ready handles breakpoint changes safely.
   const handleCanPlay = useCallback(() => {
-    setReadySrc(isMobile ? MOBILE_SRC : DESKTOP_SRC)
-  }, [isMobile])
+    setReadyVariant(currentVariant.key)
+  }, [currentVariant.key])
 
   return (
     <section
       className="relative overflow-hidden min-h-screen"
       style={{ backgroundColor: HERO_BG }}
     >
-      {/* Single video element — src is stable within a breakpoint so React never
-          touches the DOM attribute on re-renders, theme changes, or scrolls. */}
+      {/* Single video element with only the active breakpoint's sources attached. */}
       <video
         ref={videoRef}
         autoPlay
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
+        poster={currentVariant.poster}
         aria-hidden="true"
         onEnded={handleVideoEnded}
         onCanPlay={handleCanPlay}
         className="absolute inset-0 h-full w-full object-cover object-center"
-        src={currentSrc}
-      />
+      >
+        {shouldLoadVideo &&
+          currentVariant.sources.map((source) => (
+            <source key={source.type} src={source.src} type={source.type} />
+          ))}
+      </video>
 
       {/* Mobile overlay — uniform cream tint so text stays readable */}
       <div
