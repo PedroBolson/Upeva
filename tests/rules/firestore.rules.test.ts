@@ -218,4 +218,49 @@ describe('Firestore security rules', () => {
       await assertFails(adminDb.doc('rateLimits/hash-only').get())
     })
   })
+
+  describe('archiveFiles', () => {
+    const archiveFileDoc = {
+      type: 'contract',
+      storagePath: 'private-pdfs/contracts/2026/contrato_abc_2026.pdf',
+      fileName: 'contrato_abc_2026.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 12000,
+      year: 2026,
+      applicationId: 'abc',
+      status: 'stored',
+    }
+
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc('archiveFiles/archive-1').set(archiveFileDoc)
+      })
+    })
+
+    it('allows staff to read and list archiveFiles', async () => {
+      const reviewerDb = testEnv.authenticatedContext('reviewer', { role: 'reviewer' }).firestore()
+      const adminDb = testEnv.authenticatedContext('admin', { role: 'admin' }).firestore()
+
+      await assertSucceeds(reviewerDb.doc('archiveFiles/archive-1').get())
+      await assertSucceeds(adminDb.collection('archiveFiles').get())
+    })
+
+    it('denies public and non-staff reads of archiveFiles', async () => {
+      const anonymousDb = testEnv.unauthenticatedContext().firestore()
+      const userDb = testEnv.authenticatedContext('alice').firestore()
+
+      await assertFails(anonymousDb.doc('archiveFiles/archive-1').get())
+      await assertFails(userDb.doc('archiveFiles/archive-1').get())
+      await assertFails(anonymousDb.collection('archiveFiles').get())
+    })
+
+    it('denies all client writes to archiveFiles', async () => {
+      const adminDb = testEnv.authenticatedContext('admin', { role: 'admin' }).firestore()
+      const reviewerDb = testEnv.authenticatedContext('reviewer', { role: 'reviewer' }).firestore()
+
+      await assertFails(adminDb.doc('archiveFiles/new-1').set(archiveFileDoc))
+      await assertFails(reviewerDb.doc('archiveFiles/archive-1').update({ status: 'deleted' }))
+      await assertFails(adminDb.doc('archiveFiles/archive-1').delete())
+    })
+  })
 })

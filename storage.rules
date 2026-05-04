@@ -22,5 +22,12 @@ service firebase.storage {
         ];
       allow delete: if isStaff();
     }
+
+    // Private PDF archive: no direct client access under any circumstances.
+    // Cloud Functions (Admin SDK) write here; signed URLs are issued server-side
+    // only, after role validation, by the getArchiveFileUrl callable.
+    match /private-pdfs/{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }

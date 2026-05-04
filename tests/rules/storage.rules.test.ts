@@ -88,4 +88,31 @@ describe('Storage security rules', () => {
       putAnimalPhoto(context, 'animals/admin/too-large.jpg', 'image/jpeg', 5 * 1024 * 1024),
     )
   })
+
+  describe('private-pdfs path', () => {
+    function putPrivatePdf(context: RulesTestContext, path: string) {
+      const task = context
+        .storage(BUCKET_URL)
+        .ref(path)
+        .put(bytes(16), { contentType: 'application/pdf' })
+
+      return new Promise((resolve, reject) => {
+        task.then(resolve, reject)
+      })
+    }
+
+    it('denies unauthenticated reads and writes under private-pdfs', async () => {
+      const context = testEnv.unauthenticatedContext()
+
+      await assertFails(putPrivatePdf(context, 'private-pdfs/contracts/2026/test.pdf'))
+    })
+
+    it('denies staff writes directly to private-pdfs', async () => {
+      const admin = testEnv.authenticatedContext('admin', { role: 'admin' })
+      const reviewer = testEnv.authenticatedContext('reviewer', { role: 'reviewer' })
+
+      await assertFails(putPrivatePdf(admin, 'private-pdfs/contracts/2026/test.pdf'))
+      await assertFails(putPrivatePdf(reviewer, 'private-pdfs/rejections/2026/test.pdf'))
+    })
+  })
 })

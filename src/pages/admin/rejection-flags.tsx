@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
-import { AlertTriangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Trash2 } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { Button, Card } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useDeleteRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
+import { useGetArchiveFileUrl } from '@/features/admin/hooks/use-archive-files'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 type RejectionFlag = {
@@ -15,7 +16,7 @@ type RejectionFlag = {
   reason: string | null
   rejectionCount: number
   rejectedAt: unknown
-  driveUrl?: string
+  archiveFileId?: string
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -39,6 +40,8 @@ export function RejectionFlagsPage() {
 
   const [flagToDelete, setFlagToDelete] = useState<RejectionFlag | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   const { data: flags = [], isLoading, error, refetch } = useQuery({
     queryKey: ['rejection-flags'],
@@ -53,7 +56,7 @@ export function RejectionFlagsPage() {
           reason: (data.reason as string) ?? null,
           rejectionCount: (data.rejectionCount as number) ?? 1,
           rejectedAt: data.rejectedAt ?? null,
-          driveUrl: data.driveUrl as string | undefined,
+          archiveFileId: data.archiveFileId as string | undefined,
         }
       })
     },
@@ -61,6 +64,7 @@ export function RejectionFlagsPage() {
   })
 
   const { mutate: deleteFlag, isPending: isDeleting } = useDeleteRejectionFlag()
+  const { mutate: fetchUrl } = useGetArchiveFileUrl()
 
   function handleConfirmDelete() {
     if (!flagToDelete) return
@@ -73,6 +77,21 @@ export function RejectionFlagsPage() {
       onError: () => {
         setFlagToDelete(null)
         setDeleteError('Não foi possível remover o alerta. Tente novamente.')
+      },
+    })
+  }
+
+  function handleOpenPdf(archiveFileId: string) {
+    setUrlError(null)
+    setOpeningId(archiveFileId)
+    fetchUrl(archiveFileId, {
+      onSuccess: (url) => {
+        setOpeningId(null)
+        window.open(url, '_blank', 'noopener,noreferrer')
+      },
+      onError: () => {
+        setOpeningId(null)
+        setUrlError('Não foi possível gerar o link do PDF. Tente novamente.')
       },
     })
   }
@@ -142,31 +161,41 @@ export function RejectionFlagsPage() {
                     <span>{REASON_LABELS[flag.reason] ?? flag.reason}</span>
                   )}
                   <span>Registrado em {formatFlagDate(flag.rejectedAt)}</span>
-                  {flag.driveUrl && (
-                    <a
-                      href={flag.driveUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Ver PDF no Drive
-                    </a>
-                  )}
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0 text-muted-foreground hover:text-danger"
-                aria-label="Remover alerta"
-                onClick={() => {
-                  setDeleteError(null)
-                  setFlagToDelete(flag)
-                }}
-              >
-                <Trash2 size={16} />
-              </Button>
+              <div className="flex items-center gap-1 shrink-0">
+                {flag.archiveFileId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-muted-foreground hover:text-primary"
+                    onClick={() => handleOpenPdf(flag.archiveFileId!)}
+                    disabled={openingId === flag.archiveFileId}
+                    aria-label="Abrir PDF de rejeição"
+                  >
+                    {openingId === flag.archiveFileId ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <ExternalLink size={14} />
+                    )}
+                    PDF
+                  </Button>
+                )}
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-danger"
+                  aria-label="Remover alerta"
+                  onClick={() => {
+                    setDeleteError(null)
+                    setFlagToDelete(flag)
+                  }}
+                >
+                  <Trash2 size={16} />
+                </Button>
+              </div>
             </div>
           ))}
         </Card>
@@ -174,6 +203,9 @@ export function RejectionFlagsPage() {
 
       {deleteError && (
         <p role="alert" className="text-sm text-danger">{deleteError}</p>
+      )}
+      {urlError && (
+        <p role="alert" className="text-sm text-danger">{urlError}</p>
       )}
     </div>
   )

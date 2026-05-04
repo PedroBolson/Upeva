@@ -16,12 +16,7 @@ import * as functionsV1 from "firebase-functions/v1";
 import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./lib/crypto.util.js";
 import { assertAdminRateLimit } from "./lib/rate-limit.util.js";
 import { generatePdf, type AddressData } from "./lib/pdf.helper.js";
-import {
-  uploadToDrive,
-  getYearlyFolderId,
-  DRIVE_FOLDERS,
-  driveSecrets,
-} from "./lib/drive.helper.js";
+import { uploadArchivePdf, getArchiveSignedUrl } from "./lib/storage-archive.helper.js";
 
 initializeApp();
 
@@ -281,7 +276,6 @@ const INTERNAL_TRACEABILITY_FIELDS = [
   "archivedAt",
   "archivedBy",
   "archivedByLabel",
-  "driveUrl",
   "roleUpdatedBy",
   "roleUpdatedByLabel",
   "roleUpdatedAt",
@@ -298,7 +292,6 @@ const PUBLIC_ANIMAL_INTERNAL_FIELDS = [
   "archivedBy",
   "archivedByLabel",
   "archivedAt",
-  "driveUrl",
 ];
 
 const VALID_STATES = new Set([
@@ -2698,15 +2691,18 @@ export const cleanOperationalData = onSchedule(
 
 // ── archiveAndCleanup: cron semanal domingo às 2h — exporta e limpa dados ──────
 // Processa em ordem: candidaturas → animais. Cada tipo em lotes de 400.
+// PDFs ficam em private-pdfs/** no Firebase Storage (Admin SDK); metadados
+// seguros ficam em archiveFiles/{id}. O documento original só é deletado após
+// upload + escrita de metadados bem-sucedidos.
 export const archiveAndCleanup = onSchedule(
   {
     schedule: "0 2 * * 0",
     timeZone: "America/Sao_Paulo",
     region: "southamerica-east1",
-    secrets: [piiEncryptionKey, hmacSecretKey, ...driveSecrets],
+    secrets: [piiEncryptionKey, hmacSecretKey],
   },
   async () => {
-    const operation = "drive.archive_cleanup";
+    const operation = "storage.archive_cleanup";
     logOperationStart({ operation });
 
     try {
@@ -2715,7 +2711,7 @@ export const archiveAndCleanup = onSchedule(
       const ONG_NAME = "Upeva Adoções";
       const year = new Date().getFullYear();
 
-      // ── 1. approved > 30 dias → PDF contrato → Drive → deletar ──────────────
+      // ── 1. approved > 30 dias → PDF contrato → Storage → archiveFiles → deletar
       const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
       const approvedSnap = await db.collection("applications")
         .where("status", "==", "approved")
@@ -2726,10 +2722,10 @@ export const archiveAndCleanup = onSchedule(
       for (const docSnap of approvedSnap.docs) {
         const data = docSnap.data() as Record<string, unknown>;
         const pii = readApplicationPIIForArchive(data);
-        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.contracts, year);
         const approvedAt = data.reviewedAt instanceof Timestamp ?
           data.reviewedAt.toDate() :
           (data.updatedAt as Timestamp).toDate();
+        const fileName = `contrato_${docSnap.id}_${year}.pdf`;
         const pdfBuffer = await generatePdf("contract", {
           applicationId: docSnap.id,
           fullName: data.fullName as string,
@@ -2745,13 +2741,40 @@ export const archiveAndCleanup = onSchedule(
           reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
           ongName: ONG_NAME,
         });
-        const driveUrl = await uploadToDrive(
-          pdfBuffer,
-          `contrato_${docSnap.id}_${year}.pdf`,
-          folderId
-        );
 
-        // Deletar animal + fotos do Storage + candidatura (PDF salvo no Drive)
+        let uploaded = false;
+        try {
+          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+            type: "contracts",
+            fileName,
+            year,
+          });
+          await db.collection("archiveFiles").add({
+            type: "contract",
+            storagePath,
+            fileName,
+            contentType: "application/pdf",
+            sizeBytes,
+            year,
+            applicationId: docSnap.id,
+            animalId: (data.animalId as string | undefined) ?? null,
+            animalName: (data.animalName as string | undefined) ?? null,
+            species: (data.species as string | undefined) ?? null,
+            reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
+            createdAt: FieldValue.serverTimestamp(),
+            status: "stored",
+          });
+          uploaded = true;
+        } catch (err) {
+          logOperationError(err, {
+            operation: "storage.archive.contract.upload",
+            targetId: docSnap.id,
+            status: "upload_failed",
+          });
+        }
+
+        if (!uploaded) continue;
+
         const animalId = data.animalId as string | undefined;
         if (animalId) {
           const animalSnap = await db.collection("animals").doc(animalId).get();
@@ -2761,11 +2784,10 @@ export const archiveAndCleanup = onSchedule(
             await animalSnap.ref.delete();
           }
         }
-        void driveUrl; // PDF já está no Drive; não há doc para atualizar
         await docSnap.ref.delete();
       }
 
-      // ── 2. rejected + pendingExport → PDF rejeição → Drive → flag → deletar ──
+      // ── 2. rejected + pendingExport → PDF rejeição → Storage → archiveFiles → flag → deletar
       const rejectedSnap = await db.collection("applications")
         .where("status", "==", "rejected")
         .where("pendingExport", "==", true)
@@ -2775,10 +2797,10 @@ export const archiveAndCleanup = onSchedule(
       for (const docSnap of rejectedSnap.docs) {
         const data = docSnap.data() as Record<string, unknown>;
         const pii = readApplicationPIIForArchive(data);
-        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.rejections, year);
         const rejectedAt = data.reviewedAt instanceof Timestamp ?
           data.reviewedAt.toDate() :
           (data.updatedAt as Timestamp).toDate();
+        const fileName = `rejeicao_${docSnap.id}_${year}.pdf`;
         const pdfBuffer = await generatePdf("rejection", {
           applicationId: docSnap.id,
           fullName: data.fullName as string,
@@ -2792,13 +2814,40 @@ export const archiveAndCleanup = onSchedule(
           rejectedAt,
           ongName: ONG_NAME,
         });
-        const driveUrl = await uploadToDrive(
-          pdfBuffer,
-          `rejeicao_${docSnap.id}_${year}.pdf`,
-          folderId
-        );
 
-        // Criar/atualizar flag com HMAC do CPF
+        let archiveFileId: string | null = null;
+        try {
+          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+            type: "rejections",
+            fileName,
+            year,
+          });
+          const archiveRef = await db.collection("archiveFiles").add({
+            type: "rejection",
+            storagePath,
+            fileName,
+            contentType: "application/pdf",
+            sizeBytes,
+            year,
+            applicationId: docSnap.id,
+            animalId: (data.animalId as string | undefined) ?? null,
+            animalName: (data.animalName as string | undefined) ?? null,
+            species: (data.species as string | undefined) ?? null,
+            reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
+            createdAt: FieldValue.serverTimestamp(),
+            status: "stored",
+          });
+          archiveFileId = archiveRef.id;
+        } catch (err) {
+          logOperationError(err, {
+            operation: "storage.archive.rejection.upload",
+            targetId: docSnap.id,
+            status: "upload_failed",
+          });
+        }
+
+        if (!archiveFileId) continue;
+
         const cpfHash = hmac(pii.cpf);
         const flagRef = db.collection("rejectionFlags").doc(cpfHash);
         const existingFlag = await flagRef.get();
@@ -2807,7 +2856,7 @@ export const archiveAndCleanup = onSchedule(
             rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
             rejectedAt: FieldValue.serverTimestamp(),
             reason: data.rejectionReason,
-            driveUrl,
+            archiveFileId,
           });
         } else {
           await flagRef.set({
@@ -2815,7 +2864,7 @@ export const archiveAndCleanup = onSchedule(
             rejectionCount: 1,
             rejectedAt: FieldValue.serverTimestamp(),
             reason: data.rejectionReason,
-            driveUrl,
+            archiveFileId,
           });
         }
 
@@ -2834,7 +2883,7 @@ export const archiveAndCleanup = onSchedule(
         await docSnap.ref.delete();
       }
 
-      // ── 4. archived animals > 30 dias → PDF arquivamento → Drive → deletar ──
+      // ── 4. archived animals > 30 dias → PDF arquivamento → Storage → archiveFiles → deletar
       const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
       const archivedAnimalsSnap = await db.collection("animals")
         .where("status", "==", "archived")
@@ -2844,12 +2893,11 @@ export const archiveAndCleanup = onSchedule(
 
       for (const docSnap of archivedAnimalsSnap.docs) {
         const data = docSnap.data() as Record<string, unknown>;
-        const folderId = await getYearlyFolderId(DRIVE_FOLDERS.archivedAnimals, year);
         const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
         const archivedAt = data.archivedAt instanceof Timestamp ?
           (data.archivedAt as Timestamp).toDate() :
           new Date();
-
+        const fileName = `animal_${docSnap.id}_${year}.pdf`;
         const pdfBuffer = await generatePdf("archivedAnimal", {
           animalId: docSnap.id,
           animalName: (data.name as string) ?? "Animal",
@@ -2865,15 +2913,42 @@ export const archiveAndCleanup = onSchedule(
           ongName: ONG_NAME,
         });
 
-        const driveUrl = await uploadToDrive(
-          pdfBuffer,
-          `animal_${docSnap.id}_${year}.pdf`,
-          folderId
-        );
+        let uploaded = false;
+        try {
+          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+            type: "archived-animals",
+            fileName,
+            year,
+          });
+          await db.collection("archiveFiles").add({
+            type: "archivedAnimal",
+            storagePath,
+            fileName,
+            contentType: "application/pdf",
+            sizeBytes,
+            year,
+            animalId: docSnap.id,
+            animalName: (data.name as string | undefined) ?? null,
+            species: (data.species as string | undefined) ?? null,
+            reviewerLabel: (data.archivedByLabel as string | undefined) ?? null,
+            createdAt: FieldValue.serverTimestamp(),
+            status: "stored",
+          });
+          uploaded = true;
+        } catch (err) {
+          logOperationError(err, {
+            operation: "storage.archive.animal.upload",
+            targetId: docSnap.id,
+            status: "upload_failed",
+          });
+        }
+
+        if (!uploaded) continue;
+
         await deleteStorageFilesFromUrls(data.photos);
-        await docSnap.ref.update({ driveUrl });
         await docSnap.ref.delete();
       }
+
       logOperationSuccess({
         operation,
         approvedApplications: approvedSnap.size,
@@ -2888,5 +2963,59 @@ export const archiveAndCleanup = onSchedule(
       logOperationError(err, { operation });
       throw err;
     }
+  }
+);
+
+// ── getArchiveFileUrl: gera URL assinada de curta duração para PDF privado ─────
+// Apenas admin/reviewer podem chamar. Valida que storagePath começa com
+// private-pdfs/ para prevenir acesso arbitrário a outros objetos do bucket.
+export const getArchiveFileUrl = onCall(
+  { region: "southamerica-east1", maxInstances: 10 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("archive.signed_url.get", request.auth.uid, callerRole);
+      throw new HttpsError("permission-denied", "Only staff can access archive files.");
+    }
+
+    await assertAdminRateLimit(request.auth.uid, "archive.signed_url.get", 100);
+
+    const { archiveFileId } = request.data as { archiveFileId?: string };
+    if (typeof archiveFileId !== "string" || !archiveFileId.trim()) {
+      throw new HttpsError("invalid-argument", "archiveFileId inválido.");
+    }
+
+    const archiveSnap = await db.collection("archiveFiles").doc(archiveFileId.trim()).get();
+    if (!archiveSnap.exists) {
+      throw new HttpsError("not-found", "Arquivo de arquivamento não encontrado.");
+    }
+
+    const archiveData = archiveSnap.data() as Record<string, unknown>;
+    const storagePath = archiveData.storagePath as string | undefined;
+
+    if (typeof storagePath !== "string" || !storagePath.startsWith("private-pdfs/")) {
+      logOperationError(new Error("Invalid storagePath in archiveFiles document"), {
+        operation: "archive.signed_url.get",
+        uid: request.auth.uid,
+        targetId: archiveFileId.trim(),
+        status: "invalid_path",
+      });
+      throw new HttpsError("internal", "Caminho do arquivo inválido.");
+    }
+
+    logOperationSuccess({
+      operation: "archive.signed_url.get",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId: archiveFileId.trim(),
+      status: "url_generated",
+    });
+
+    const signedUrl = await getArchiveSignedUrl(storagePath);
+    return { url: signedUrl };
   }
 );

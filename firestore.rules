@@ -49,8 +49,7 @@ service cloud.firestore {
         'createdBy', 'updatedBy', 'updatedByLabel',
         'adoptedApplicationId', 'adoptedAt',
         'archiveReason', 'archiveDetails', 'archiveDate',
-        'archivedBy', 'archivedByLabel', 'archivedAt',
-        'driveUrl'
+        'archivedBy', 'archivedByLabel', 'archivedAt'
       ]);
     }
 
@@ -60,7 +59,7 @@ service cloud.firestore {
         'reviewedBy', 'reviewedByLabel', 'reviewedAt', 'reviewAction',
         'adoptedApplicationId', 'adoptedAt',
         'archiveReason', 'archiveDetails', 'archiveDate', 'archivedBy', 'archivedByLabel', 'archivedAt',
-        'driveUrl', 'roleUpdatedBy', 'roleUpdatedByLabel', 'roleUpdatedAt'
+        'roleUpdatedBy', 'roleUpdatedByLabel', 'roleUpdatedAt'
       ]);
     }
 
@@ -156,6 +155,16 @@ service cloud.firestore {
     match /animalSimilarityCache/{animalId} {
       allow read: if true;
       allow write: if false; // Cloud Functions only
+    }
+
+    // ── Archive files (PDF metadata) ──────────────────────────────────────────
+    // Stores safe metadata for PDFs archived in private-pdfs/** Storage path.
+    // Signed URLs are obtained via the getArchiveFileUrl callable, not by
+    // reading storagePath directly. No PII is stored here.
+
+    match /archiveFiles/{fileId} {
+      allow read, list: if isStaff();
+      allow create, update, delete: if false; // Cloud Functions only
     }
 
     // ── Rate limits ────────────────────────────────────────────────────────────
