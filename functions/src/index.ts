@@ -1,7 +1,13 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
-import { FieldValue, getFirestore, Timestamp, type Transaction } from "firebase-admin/firestore";
+import {
+  FieldValue,
+  getFirestore,
+  Timestamp,
+  type DocumentReference,
+  type Transaction,
+} from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -139,6 +145,9 @@ type AnimalRecord = {
   adoptedAt?: unknown;
   activeApplicationCount?: number;
 };
+
+const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] = ["pending", "in_review"];
+const INACTIVE_APPLICATION_STATUSES: ApplicationStatus[] = ["rejected", "withdrawn"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -801,118 +810,155 @@ function animalMatchesGeneralApplication(application: ApplicationRecord, animal:
 
 async function recomputeAnimalState(animalId: string): Promise<void> {
   const animalRef = db.collection("animals").doc(animalId);
-  const animalSnap = await animalRef.get();
 
-  if (!animalSnap.exists) return;
+  await runTransactionWithRetry(async (tx) => {
+    const animalSnap = await tx.get(animalRef);
 
-  const animal = animalSnap.data() as AnimalRecord;
-  // Single query covers all relevant statuses — no extra read needed
-  const relevantAppsSnap = await db
-    .collection("applications")
-    .where("animalId", "==", animalId)
-    .where("status", "in", ["pending", "approved", "in_review", "withdrawn"])
-    .get();
+    if (!animalSnap.exists) return;
 
-  const relevantApps = relevantAppsSnap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as ApplicationRecord),
-  }));
+    const animal = animalSnap.data() as AnimalRecord;
+    // Single query covers all relevant statuses — no extra read needed
+    const relevantAppsSnap = await tx.get(
+      db
+        .collection("applications")
+        .where("animalId", "==", animalId)
+        .where("status", "in", ["pending", "approved", "in_review", "withdrawn"])
+    );
 
-  const approvedApps = relevantApps.filter((app) => app.status === "approved");
-  const inReviewApps = relevantApps.filter((app) => app.status === "in_review");
-  const withdrawnWinner = relevantApps.find(
-    (app) => app.id === animal.adoptedApplicationId && app.status === "withdrawn"
-  );
+    const relevantApps = relevantAppsSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as ApplicationRecord),
+    }));
 
-  // Count active (pending + in_review) for queue position tracking
-  const activeApplicationCount = relevantApps.filter(
-    (app) => app.status === "pending" || app.status === "in_review"
-  ).length;
+    const approvedApps = relevantApps.filter((app) => app.status === "approved");
+    const inReviewApps = relevantApps.filter((app) => app.status === "in_review");
+    const withdrawnWinner = relevantApps.find(
+      (app) => app.id === animal.adoptedApplicationId && app.status === "withdrawn"
+    );
 
-  const winner =
-    approvedApps.find((app) => app.id === animal.adoptedApplicationId) ?? approvedApps[0] ?? null;
+    // Count active (pending + in_review) for queue position tracking
+    const activeApplicationCount = relevantApps.filter(
+      (app) => ACTIVE_APPLICATION_STATUSES.includes(app.status)
+    ).length;
 
-  if (winner) {
-    const update: Record<string, unknown> = {
-      status: "adopted",
-      activeApplicationCount: 0,
-      adoptedApplicationId: winner.id,
-      adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    if (winner.reviewedBy) update.updatedBy = winner.reviewedBy;
-    if (winner.reviewedByLabel) update.updatedByLabel = winner.reviewedByLabel;
-    await animalRef.update(update);
-    return;
-  }
+    const winner =
+      approvedApps.find((app) => app.id === animal.adoptedApplicationId) ?? approvedApps[0] ?? null;
 
-  if (withdrawnWinner) {
-    const update: Record<string, unknown> = {
-      status: "adopted",
-      activeApplicationCount: 0,
-      adoptedApplicationId: withdrawnWinner.id,
-      adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    if (withdrawnWinner.reviewedBy) update.updatedBy = withdrawnWinner.reviewedBy;
-    if (withdrawnWinner.reviewedByLabel) update.updatedByLabel = withdrawnWinner.reviewedByLabel;
-    await animalRef.update(update);
-    return;
-  }
+    if (winner) {
+      const update: Record<string, unknown> = {
+        status: "adopted",
+        activeApplicationCount: 0,
+        adoptedApplicationId: winner.id,
+        adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (winner.reviewedBy) update.updatedBy = winner.reviewedBy;
+      if (winner.reviewedByLabel) update.updatedByLabel = winner.reviewedByLabel;
+      tx.update(animalRef, update);
+      return;
+    }
 
-  if (inReviewApps.length > 0) {
-    await animalRef.update({
-      status: "under_review",
+    if (withdrawnWinner) {
+      const update: Record<string, unknown> = {
+        status: "adopted",
+        activeApplicationCount: 0,
+        adoptedApplicationId: withdrawnWinner.id,
+        adoptedAt: animal.adoptedAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (withdrawnWinner.reviewedBy) update.updatedBy = withdrawnWinner.reviewedBy;
+      if (withdrawnWinner.reviewedByLabel) update.updatedByLabel = withdrawnWinner.reviewedByLabel;
+      tx.update(animalRef, update);
+      return;
+    }
+
+    if (inReviewApps.length > 0) {
+      tx.update(animalRef, {
+        status: "under_review",
+        activeApplicationCount,
+        ...publicAnimalInternalFieldDeletes(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    tx.update(animalRef, {
+      status: animal.status === "archived" ? "archived" : "available",
       activeApplicationCount,
-      ...publicAnimalInternalFieldDeletes(),
+      ...(animal.status === "archived" ? {} : publicAnimalInternalFieldDeletes()),
       updatedAt: FieldValue.serverTimestamp(),
     });
-    return;
-  }
-
-  await animalRef.update({
-    status: animal.status === "archived" ? "archived" : "available",
-    activeApplicationCount,
-    ...(animal.status === "archived" ? {} : publicAnimalInternalFieldDeletes()),
-    updatedAt: FieldValue.serverTimestamp(),
   });
 }
 
 async function recalibrateAnimalQueue(animalId: string): Promise<void> {
-  const snap = await db
-    .collection("applications")
-    .where("animalId", "==", animalId)
-    .where("status", "in", ["pending", "in_review"])
-    .get();
+  const animalRef = db.collection("animals").doc(animalId);
 
-  if (snap.empty) return;
+  await runTransactionWithRetry(async (tx) => {
+    const animalSnap = await tx.get(animalRef);
+    if (!animalSnap.exists) return;
 
-  const sorted = snap.docs.slice().sort((a, b) => {
-    const ap = (a.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
-    const bp = (b.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
-    return ap - bp;
+    const snap = await tx.get(
+      db
+        .collection("applications")
+        .where("animalId", "==", animalId)
+        .where("status", "in", ["pending", "in_review"])
+    );
+
+    const sorted = snap.docs.slice().sort((a, b) => {
+      const ap = (a.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
+      const bp = (b.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
+      return ap - bp;
+    });
+
+    sorted.forEach((doc, i) => {
+      const queuePosition = i + 1;
+      tx.update(doc.ref, { queuePosition, waitlistEntry: queuePosition > 1 });
+    });
+    tx.update(animalRef, { activeApplicationCount: sorted.length });
   });
-
-  const batch = db.batch();
-  sorted.forEach((doc, i) => {
-    const queuePosition = i + 1;
-    batch.update(doc.ref, { queuePosition, waitlistEntry: queuePosition > 1 });
-  });
-  await batch.commit();
 }
 
 async function appendToAnimalQueue(animalId: string, appId: string): Promise<void> {
-  const snap = await db
-    .collection("applications")
-    .where("animalId", "==", animalId)
-    .where("status", "in", ["pending", "in_review"])
-    .get();
+  const animalRef = db.collection("animals").doc(animalId);
+  const appRef = db.collection("applications").doc(appId);
 
-  const activeCount = snap.docs.filter((d) => d.id !== appId).length;
-  const queuePosition = activeCount + 1;
-  await db.collection("applications").doc(appId).update({
-    queuePosition,
-    waitlistEntry: queuePosition > 1,
+  await runTransactionWithRetry(async (tx) => {
+    const animalSnap = await tx.get(animalRef);
+    const appSnap = await tx.get(appRef);
+    if (!animalSnap.exists || !appSnap.exists) return;
+
+    const animal = animalSnap.data() as AnimalRecord;
+    const application = appSnap.data() as ApplicationRecord;
+    if (
+      application.animalId !== animalId ||
+      !ACTIVE_APPLICATION_STATUSES.includes(application.status)
+    ) {
+      return;
+    }
+
+    if (animal.status !== "available" && animal.status !== "under_review") return;
+
+    const activeApplicationCount =
+      typeof animal.activeApplicationCount === "number" && animal.activeApplicationCount >= 0 ?
+        animal.activeApplicationCount :
+        0;
+    const queuePosition = activeApplicationCount + 1;
+    const waitlistEntry = queuePosition > 1;
+
+    const animalUpdate: Record<string, unknown> = {
+      activeApplicationCount: queuePosition,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (application.status === "in_review") {
+      Object.assign(animalUpdate, {
+        status: "under_review",
+        ...publicAnimalInternalFieldDeletes(),
+      });
+    }
+
+    tx.update(appRef, { queuePosition, waitlistEntry });
+    tx.update(animalRef, animalUpdate);
   });
 }
 
@@ -1281,46 +1327,8 @@ export const createApplication = onCall(
     if (typeof cannotKeepResponse === "string") assertMaxLength(cannotKeepResponse, 1000, "cannotKeepResponse");
     if (typeof longTermCommitment === "string") assertMaxLength(longTermCommitment, 1000, "longTermCommitment");
 
-    let resolvedAnimalName = animalName;
     let waitlistEntry = false;
     let queuePosition = 0;
-
-    if (animalId) {
-      const animalSnap = await db.collection("animals").doc(animalId).get();
-      if (!animalSnap.exists) {
-        throw new HttpsError("not-found", "Animal não encontrado.");
-      }
-
-      const animal = animalSnap.data() as AnimalRecord;
-      if (animal.species !== species) {
-        throw new HttpsError(
-          "failed-precondition",
-          "A espécie do animal não corresponde à candidatura."
-        );
-      }
-
-      if (animal.status !== "available" && animal.status !== "under_review") {
-        throw new HttpsError(
-          "failed-precondition",
-          "Este animal não está disponível para novas candidaturas."
-        );
-      }
-
-      resolvedAnimalName = typeof animal.name === "string" ? animal.name.trim() : animalName;
-      if (!resolvedAnimalName) {
-        throw new HttpsError("failed-precondition", "Não foi possível identificar o animal.");
-      }
-
-      // Live count query — avoids bootstrapping issues with the denormalized counter
-      const activeCountSnap = await db
-        .collection("applications")
-        .where("animalId", "==", animalId)
-        .where("status", "in", ["pending", "in_review"])
-        .count()
-        .get();
-      queuePosition = activeCountSnap.data().count + 1;
-      waitlistEntry = queuePosition > 1;
-    }
 
     const applicationPayload: Record<string, unknown> = {
       species,
@@ -1339,10 +1347,6 @@ export const createApplication = onCall(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     };
-    if (animalId && resolvedAnimalName) {
-      applicationPayload.animalId = animalId;
-      applicationPayload.animalName = resolvedAnimalName;
-    }
 
     // Optional fields — only include if present to avoid storing undefined
     const optionalFields: Record<string, unknown> = {
@@ -1359,7 +1363,67 @@ export const createApplication = onCall(
       if (value !== undefined) applicationPayload[key] = value;
     }
 
-    const ref = await db.collection("applications").add(applicationPayload);
+    const ref = db.collection("applications").doc();
+
+    if (animalId) {
+      const animalRef = db.collection("animals").doc(animalId);
+      const assignment = await runTransactionWithRetry(async (tx) => {
+        const animalSnap = await tx.get(animalRef);
+        if (!animalSnap.exists) {
+          throw new HttpsError("not-found", "Animal não encontrado.");
+        }
+
+        const animal = animalSnap.data() as AnimalRecord;
+        if (animal.species !== species) {
+          throw new HttpsError(
+            "failed-precondition",
+            "A espécie do animal não corresponde à candidatura."
+          );
+        }
+
+        if (animal.status !== "available" && animal.status !== "under_review") {
+          throw new HttpsError(
+            "failed-precondition",
+            "Este animal não está disponível para novas candidaturas."
+          );
+        }
+
+        const resolvedAnimalName = typeof animal.name === "string" ? animal.name.trim() : animalName;
+        if (!resolvedAnimalName) {
+          throw new HttpsError("failed-precondition", "Não foi possível identificar o animal.");
+        }
+
+        const activeApplicationCount =
+          typeof animal.activeApplicationCount === "number" && animal.activeApplicationCount >= 0 ?
+            animal.activeApplicationCount :
+            0;
+        const nextQueuePosition = activeApplicationCount + 1;
+        const nextWaitlistEntry = nextQueuePosition > 1;
+
+        tx.set(ref, {
+          ...applicationPayload,
+          animalId,
+          animalName: resolvedAnimalName,
+          queuePosition: nextQueuePosition,
+          waitlistEntry: nextWaitlistEntry,
+        });
+        tx.update(animalRef, {
+          activeApplicationCount: nextQueuePosition,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        return {
+          queuePosition: nextQueuePosition,
+          waitlistEntry: nextWaitlistEntry,
+        };
+      });
+
+      queuePosition = assignment.queuePosition;
+      waitlistEntry = assignment.waitlistEntry;
+    } else {
+      await ref.set(applicationPayload);
+    }
+
     return { id: ref.id, waitlistEntry, queuePosition };
   }
 );
@@ -1466,6 +1530,7 @@ export const updateApplicationReview = onCall(
         let nextAnimalId = currentAnimalId;
         let nextAnimalName = application.animalName;
         let linkedAnimal: AnimalRecord | null = null;
+        let linkedAnimalRef: DocumentReference | null = null;
 
         if (requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
           throw new HttpsError(
@@ -1508,6 +1573,30 @@ export const updateApplicationReview = onCall(
           nextAnimalId = requestedAnimalId;
           nextAnimalName = typeof animal.name === "string" ? animal.name.trim() : undefined;
           linkedAnimal = animal;
+          linkedAnimalRef = animalRef;
+        }
+
+        const targetIsActive = ACTIVE_APPLICATION_STATUSES.includes(status);
+        const isReentering =
+          INACTIVE_APPLICATION_STATUSES.includes(application.status) && targetIsActive;
+
+        if (isReentering && nextAnimalId && !linkedAnimal) {
+          const animalRef = db.collection("animals").doc(nextAnimalId);
+          const animalSnap = await transaction.get(animalRef);
+          if (!animalSnap.exists) {
+            throw new HttpsError("not-found", "Animal não encontrado.");
+          }
+          linkedAnimal = animalSnap.data() as AnimalRecord;
+          linkedAnimalRef = animalRef;
+        }
+
+        if (isReentering && nextAnimalId && linkedAnimal) {
+          if (linkedAnimal.status !== "available" && linkedAnimal.status !== "under_review") {
+            throw new HttpsError(
+              "failed-precondition",
+              "Só é possível reativar candidaturas de animais disponíveis ou em análise."
+            );
+          }
         }
 
         if (status === "approved") {
@@ -1525,6 +1614,8 @@ export const updateApplicationReview = onCall(
           if (!animal) {
             throw new HttpsError("not-found", "Animal não encontrado.");
           }
+          linkedAnimal = animal;
+          linkedAnimalRef = animalRef;
 
           if (
             typeof animal.adoptedApplicationId === "string" &&
@@ -1551,17 +1642,21 @@ export const updateApplicationReview = onCall(
           }
         }
 
-        // Recompute queue position when a new animal is linked to a general interest application
+        // Assign queue position atomically when a general-interest application
+        // enters an animal's active queue.
         let newQueuePosition: number | undefined;
         const animalLinkChanged = isGeneralInterest && nextAnimalId && nextAnimalId !== currentAnimalId;
-        if (animalLinkChanged) {
-          const activeSnap = await transaction.get(
-            db.collection("applications")
-              .where("animalId", "==", nextAnimalId)
-              .where("status", "in", ["pending", "in_review"])
-          );
-          const activeCount = activeSnap.docs.filter((d) => d.id !== targetId).length;
-          newQueuePosition = activeCount + 1;
+        if (animalLinkChanged && targetIsActive && linkedAnimal && linkedAnimalRef) {
+          const activeApplicationCount =
+            typeof linkedAnimal.activeApplicationCount === "number" &&
+            linkedAnimal.activeApplicationCount >= 0 ?
+              linkedAnimal.activeApplicationCount :
+              0;
+          newQueuePosition = activeApplicationCount + 1;
+          transaction.update(linkedAnimalRef, {
+            activeApplicationCount: newQueuePosition,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
         }
 
         const payload: Record<string, unknown> = {
@@ -1596,6 +1691,19 @@ export const updateApplicationReview = onCall(
         if (newQueuePosition !== undefined) {
           payload.queuePosition = newQueuePosition;
           payload.waitlistEntry = newQueuePosition > 1;
+        }
+
+        if (status === "approved" && nextAnimalId && linkedAnimalRef) {
+          const animalUpdate: Record<string, unknown> = {
+            status: "adopted",
+            adoptedApplicationId: targetId,
+            adoptedAt: FieldValue.serverTimestamp(),
+            activeApplicationCount: 0,
+            updatedAt: FieldValue.serverTimestamp(),
+            updatedBy: actorUid,
+          };
+          if (actorLabel) animalUpdate.updatedByLabel = actorLabel;
+          transaction.update(linkedAnimalRef, animalUpdate);
         }
 
         resolvedAnimalId = nextAnimalId;
@@ -2006,13 +2114,30 @@ export const onApplicationStatusChanged = onDocumentWritten(
     if (before?.animalId) affectedAnimalIds.add(before.animalId);
     if (after?.animalId) affectedAnimalIds.add(after.animalId);
 
+    // createApplication assigns queuePosition and activeApplicationCount in the
+    // same transaction as the application create. Recomputing here can race with
+    // another create trigger and write an older count after a newer transaction.
+    if (!before && after?.animalId && ACTIVE_APPLICATION_STATUSES.includes(after.status)) {
+      return;
+    }
+
     const animalLinkChanged = before?.animalId !== after?.animalId;
     const statusChanged = before?.status !== after?.status;
+    const isLeaving =
+      before?.status !== undefined &&
+      after?.status !== undefined &&
+      ACTIVE_APPLICATION_STATUSES.includes(before.status) &&
+      INACTIVE_APPLICATION_STATUSES.includes(after.status);
+    const isReentering =
+      before?.status !== undefined &&
+      after?.status !== undefined &&
+      INACTIVE_APPLICATION_STATUSES.includes(before.status) &&
+      ACTIVE_APPLICATION_STATUSES.includes(after.status);
 
     if (!after && before?.animalId) {
       await recomputeAnimalState(before.animalId);
       // Recalibrate queue when an active application is deleted (e.g. declined)
-      if (before.status === "pending" || before.status === "in_review") {
+      if (ACTIVE_APPLICATION_STATUSES.includes(before.status)) {
         await recalibrateAnimalQueue(before.animalId);
       }
       return;
@@ -2021,30 +2146,20 @@ export const onApplicationStatusChanged = onDocumentWritten(
     if (!after) return;
     if (!animalLinkChanged && !statusChanged) return;
 
+    if (isReentering && after.animalId) {
+      if (animalLinkChanged) return;
+      await appendToAnimalQueue(after.animalId, event.params.appId);
+      return;
+    }
+
     for (const animalId of affectedAnimalIds) {
       await recomputeAnimalState(animalId);
     }
 
-    // ── Recalibrate queue positions when the active pool changes ─────────────
-    // Candidate leaves: pending/in_review → rejected/withdrawn
-    // Candidate re-enters: rejected/withdrawn → pending/in_review
-    const activeStatuses: ApplicationStatus[] = ["pending", "in_review"];
-    const inactiveStatuses: ApplicationStatus[] = ["rejected", "withdrawn"];
-    const isLeaving =
-      before?.status !== undefined &&
-      after?.status !== undefined &&
-      activeStatuses.includes(before.status) &&
-      inactiveStatuses.includes(after.status);
-    const isReentering =
-      before?.status !== undefined &&
-      after?.status !== undefined &&
-      inactiveStatuses.includes(before.status) &&
-      activeStatuses.includes(after.status);
-
+    // ── Recalibrate queue positions when a candidate leaves the active pool ──
+    // Re-entry is handled above by appendToAnimalQueue's animal transaction.
     if (isLeaving && after.animalId) {
       await recalibrateAnimalQueue(after.animalId);
-    } else if (isReentering && after.animalId) {
-      await appendToAnimalQueue(after.animalId, event.params.appId);
     }
   }
 );
