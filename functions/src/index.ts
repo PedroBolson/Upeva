@@ -264,6 +264,8 @@ const INTERNAL_TRACEABILITY_FIELDS = [
   "reviewedByLabel",
   "reviewedAt",
   "reviewAction",
+  "adoptedApplicationId",
+  "adoptedAt",
   "archiveReason",
   "archiveDetails",
   "archiveDate",
@@ -274,6 +276,20 @@ const INTERNAL_TRACEABILITY_FIELDS = [
   "roleUpdatedBy",
   "roleUpdatedByLabel",
   "roleUpdatedAt",
+];
+
+const PUBLIC_ANIMAL_INTERNAL_FIELDS = [
+  "adoptedApplicationId",
+  "adoptedAt",
+  "updatedBy",
+  "updatedByLabel",
+  "archiveReason",
+  "archiveDetails",
+  "archiveDate",
+  "archivedBy",
+  "archivedByLabel",
+  "archivedAt",
+  "driveUrl",
 ];
 
 const VALID_STATES = new Set([
@@ -321,6 +337,14 @@ function stripInternalTraceability(data: Record<string, unknown>): Record<string
     delete sanitized[field];
   }
   return sanitized;
+}
+
+type FieldDelete = ReturnType<typeof FieldValue.delete>;
+
+function publicAnimalInternalFieldDeletes(): Record<string, FieldDelete> {
+  return Object.fromEntries(
+    PUBLIC_ANIMAL_INTERNAL_FIELDS.map((field) => [field, FieldValue.delete()]),
+  );
 }
 
 function getActorLabel(auth: { token?: { name?: unknown; email?: unknown } }): string | undefined {
@@ -840,10 +864,7 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
     await animalRef.update({
       status: "under_review",
       activeApplicationCount,
-      adoptedApplicationId: FieldValue.delete(),
-      adoptedAt: FieldValue.delete(),
-      updatedBy: FieldValue.delete(),
-      updatedByLabel: FieldValue.delete(),
+      ...publicAnimalInternalFieldDeletes(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     return;
@@ -852,10 +873,7 @@ async function recomputeAnimalState(animalId: string): Promise<void> {
   await animalRef.update({
     status: animal.status === "archived" ? "archived" : "available",
     activeApplicationCount,
-    adoptedApplicationId: FieldValue.delete(),
-    adoptedAt: FieldValue.delete(),
-    updatedBy: FieldValue.delete(),
-    updatedByLabel: FieldValue.delete(),
+    ...(animal.status === "archived" ? {} : publicAnimalInternalFieldDeletes()),
     updatedAt: FieldValue.serverTimestamp(),
   });
 }
@@ -2315,15 +2333,8 @@ export const updateAnimalStatus = onCall(
         const actorLabel = getActorLabel(request.auth);
         update.updatedBy = request.auth.uid;
         if (actorLabel) update.updatedByLabel = actorLabel;
-      } else {
-        update.updatedBy = FieldValue.delete();
-        update.updatedByLabel = FieldValue.delete();
-        update.archiveReason = FieldValue.delete();
-        update.archiveDetails = FieldValue.delete();
-        update.archiveDate = FieldValue.delete();
-        update.archivedBy = FieldValue.delete();
-        update.archivedByLabel = FieldValue.delete();
-        update.archivedAt = FieldValue.delete();
+      } else if (status === "available" || status === "under_review") {
+        Object.assign(update, publicAnimalInternalFieldDeletes());
       }
 
       await animalRef.update(update);

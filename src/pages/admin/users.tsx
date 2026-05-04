@@ -15,6 +15,7 @@ import { MetadataRow } from '@/features/admin/components/traceability-card'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from '@/features/users/hooks/use-users'
 import { useAuth } from '@/features/auth/hooks/use-auth'
+import { PASSWORD_POLICY, PASSWORD_POLICY_MESSAGES } from '@/features/auth/utils/password-policy'
 import type { UserProfile, UserRole } from '@/types/common'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -37,10 +38,10 @@ const createUserSchema = z.object({
   displayName: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
   email: z.email('Digite um email válido'),
   password: z.string()
-    .min(8, 'Senha deve ter ao menos 8 caracteres')
-    .refine((v) => /[A-Z]/.test(v), 'Senha deve conter ao menos uma letra maiúscula')
-    .refine((v) => /[a-z]/.test(v), 'Senha deve conter ao menos uma letra minúscula')
-    .refine((v) => /[0-9]/.test(v), 'Senha deve conter ao menos um número'),
+    .min(PASSWORD_POLICY.minLength, PASSWORD_POLICY_MESSAGES.minLength)
+    .refine((v) => PASSWORD_POLICY.uppercase.test(v), PASSWORD_POLICY_MESSAGES.uppercase)
+    .refine((v) => PASSWORD_POLICY.lowercase.test(v), PASSWORD_POLICY_MESSAGES.lowercase)
+    .refine((v) => PASSWORD_POLICY.number.test(v), PASSWORD_POLICY_MESSAGES.number),
   role: z.enum(['admin', 'reviewer']),
 })
 

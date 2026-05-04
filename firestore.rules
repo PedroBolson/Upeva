@@ -47,7 +47,10 @@ service cloud.firestore {
     function hasInternalAnimalTraceability() {
       return resource.data.keys().hasAny([
         'createdBy', 'updatedBy', 'updatedByLabel',
-        'archiveReason', 'archiveDetails', 'archiveDate', 'archivedBy', 'archivedByLabel'
+        'adoptedApplicationId', 'adoptedAt',
+        'archiveReason', 'archiveDetails', 'archiveDate',
+        'archivedBy', 'archivedByLabel', 'archivedAt',
+        'driveUrl'
       ]);
     }
 
@@ -55,8 +58,9 @@ service cloud.firestore {
       return keys.hasAny([
         'createdBy', 'updatedBy', 'updatedByLabel',
         'reviewedBy', 'reviewedByLabel', 'reviewedAt', 'reviewAction',
+        'adoptedApplicationId', 'adoptedAt',
         'archiveReason', 'archiveDetails', 'archiveDate', 'archivedBy', 'archivedByLabel', 'archivedAt',
-        'roleUpdatedBy', 'roleUpdatedByLabel', 'roleUpdatedAt'
+        'driveUrl', 'roleUpdatedBy', 'roleUpdatedByLabel', 'roleUpdatedAt'
       ]);
     }
 

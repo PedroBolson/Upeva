@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { Input, Button } from '@/components/ui'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { validatePasswordPolicy } from '@/features/auth/utils/password-policy'
 import { Loader2 } from 'lucide-react'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
@@ -48,8 +49,9 @@ export function SettingsPage() {
     e.preventDefault()
     setPassMessage(null)
 
-    if (newPassword.length < 6) {
-      setPassMessage({ text: 'A nova senha deve ter ao menos 6 caracteres.', ok: false })
+    const passwordPolicyError = validatePasswordPolicy(newPassword)
+    if (passwordPolicyError) {
+      setPassMessage({ text: passwordPolicyError, ok: false })
       return
     }
     if (newPassword !== confirmPassword) {

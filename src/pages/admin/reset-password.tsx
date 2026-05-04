@@ -8,11 +8,16 @@ import { motion } from 'framer-motion'
 import { Input, Button } from '@/components/ui'
 import { SystemBarTint } from '@/components/ui/system-bar-tint'
 import { confirmReset } from '@/features/auth/services/auth.service'
+import { PASSWORD_POLICY, PASSWORD_POLICY_MESSAGES } from '@/features/auth/utils/password-policy'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 const schema = z
   .object({
-    password: z.string().min(6, 'Mínimo 6 caracteres'),
+    password: z.string()
+      .min(PASSWORD_POLICY.minLength, PASSWORD_POLICY_MESSAGES.minLength)
+      .refine((v) => PASSWORD_POLICY.uppercase.test(v), PASSWORD_POLICY_MESSAGES.uppercase)
+      .refine((v) => PASSWORD_POLICY.lowercase.test(v), PASSWORD_POLICY_MESSAGES.lowercase)
+      .refine((v) => PASSWORD_POLICY.number.test(v), PASSWORD_POLICY_MESSAGES.number),
     confirm:  z.string(),
   })
   .refine((d) => d.password === d.confirm, {

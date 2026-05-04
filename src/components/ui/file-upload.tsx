@@ -17,10 +17,20 @@ interface FileUploadProps {
 }
 
 const DEFAULT_MAX_SIZE = 5 * 1024 * 1024 // 5MB
+const DEFAULT_ACCEPTED_IMAGE_TYPES = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
+const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']
+const IMAGE_TYPE_ERROR = 'Formato não suportado. Envie apenas imagens JPG, PNG ou WEBP.'
+
+function isAllowedImageFile(file: File): boolean {
+  const lowerName = file.name.toLowerCase()
+  return ALLOWED_IMAGE_MIME_TYPES.has(file.type) ||
+    ALLOWED_IMAGE_EXTENSIONS.some((extension) => lowerName.endsWith(extension))
+}
 
 export function FileUpload({
   label,
-  accept = 'image/*',
+  accept = DEFAULT_ACCEPTED_IMAGE_TYPES,
   multiple = false,
   maxFiles = 10,
   maxSizeBytes = DEFAULT_MAX_SIZE,
@@ -41,7 +51,12 @@ export function FileUpload({
     (incoming: File[]) => {
       setSizeError(null)
       if (incoming.length === 0) {
-        setSizeError('Adicione apenas imagens PNG, JPG ou WEBP.')
+        setSizeError(IMAGE_TYPE_ERROR)
+        return
+      }
+      const unsupported = incoming.find((f) => !isAllowedImageFile(f))
+      if (unsupported) {
+        setSizeError(`"${unsupported.name}" não é suportado. Envie apenas imagens JPG, PNG ou WEBP.`)
         return
       }
       if (multiple && value.length + incoming.length > maxFiles) {
@@ -71,9 +86,7 @@ export function FileUpload({
     e.preventDefault()
     setDragOver(false)
     if (isDisabled) return
-    const files = Array.from(e.dataTransfer.files).filter((f) =>
-      f.type.startsWith('image/'),
-    )
+    const files = Array.from(e.dataTransfer.files)
     addFiles(files)
   }
 
