@@ -5,7 +5,7 @@ import {
   confirmPasswordReset,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, terminate, clearIndexedDbPersistence } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '@/lib/firebase'
 import type { UserProfile } from '@/types/common'
@@ -29,7 +29,23 @@ export async function signIn(email: string, password: string): Promise<User> {
 }
 
 export async function signOut(): Promise<void> {
+  // Terminate the Firestore instance so clearIndexedDbPersistence can run,
+  // then wipe the local cache to prevent admin/reviewer data from remaining
+  // on disk after logout. failed-precondition means another tab still holds
+  // the DB open — cache cannot be cleared now, which is an accepted caveat.
+  // Any other error is unexpected but must not block the auth sign-out.
+  try {
+    await terminate(db)
+    await clearIndexedDbPersistence(db)
+  } catch (err) {
+    if ((err as { code?: string }).code !== 'failed-precondition') {
+      console.warn('[auth] Firestore local cache could not be cleared on logout.')
+    }
+  }
   await firebaseSignOut(auth)
+  // terminate() permanently kills the db singleton in this module scope.
+  // A full reload re-evaluates firebase.ts and gives Firestore a fresh instance.
+  window.location.reload()
 }
 
 export async function resetPassword(email: string): Promise<void> {
