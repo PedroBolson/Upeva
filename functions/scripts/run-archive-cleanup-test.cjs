@@ -27,7 +27,7 @@ const { resolve } = require('path')
 const http = require('http')
 
 const PROJECT_ID = 'demo-upeva-test'
-const BUCKET     = `${PROJECT_ID}.appspot.com`
+const BUCKET = `${PROJECT_ID}.appspot.com`
 
 // ── Safety: refuse to run against a real project ──────────────────────────────
 if (process.env.ALLOW_REAL_PROJECT) {

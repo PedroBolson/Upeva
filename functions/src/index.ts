@@ -1503,7 +1503,7 @@ export const updateApplicationReview = onCall(
       }
 
       const requestedAnimalId = typeof request.data.animalId === "string" &&
-      request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
+        request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
       const adminNotes = typeof request.data.adminNotes === "string" ?
         request.data.adminNotes.trim() : undefined;
       if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
@@ -1612,7 +1612,7 @@ export const updateApplicationReview = onCall(
 
           if (
             typeof animal.adoptedApplicationId === "string" &&
-          animal.adoptedApplicationId !== targetId
+            animal.adoptedApplicationId !== targetId
           ) {
             throw new HttpsError(
               "failed-precondition",
@@ -1642,7 +1642,7 @@ export const updateApplicationReview = onCall(
         if (animalLinkChanged && targetIsActive && linkedAnimal && linkedAnimalRef) {
           const activeApplicationCount =
             typeof linkedAnimal.activeApplicationCount === "number" &&
-            linkedAnimal.activeApplicationCount >= 0 ?
+              linkedAnimal.activeApplicationCount >= 0 ?
               linkedAnimal.activeApplicationCount :
               0;
           newQueuePosition = activeApplicationCount + 1;
@@ -2695,267 +2695,267 @@ export const cleanOperationalData = onSchedule(
 // seguros ficam em archiveFiles/{id}. O documento original só é deletado após
 // upload + escrita de metadados bem-sucedidos.
 export async function runArchiveAndCleanup(): Promise<void> {
-    const operation = "storage.archive_cleanup";
-    logOperationStart({ operation });
+  const operation = "storage.archive_cleanup";
+  logOperationStart({ operation });
 
-    try {
-      const now = Date.now();
-      const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
-      const ONG_NAME = "Upeva Adoções";
-      const year = new Date().getFullYear();
+  try {
+    const now = Date.now();
+    const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
+    const ONG_NAME = "Upeva Adoções";
+    const year = new Date().getFullYear();
 
-      // ── 1. approved > 30 dias → PDF contrato → Storage → archiveFiles → deletar
-      const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-      const approvedSnap = await db.collection("applications")
-        .where("status", "==", "approved")
-        .where("updatedAt", "<=", approvedCutoff)
-        .limit(400)
-        .get();
+    // ── 1. approved > 30 dias → PDF contrato → Storage → archiveFiles → deletar
+    const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const approvedSnap = await db.collection("applications")
+      .where("status", "==", "approved")
+      .where("updatedAt", "<=", approvedCutoff)
+      .limit(400)
+      .get();
 
-      for (const docSnap of approvedSnap.docs) {
-        const data = docSnap.data() as Record<string, unknown>;
-        const pii = readApplicationPIIForArchive(data);
-        const approvedAt = data.reviewedAt instanceof Timestamp ?
-          data.reviewedAt.toDate() :
-          (data.updatedAt as Timestamp).toDate();
-        const fileName = `contrato_${docSnap.id}_${year}.pdf`;
-        const pdfBuffer = await generatePdf("contract", {
-          applicationId: docSnap.id,
-          fullName: data.fullName as string,
-          email: data.email as string,
-          cpf: pii.cpf,
-          phone: pii.phone,
-          birthDate: pii.birthDate,
-          address: pii.address as AddressData,
-          animalId: (data.animalId as string) ?? "",
-          animalName: (data.animalName as string) ?? "Animal",
-          species: (data.species as string) ?? "dog",
-          approvedAt,
-          reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
-          ongName: ONG_NAME,
-        });
-
-        let uploaded = false;
-        try {
-          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
-            type: "contracts",
-            fileName,
-            year,
-          });
-          await db.collection("archiveFiles").add({
-            type: "contract",
-            storagePath,
-            fileName,
-            contentType: "application/pdf",
-            sizeBytes,
-            year,
-            applicationId: docSnap.id,
-            animalId: (data.animalId as string | undefined) ?? null,
-            animalName: (data.animalName as string | undefined) ?? null,
-            species: (data.species as string | undefined) ?? null,
-            reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
-            createdAt: FieldValue.serverTimestamp(),
-            status: "stored",
-          });
-          uploaded = true;
-        } catch (err) {
-          logOperationError(err, {
-            operation: "storage.archive.contract.upload",
-            targetId: docSnap.id,
-            status: "upload_failed",
-          });
-        }
-
-        if (!uploaded) continue;
-
-        const animalId = data.animalId as string | undefined;
-        if (animalId) {
-          const animalSnap = await db.collection("animals").doc(animalId).get();
-          if (animalSnap.exists) {
-            const animalData = animalSnap.data() as Record<string, unknown>;
-            await deleteStorageFilesFromUrls(animalData.photos);
-            await animalSnap.ref.delete();
-          }
-        }
-        await docSnap.ref.delete();
-      }
-
-      // ── 2. rejected + pendingExport → PDF rejeição → Storage → archiveFiles → flag → deletar
-      const rejectedSnap = await db.collection("applications")
-        .where("status", "==", "rejected")
-        .where("pendingExport", "==", true)
-        .limit(400)
-        .get();
-
-      for (const docSnap of rejectedSnap.docs) {
-        const data = docSnap.data() as Record<string, unknown>;
-        const pii = readApplicationPIIForArchive(data);
-        const rejectedAt = data.reviewedAt instanceof Timestamp ?
-          data.reviewedAt.toDate() :
-          (data.updatedAt as Timestamp).toDate();
-        const fileName = `rejeicao_${docSnap.id}_${year}.pdf`;
-        const pdfBuffer = await generatePdf("rejection", {
-          applicationId: docSnap.id,
-          fullName: data.fullName as string,
-          email: data.email as string,
-          cpf: pii.cpf,
-          animalName: data.animalName as string | undefined,
-          species: (data.species as string) ?? "dog",
-          rejectionReason: data.rejectionReason as string,
-          rejectionDetails: data.rejectionDetails as string,
-          reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
-          rejectedAt,
-          ongName: ONG_NAME,
-        });
-
-        let archiveFileId: string | null = null;
-        try {
-          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
-            type: "rejections",
-            fileName,
-            year,
-          });
-          const archiveRef = await db.collection("archiveFiles").add({
-            type: "rejection",
-            storagePath,
-            fileName,
-            contentType: "application/pdf",
-            sizeBytes,
-            year,
-            applicationId: docSnap.id,
-            animalId: (data.animalId as string | undefined) ?? null,
-            animalName: (data.animalName as string | undefined) ?? null,
-            species: (data.species as string | undefined) ?? null,
-            reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
-            createdAt: FieldValue.serverTimestamp(),
-            status: "stored",
-          });
-          archiveFileId = archiveRef.id;
-        } catch (err) {
-          logOperationError(err, {
-            operation: "storage.archive.rejection.upload",
-            targetId: docSnap.id,
-            status: "upload_failed",
-          });
-        }
-
-        if (!archiveFileId) continue;
-
-        const cpfHash = hmac(pii.cpf);
-        const flagRef = db.collection("rejectionFlags").doc(cpfHash);
-        const existingFlag = await flagRef.get();
-        if (existingFlag.exists) {
-          await flagRef.update({
-            rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
-            rejectedAt: FieldValue.serverTimestamp(),
-            reason: data.rejectionReason,
-            archiveFileId,
-          });
-        } else {
-          await flagRef.set({
-            emailHash: hmac(data.email as string),
-            rejectionCount: 1,
-            rejectedAt: FieldValue.serverTimestamp(),
-            reason: data.rejectionReason,
-            archiveFileId,
-          });
-        }
-
-        await docSnap.ref.delete();
-      }
-
-      // ── 3. withdrawn > 30 dias → deletar (sem PDF, sem flag) ────────────────
-      const withdrawnCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-      const withdrawnSnap = await db.collection("applications")
-        .where("status", "==", "withdrawn")
-        .where("updatedAt", "<=", withdrawnCutoff)
-        .limit(400)
-        .get();
-
-      for (const docSnap of withdrawnSnap.docs) {
-        await docSnap.ref.delete();
-      }
-
-      // ── 4. archived animals > 30 dias → PDF arquivamento → Storage → archiveFiles → deletar
-      const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
-      const archivedAnimalsSnap = await db.collection("animals")
-        .where("status", "==", "archived")
-        .where("archivedAt", "<=", archivedCutoff)
-        .limit(400)
-        .get();
-
-      for (const docSnap of archivedAnimalsSnap.docs) {
-        const data = docSnap.data() as Record<string, unknown>;
-        const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
-        const archivedAt = data.archivedAt instanceof Timestamp ?
-          (data.archivedAt as Timestamp).toDate() :
-          new Date();
-        const fileName = `animal_${docSnap.id}_${year}.pdf`;
-        const pdfBuffer = await generatePdf("archivedAnimal", {
-          animalId: docSnap.id,
-          animalName: (data.name as string) ?? "Animal",
-          species: (data.species as string) ?? "dog",
-          sex: data.sex as string | undefined,
-          size: data.size as string | undefined,
-          // Guard: legado sem motivo usa valor padrão
-          archiveReason: (data.archiveReason as string) ?? "Não informado (registro legado)",
-          archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
-          archiveDate: new Date(archiveDate),
-          archivedAt,
-          archivedBy: data.archivedByLabel as string | undefined,
-          ongName: ONG_NAME,
-        });
-
-        let uploaded = false;
-        try {
-          const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
-            type: "archived-animals",
-            fileName,
-            year,
-          });
-          await db.collection("archiveFiles").add({
-            type: "archivedAnimal",
-            storagePath,
-            fileName,
-            contentType: "application/pdf",
-            sizeBytes,
-            year,
-            animalId: docSnap.id,
-            animalName: (data.name as string | undefined) ?? null,
-            species: (data.species as string | undefined) ?? null,
-            reviewerLabel: (data.archivedByLabel as string | undefined) ?? null,
-            createdAt: FieldValue.serverTimestamp(),
-            status: "stored",
-          });
-          uploaded = true;
-        } catch (err) {
-          logOperationError(err, {
-            operation: "storage.archive.animal.upload",
-            targetId: docSnap.id,
-            status: "upload_failed",
-          });
-        }
-
-        if (!uploaded) continue;
-
-        await deleteStorageFilesFromUrls(data.photos);
-        await docSnap.ref.delete();
-      }
-
-      logOperationSuccess({
-        operation,
-        approvedApplications: approvedSnap.size,
-        rejectedApplications: rejectedSnap.size,
-        withdrawnApplications: withdrawnSnap.size,
-        archivedAnimals: archivedAnimalsSnap.size,
+    for (const docSnap of approvedSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const pii = readApplicationPIIForArchive(data);
+      const approvedAt = data.reviewedAt instanceof Timestamp ?
+        data.reviewedAt.toDate() :
+        (data.updatedAt as Timestamp).toDate();
+      const fileName = `contrato_${docSnap.id}_${year}.pdf`;
+      const pdfBuffer = await generatePdf("contract", {
+        applicationId: docSnap.id,
+        fullName: data.fullName as string,
+        email: data.email as string,
+        cpf: pii.cpf,
+        phone: pii.phone,
+        birthDate: pii.birthDate,
+        address: pii.address as AddressData,
+        animalId: (data.animalId as string) ?? "",
+        animalName: (data.animalName as string) ?? "Animal",
+        species: (data.species as string) ?? "dog",
+        approvedAt,
+        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
+        ongName: ONG_NAME,
       });
-      // onAnimalChanged e onApplicationStatusChanged mantêm metadata/counts via FieldValue.increment.
-      // Não recalibrar aqui — o cron rodar count() antes dos triggers concluírem causaria race condition
-      // que deixa os contadores negativos. Use recalibrateCounts() manualmente se houver drift.
-    } catch (err) {
-      logOperationError(err, { operation });
-      throw err;
+
+      let uploaded = false;
+      try {
+        const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+          type: "contracts",
+          fileName,
+          year,
+        });
+        await db.collection("archiveFiles").add({
+          type: "contract",
+          storagePath,
+          fileName,
+          contentType: "application/pdf",
+          sizeBytes,
+          year,
+          applicationId: docSnap.id,
+          animalId: (data.animalId as string | undefined) ?? null,
+          animalName: (data.animalName as string | undefined) ?? null,
+          species: (data.species as string | undefined) ?? null,
+          reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
+          createdAt: FieldValue.serverTimestamp(),
+          status: "stored",
+        });
+        uploaded = true;
+      } catch (err) {
+        logOperationError(err, {
+          operation: "storage.archive.contract.upload",
+          targetId: docSnap.id,
+          status: "upload_failed",
+        });
+      }
+
+      if (!uploaded) continue;
+
+      const animalId = data.animalId as string | undefined;
+      if (animalId) {
+        const animalSnap = await db.collection("animals").doc(animalId).get();
+        if (animalSnap.exists) {
+          const animalData = animalSnap.data() as Record<string, unknown>;
+          await deleteStorageFilesFromUrls(animalData.photos);
+          await animalSnap.ref.delete();
+        }
+      }
+      await docSnap.ref.delete();
     }
+
+    // ── 2. rejected + pendingExport → PDF rejeição → Storage → archiveFiles → flag → deletar
+    const rejectedSnap = await db.collection("applications")
+      .where("status", "==", "rejected")
+      .where("pendingExport", "==", true)
+      .limit(400)
+      .get();
+
+    for (const docSnap of rejectedSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const pii = readApplicationPIIForArchive(data);
+      const rejectedAt = data.reviewedAt instanceof Timestamp ?
+        data.reviewedAt.toDate() :
+        (data.updatedAt as Timestamp).toDate();
+      const fileName = `rejeicao_${docSnap.id}_${year}.pdf`;
+      const pdfBuffer = await generatePdf("rejection", {
+        applicationId: docSnap.id,
+        fullName: data.fullName as string,
+        email: data.email as string,
+        cpf: pii.cpf,
+        animalName: data.animalName as string | undefined,
+        species: (data.species as string) ?? "dog",
+        rejectionReason: data.rejectionReason as string,
+        rejectionDetails: data.rejectionDetails as string,
+        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
+        rejectedAt,
+        ongName: ONG_NAME,
+      });
+
+      let archiveFileId: string | null = null;
+      try {
+        const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+          type: "rejections",
+          fileName,
+          year,
+        });
+        const archiveRef = await db.collection("archiveFiles").add({
+          type: "rejection",
+          storagePath,
+          fileName,
+          contentType: "application/pdf",
+          sizeBytes,
+          year,
+          applicationId: docSnap.id,
+          animalId: (data.animalId as string | undefined) ?? null,
+          animalName: (data.animalName as string | undefined) ?? null,
+          species: (data.species as string | undefined) ?? null,
+          reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
+          createdAt: FieldValue.serverTimestamp(),
+          status: "stored",
+        });
+        archiveFileId = archiveRef.id;
+      } catch (err) {
+        logOperationError(err, {
+          operation: "storage.archive.rejection.upload",
+          targetId: docSnap.id,
+          status: "upload_failed",
+        });
+      }
+
+      if (!archiveFileId) continue;
+
+      const cpfHash = hmac(pii.cpf);
+      const flagRef = db.collection("rejectionFlags").doc(cpfHash);
+      const existingFlag = await flagRef.get();
+      if (existingFlag.exists) {
+        await flagRef.update({
+          rejectionCount: (existingFlag.data()?.rejectionCount ?? 0) + 1,
+          rejectedAt: FieldValue.serverTimestamp(),
+          reason: data.rejectionReason,
+          archiveFileId,
+        });
+      } else {
+        await flagRef.set({
+          emailHash: hmac(data.email as string),
+          rejectionCount: 1,
+          rejectedAt: FieldValue.serverTimestamp(),
+          reason: data.rejectionReason,
+          archiveFileId,
+        });
+      }
+
+      await docSnap.ref.delete();
+    }
+
+    // ── 3. withdrawn > 30 dias → deletar (sem PDF, sem flag) ────────────────
+    const withdrawnCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const withdrawnSnap = await db.collection("applications")
+      .where("status", "==", "withdrawn")
+      .where("updatedAt", "<=", withdrawnCutoff)
+      .limit(400)
+      .get();
+
+    for (const docSnap of withdrawnSnap.docs) {
+      await docSnap.ref.delete();
+    }
+
+    // ── 4. archived animals > 30 dias → PDF arquivamento → Storage → archiveFiles → deletar
+    const archivedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
+    const archivedAnimalsSnap = await db.collection("animals")
+      .where("status", "==", "archived")
+      .where("archivedAt", "<=", archivedCutoff)
+      .limit(400)
+      .get();
+
+    for (const docSnap of archivedAnimalsSnap.docs) {
+      const data = docSnap.data() as Record<string, unknown>;
+      const archiveDate = (data.archiveDate as string) ?? new Date().toISOString().split("T")[0];
+      const archivedAt = data.archivedAt instanceof Timestamp ?
+        (data.archivedAt as Timestamp).toDate() :
+        new Date();
+      const fileName = `animal_${docSnap.id}_${year}.pdf`;
+      const pdfBuffer = await generatePdf("archivedAnimal", {
+        animalId: docSnap.id,
+        animalName: (data.name as string) ?? "Animal",
+        species: (data.species as string) ?? "dog",
+        sex: data.sex as string | undefined,
+        size: data.size as string | undefined,
+        // Guard: legado sem motivo usa valor padrão
+        archiveReason: (data.archiveReason as string) ?? "Não informado (registro legado)",
+        archiveDetails: (data.archiveDetails as string) ?? "Arquivado antes da implementação do novo sistema.",
+        archiveDate: new Date(archiveDate),
+        archivedAt,
+        archivedBy: data.archivedByLabel as string | undefined,
+        ongName: ONG_NAME,
+      });
+
+      let uploaded = false;
+      try {
+        const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+          type: "archived-animals",
+          fileName,
+          year,
+        });
+        await db.collection("archiveFiles").add({
+          type: "archivedAnimal",
+          storagePath,
+          fileName,
+          contentType: "application/pdf",
+          sizeBytes,
+          year,
+          animalId: docSnap.id,
+          animalName: (data.name as string | undefined) ?? null,
+          species: (data.species as string | undefined) ?? null,
+          reviewerLabel: (data.archivedByLabel as string | undefined) ?? null,
+          createdAt: FieldValue.serverTimestamp(),
+          status: "stored",
+        });
+        uploaded = true;
+      } catch (err) {
+        logOperationError(err, {
+          operation: "storage.archive.animal.upload",
+          targetId: docSnap.id,
+          status: "upload_failed",
+        });
+      }
+
+      if (!uploaded) continue;
+
+      await deleteStorageFilesFromUrls(data.photos);
+      await docSnap.ref.delete();
+    }
+
+    logOperationSuccess({
+      operation,
+      approvedApplications: approvedSnap.size,
+      rejectedApplications: rejectedSnap.size,
+      withdrawnApplications: withdrawnSnap.size,
+      archivedAnimals: archivedAnimalsSnap.size,
+    });
+    // onAnimalChanged e onApplicationStatusChanged mantêm metadata/counts via FieldValue.increment.
+    // Não recalibrar aqui — o cron rodar count() antes dos triggers concluírem causaria race condition
+    // que deixa os contadores negativos. Use recalibrateCounts() manualmente se houver drift.
+  } catch (err) {
+    logOperationError(err, { operation });
+    throw err;
+  }
 }
 
 export const archiveAndCleanup = onSchedule(
