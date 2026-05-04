@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Users,
   Star,
+  Archive,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -50,6 +51,7 @@ const navItems = [
   { to: '/admin/animais', label: 'Animais', icon: PawPrint, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/destaques', label: 'Destaques', icon: Star, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined },
+  { to: '/admin/arquivos', label: 'Arquivos', icon: Archive, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined },
 ]
