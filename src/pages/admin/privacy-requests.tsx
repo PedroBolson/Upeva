@@ -242,7 +242,7 @@ function BackfillConfirmModal({
       onClose={onClose}
       onConfirm={onConfirm}
       title="Atualizar índices de privacidade?"
-      description="Esta ação processa candidaturas antigas para permitir a busca por CPF/e-mail na tela de privacidade. Ela não altera status, não envia mensagens e não modifica o conteúdo da candidatura, mas pode gerar leituras e escritas no Firebase. Execute apenas quando necessário."
+      description="Esta ação processa candidaturas antigas para permitir a busca por CPF/e-mail na tela de privacidade. Ela não altera status, não envia mensagens e não modifica o conteúdo da candidatura, mas pode gerar leituras e escritas no Firebase. Execute apenas quando não encontrar dados do CPF requisitado."
       confirmLabel="Atualizar índices"
       cancelLabel="Cancelar"
       variant="warning"
@@ -250,6 +250,8 @@ function BackfillConfirmModal({
     >
       <p className="text-sm text-muted-foreground">
         Novas candidaturas já recebem esses índices automaticamente.
+        <br />
+        Se você rodou a atualização após não encontrar um registro, é possivel que não exista registros com o CPF/email informados.
       </p>
     </ConfirmModal>
   )
@@ -321,10 +323,10 @@ export function PrivacyRequestsPage() {
 
   const hasPreviewResults = Boolean(
     preview &&
-      (preview.applications.length > 0 ||
-        preview.rejectionFlags.length > 0 ||
-        preview.archiveFiles.length > 0 ||
-        preview.warnings.length > 0),
+    (preview.applications.length > 0 ||
+      preview.rejectionFlags.length > 0 ||
+      preview.archiveFiles.length > 0 ||
+      preview.warnings.length > 0),
   )
 
   function runPreview(nextSearch = lastSearch) {
@@ -511,11 +513,10 @@ export function PrivacyRequestsPage() {
       <DeleteConfirmationModal
         key={
           target
-            ? `${target.kind}-${
-                target.kind === 'application' ? target.item.id :
-                  target.kind === 'flag' ? target.item.flagId :
-                    target.item.id
-              }`
+            ? `${target.kind}-${target.kind === 'application' ? target.item.id :
+              target.kind === 'flag' ? target.item.flagId :
+                target.item.id
+            }`
             : 'empty'
         }
         target={target}
