@@ -80,3 +80,11 @@ export async function generateAdoptionContractNow(
   const result = await fn({ applicationId })
   return result.data
 }
+
+export async function deleteArchiveFile(archiveFileId: string): Promise<void> {
+  const fn = httpsCallable<{ archiveFileId: string }, { success: true }>(
+    functions,
+    'deleteArchiveFile',
+  )
+  await fn({ archiveFileId })
+}

@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Archive, ExternalLink } from 'lucide-react'
-import { Button, Card } from '@/components/ui'
+import { Archive, ExternalLink, Trash2 } from 'lucide-react'
+import { Button, Card, ConfirmModal, useToast } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import {
+  useDeleteArchiveFile,
   useArchiveFiles,
   useGetArchiveFileUrl,
 } from '@/features/admin/hooks/use-archive-files'
-import type { ArchiveFileType } from '@/features/admin/services/archive.service'
+import { useAuthContext } from '@/features/auth/contexts/auth.context'
+import type { ArchiveFile, ArchiveFileType } from '@/features/admin/services/archive.service'
 
 const TYPE_LABELS: Record<ArchiveFileType, string> = {
   contract: 'Contrato de Adoção',
@@ -41,11 +43,15 @@ const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => currentYear - i)
 
 export function ArchiveFilesPage() {
   useDocumentTitle(buildAdminTitle('Arquivos'))
+  const { userProfile } = useAuthContext()
+  const { toast } = useToast()
 
   const [typeFilter, setTypeFilter] = useState<ArchiveFileType | ''>('')
   const [yearFilter, setYearFilter] = useState<number | ''>('')
   const [urlError, setUrlError] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [fileToDelete, setFileToDelete] = useState<ArchiveFile | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const { data: files = [], isLoading, error, refetch } = useArchiveFiles({
     type: typeFilter || null,
@@ -53,6 +59,8 @@ export function ArchiveFilesPage() {
   })
 
   const { mutate: fetchUrl } = useGetArchiveFileUrl()
+  const { mutate: deleteArchive, isPending: isDeletingArchive } = useDeleteArchiveFile()
+  const isAdmin = userProfile?.role === 'admin'
 
   function handleOpenPdf(archiveFileId: string) {
     setUrlError(null)
@@ -69,8 +77,35 @@ export function ArchiveFilesPage() {
     })
   }
 
+  function handleDeleteArchiveFile() {
+    if (!fileToDelete) return
+    setDeleteError(null)
+    deleteArchive(fileToDelete.id, {
+      onSuccess: () => {
+        setFileToDelete(null)
+        void refetch()
+        toast.success('Arquivo arquivado excluído.')
+      },
+      onError: () => {
+        setDeleteError('Não foi possível excluir o arquivo arquivado. Tente novamente.')
+      },
+    })
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <ConfirmModal
+        open={fileToDelete !== null}
+        onClose={() => setFileToDelete(null)}
+        onConfirm={handleDeleteArchiveFile}
+        title="Excluir arquivo arquivado?"
+        description="Esta ação excluirá o PDF privado e o registro de arquivo arquivado. Ela não altera automaticamente o status da candidatura, do animal ou de qualquer processo relacionado. Se este arquivo estiver referenciado por uma candidatura, animal ou flag, apenas as referências ao arquivo serão removidas quando possível. Use apenas para corrigir arquivos gerados por engano ou testes."
+        confirmLabel="Excluir arquivo"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={isDeletingArchive}
+      />
+
       <Card className="border-border/80 p-5">
         <div className="flex items-start gap-3">
           <Archive size={18} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -145,20 +180,36 @@ export function ArchiveFilesPage() {
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 gap-1.5 text-primary"
-                onClick={() => handleOpenPdf(file.id)}
-                disabled={openingId === file.id}
-              >
-                {openingId === file.id ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <ExternalLink size={14} />
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-primary"
+                  onClick={() => handleOpenPdf(file.id)}
+                  disabled={openingId === file.id}
+                >
+                  {openingId === file.id ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <ExternalLink size={14} />
+                  )}
+                  Abrir PDF
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-danger"
+                    onClick={() => {
+                      setDeleteError(null)
+                      setFileToDelete(file)
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Excluir
+                  </Button>
                 )}
-                Abrir PDF
-              </Button>
+              </div>
             </div>
           ))}
         </Card>
@@ -166,6 +217,9 @@ export function ArchiveFilesPage() {
 
       {urlError && (
         <p role="alert" className="text-sm text-danger">{urlError}</p>
+      )}
+      {deleteError && (
+        <p role="alert" className="text-sm text-danger">{deleteError}</p>
       )}
     </div>
   )

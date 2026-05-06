@@ -29,6 +29,16 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'archived', label: 'Arquivado' },
 ]
 
+const ADOPTION_REVERSAL_HELPER =
+  'Para reverter uma adoção, altere o status da candidatura aprovada vinculada.'
+
+function animalStatusOptionsFor(animal: Animal) {
+  if (animal.status === 'adopted') {
+    return ANIMAL_STATUS_OPTIONS.filter((option) => option.value === 'adopted')
+  }
+  return ANIMAL_STATUS_OPTIONS
+}
+
 export function AdminAnimalsPage() {
   useDocumentTitle(buildAdminTitle('Animais'))
 
@@ -41,6 +51,7 @@ export function AdminAnimalsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [animalToArchive, setAnimalToArchive] = useState<Animal | null>(null)
   const [archiveError, setArchiveError] = useState<string | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const { animals: allAnimals, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
@@ -51,11 +62,30 @@ export function AdminAnimalsPage() {
   const { mutate: archiveAnimalMutation, isPending: isArchiving } = useArchiveAnimal()
 
   function handleStatusChange(animal: Animal, status: AnimalStatus) {
+    setStatusError(null)
+    if (animal.status === status) return
+
+    if (animal.status === 'adopted' && status !== 'adopted') {
+      setStatusError(ADOPTION_REVERSAL_HELPER)
+      return
+    }
+
     if (status === 'archived') {
       setArchiveError(null)
       setAnimalToArchive(animal)
     } else {
-      updateStatus({ id: animal.id, status })
+      updateStatus(
+        { id: animal.id, status },
+        {
+          onError: (error) => {
+            setStatusError(
+              error instanceof Error && error.message.trim()
+                ? error.message
+                : 'Não foi possível alterar o status do animal.',
+            )
+          },
+        },
+      )
     }
   }
 
@@ -271,13 +301,20 @@ export function AdminAnimalsPage() {
       className: 'w-56',
       cell: (a) => (
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-          <Select
-            options={ANIMAL_STATUS_OPTIONS}
-            value={a.status}
-            onChange={(value) => handleStatusChange(a, value as AnimalStatus)}
-            className="text-xs py-1"
-            aria-label="Alterar status"
-          />
+          <div className="min-w-0 flex-1">
+            <Select
+              options={animalStatusOptionsFor(a)}
+              value={a.status}
+              onChange={(value) => handleStatusChange(a, value as AnimalStatus)}
+              className="text-xs py-1"
+              aria-label="Alterar status"
+            />
+            {a.status === 'adopted' && (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                {ADOPTION_REVERSAL_HELPER}
+              </p>
+            )}
+          </div>
           <Button
             type="button"
             variant="ghost"
@@ -354,9 +391,9 @@ export function AdminAnimalsPage() {
             )}
           </div>
 
-          {(archiveError || deleteError) && (
+          {(archiveError || deleteError || statusError) && (
             <p role="alert" className="text-sm text-danger">
-              {archiveError ?? deleteError}
+              {archiveError ?? deleteError ?? statusError}
             </p>
           )}
 
@@ -370,7 +407,7 @@ export function AdminAnimalsPage() {
               <AnimalMobileCard
                 animal={animal}
                 onEdit={() => navigate(`/admin/animais/${animal.id}/editar`)}
-                onStatusChange={(status) => handleStatusChange(animal, status)}
+	                onStatusChange={(status) => handleStatusChange(animal, status)}
                 onDelete={() => {
                   setDeleteError(null)
                   setAnimalToDelete(animal)
@@ -466,14 +503,19 @@ function AnimalMobileCard({
 
         <div className="mt-4 flex flex-col gap-3">
           <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            <Select
-              options={ANIMAL_STATUS_OPTIONS}
-              value={animal.status}
-              onChange={(value) => onStatusChange(value as AnimalStatus)}
-              className="h-11 rounded-xl text-sm"
-              aria-label={`Alterar status de ${animal.name}`}
-            />
-          </div>
+	            <Select
+	              options={animalStatusOptionsFor(animal)}
+	              value={animal.status}
+	              onChange={(value) => onStatusChange(value as AnimalStatus)}
+	              className="h-11 rounded-xl text-sm"
+	              aria-label={`Alterar status de ${animal.name}`}
+	            />
+	            {animal.status === 'adopted' && (
+	              <p className="mt-2 text-xs text-muted-foreground">
+	                {ADOPTION_REVERSAL_HELPER}
+	              </p>
+	            )}
+	          </div>
 
           <Button
             variant="outline"

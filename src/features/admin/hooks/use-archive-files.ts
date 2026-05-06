@@ -1,7 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { queryClient } from '@/lib/query-client'
 import {
   listArchiveFiles,
   getArchiveFileUrl,
+  deleteArchiveFile,
   type ArchiveFilesFilter,
 } from '../services/archive.service'
 
@@ -16,5 +18,17 @@ export function useArchiveFiles(filter: ArchiveFilesFilter = {}) {
 export function useGetArchiveFileUrl() {
   return useMutation({
     mutationFn: (archiveFileId: string) => getArchiveFileUrl(archiveFileId),
+  })
+}
+
+export function useDeleteArchiveFile() {
+  return useMutation({
+    mutationFn: (archiveFileId: string) => deleteArchiveFile(archiveFileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['archive-files'] })
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+      queryClient.invalidateQueries({ queryKey: ['animals'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'animals'] })
+    },
   })
 }

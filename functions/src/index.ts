@@ -999,6 +999,154 @@ async function deleteStorageFilesFromUrls(urls: unknown): Promise<void> {
   );
 }
 
+async function deleteStorageFileIfExists(storagePath: string): Promise<void> {
+  try {
+    await adminStorage.bucket().file(storagePath).delete();
+  } catch (err) {
+    const code = (err as { code?: unknown } | null)?.code;
+    if (code === 404 || code === "404") return;
+    throw err;
+  }
+}
+
+async function commitReferenceUpdates(
+  updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }>
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += 450) {
+    const batch = db.batch();
+    for (const update of updates.slice(i, i + 450)) {
+      batch.update(update.ref, update.data);
+    }
+    await batch.commit();
+  }
+}
+
+async function removeArchiveFileReferences(
+  archiveFileId: string,
+  options: { applications?: boolean; animals?: boolean; rejectionFlags?: boolean } = {}
+): Promise<void> {
+  const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+
+  if (options.applications !== false) {
+    const applicationsSnap = await db.collection("applications")
+      .where("contractArchiveFileId", "==", archiveFileId)
+      .get();
+    for (const docSnap of applicationsSnap.docs) {
+      updates.push({
+        ref: docSnap.ref,
+        data: {
+          contractArchiveFileId: FieldValue.delete(),
+          contractGeneratedAt: FieldValue.delete(),
+          contractGenerationStatus: FieldValue.delete(),
+        },
+      });
+    }
+  }
+
+  if (options.animals !== false) {
+    const animalsSnap = await db.collection("animals")
+      .where("adoptionContractArchiveFileId", "==", archiveFileId)
+      .get();
+    for (const docSnap of animalsSnap.docs) {
+      updates.push({
+        ref: docSnap.ref,
+        data: {
+          adoptionContractArchiveFileId: FieldValue.delete(),
+        },
+      });
+    }
+  }
+
+  if (options.rejectionFlags === true) {
+    const flagsSnap = await db.collection("rejectionFlags")
+      .where("archiveFileId", "==", archiveFileId)
+      .get();
+    for (const docSnap of flagsSnap.docs) {
+      updates.push({
+        ref: docSnap.ref,
+        data: {
+          archiveFileId: FieldValue.delete(),
+        },
+      });
+    }
+  }
+
+  if (updates.length > 0) {
+    await commitReferenceUpdates(updates);
+  }
+}
+
+async function deleteArchiveFileInternal(
+  archiveFileId: string,
+  context: {
+    operation: string;
+    uid?: string;
+    targetId?: string;
+    expectedType?: string;
+    includeRejectionFlags?: boolean;
+  }
+): Promise<{ result: string }> {
+  const archiveRef = db.collection("archiveFiles").doc(archiveFileId);
+  const archiveSnap = await archiveRef.get();
+
+  if (!archiveSnap.exists) {
+    await removeArchiveFileReferences(archiveFileId, {
+      applications: true,
+      animals: true,
+      rejectionFlags: context.includeRejectionFlags === true,
+    });
+    logOperationSuccess({
+      operation: context.operation,
+      uid: context.uid,
+      targetId: context.targetId,
+      archiveFileId,
+      result: "archive_missing_references_cleaned",
+    });
+    return { result: "archive_missing_references_cleaned" };
+  }
+
+  const archiveData = archiveSnap.data() as Record<string, unknown>;
+  const archiveType = archiveData.type as string | undefined;
+  if (context.expectedType && archiveType !== context.expectedType) {
+    await removeArchiveFileReferences(archiveFileId, {
+      applications: true,
+      animals: true,
+      rejectionFlags: false,
+    });
+    logOperationError(new Error("archiveFiles type mismatch for cleanup"), {
+      operation: context.operation,
+      uid: context.uid,
+      targetId: context.targetId,
+      archiveFileId,
+      status: "archive_type_mismatch",
+    });
+    return { result: "type_mismatch_references_cleaned" };
+  }
+
+  const storagePath = archiveData.storagePath as string | undefined;
+  if (typeof storagePath !== "string" || !storagePath.startsWith("private-pdfs/")) {
+    throw new HttpsError("failed-precondition", "Caminho do arquivo arquivado inválido.");
+  }
+
+  await deleteStorageFileIfExists(storagePath);
+  await archiveRef.delete();
+  await removeArchiveFileReferences(archiveFileId, {
+    applications: true,
+    animals: true,
+    rejectionFlags: context.includeRejectionFlags === true,
+  });
+
+  logOperationSuccess({
+    operation: context.operation,
+    uid: context.uid,
+    targetId: context.targetId,
+    archiveFileId,
+    result: "deleted",
+  });
+
+  return { result: "deleted" };
+}
+
 function readApplicationPIIForArchive(data: Record<string, unknown>) {
   return {
     cpf: decrypt(data.cpf as string),
@@ -1553,6 +1701,19 @@ export const updateApplicationReview = onCall(
         if (!snap.exists) {
           throw new HttpsError("not-found", "Candidatura não encontrada.");
         }
+        const application = snap.data() as ApplicationRecord & Record<string, unknown>;
+        const contractArchiveFileId = application.status === "approved" &&
+          typeof application.contractArchiveFileId === "string" ?
+          application.contractArchiveFileId :
+          undefined;
+        if (contractArchiveFileId) {
+          await deleteArchiveFileInternal(contractArchiveFileId, {
+            operation: "contract.archive.delete.approval_reversal",
+            uid: actorUid,
+            targetId,
+            expectedType: "contract",
+          });
+        }
         await appRef.delete();
         logOperationSuccess({
           operation: "application.review.update",
@@ -1588,6 +1749,8 @@ export const updateApplicationReview = onCall(
 
       let resolvedAnimalId: string | undefined;
       let resolvedAnimalName: string | undefined;
+      let previousStatus: ApplicationStatus | undefined;
+      let previousContractArchiveFileId: string | undefined;
 
       await db.runTransaction(async (transaction) => {
         const appSnap = await transaction.get(appRef);
@@ -1596,6 +1759,10 @@ export const updateApplicationReview = onCall(
         }
 
         const application = appSnap.data() as ApplicationRecord;
+        previousStatus = application.status;
+        previousContractArchiveFileId = typeof (application as Record<string, unknown>).contractArchiveFileId === "string" ?
+          (application as Record<string, unknown>).contractArchiveFileId as string :
+          undefined;
         const isGeneralInterest = isGeneralInterestApplication(application);
         const currentAnimalId = application.animalId;
         let nextAnimalId = currentAnimalId;
@@ -1781,6 +1948,21 @@ export const updateApplicationReview = onCall(
         resolvedAnimalName = nextAnimalName;
         transaction.update(appRef, payload);
       });
+
+      if (previousStatus === "approved" && status !== "approved" && previousContractArchiveFileId) {
+        await deleteArchiveFileInternal(previousContractArchiveFileId, {
+          operation: "contract.archive.delete.approval_reversal",
+          uid: actorUid,
+          targetId,
+          expectedType: "contract",
+        });
+      } else if (previousStatus === "approved" && status !== "approved") {
+        await appRef.update({
+          contractArchiveFileId: FieldValue.delete(),
+          contractGeneratedAt: FieldValue.delete(),
+          contractGenerationStatus: FieldValue.delete(),
+        });
+      }
 
       // When approved, convert other active candidates for the same animal to general interest
       if (status === "approved" && resolvedAnimalId) {
@@ -2530,13 +2712,6 @@ export const updateAnimalStatus = onCall(
     if (!isAnimalStatus(status)) {
       throw new HttpsError("invalid-argument", "Status do animal inválido.");
     }
-    if (status === "archived") {
-      throw new HttpsError(
-        "failed-precondition",
-        "Use archiveAnimal para arquivar animais com motivo obrigatório."
-      );
-    }
-
     const targetId = animalId.trim();
     let operation = "animal.status.update";
     try {
@@ -2550,6 +2725,20 @@ export const updateAnimalStatus = onCall(
       operation = animal.status === "archived" ?
         "animal.restore" :
         "animal.status.update";
+
+      if (animal.status === "adopted" && status !== "adopted") {
+        throw new HttpsError(
+          "failed-precondition",
+          "A reversão de uma adoção deve ser feita pela candidatura aprovada, não diretamente pelo animal."
+        );
+      }
+
+      if (status === "archived") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Use archiveAnimal para arquivar animais com motivo obrigatório."
+        );
+      }
 
       logOperationStart({
         operation,
@@ -3172,6 +3361,56 @@ export const getArchiveFileUrl = onCall(
     });
 
     return { url: signedUrl };
+  }
+);
+
+// ── deleteArchiveFile: exclusão manual admin-only de PDF arquivado ──────────────
+export const deleteArchiveFile = onCall(
+  { region: "southamerica-east1", maxInstances: 5 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin") {
+      logPermissionDenied("archive.file.delete", request.auth.uid, callerRole);
+      throw new HttpsError("permission-denied", "Only admins can delete archive files.");
+    }
+
+    await assertAdminRateLimit(request.auth.uid, "archive.file.delete", 30);
+
+    const { archiveFileId } = request.data as { archiveFileId?: string };
+    if (typeof archiveFileId !== "string" || !archiveFileId.trim()) {
+      throw new HttpsError("invalid-argument", "archiveFileId inválido.");
+    }
+
+    const targetId = archiveFileId.trim();
+    logOperationStart({
+      operation: "archive.file.delete",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId,
+    });
+
+    try {
+      const { result } = await deleteArchiveFileInternal(targetId, {
+        operation: "archive.file.delete",
+        uid: request.auth.uid,
+        targetId,
+        includeRejectionFlags: true,
+      });
+
+      return { success: true, result };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "archive.file.delete",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+      });
+      throw err;
+    }
   }
 );
 

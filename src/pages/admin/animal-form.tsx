@@ -46,6 +46,9 @@ const ARCHIVE_REASON_LABELS: Record<ArchiveReason, string> = {
   other: 'Outro',
 }
 
+const ADOPTION_REVERSAL_HELPER =
+  'Para reverter uma adoção, altere o status da candidatura aprovada vinculada.'
+
 export function AnimalFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -245,6 +248,11 @@ export function AnimalFormPage() {
   })
 
   function handleStatusChange(value: string, fieldOnChange: (v: string) => void) {
+    if (animal?.status === 'adopted' && value !== 'adopted') {
+      setSubmitError(ADOPTION_REVERSAL_HELPER)
+      return
+    }
+
     if (value === 'archived' && isEditing && animal) {
       setIsArchiveModalOpen(true)
       return
@@ -277,10 +285,13 @@ export function AnimalFormPage() {
   const displayName = name?.trim() || animal?.name || 'Novo animal'
   const speciesLabel = species ? SPECIES_LABELS[species] : 'Espécie a definir'
   const statusOptions = isEditing
-    ? ANIMAL_STATUS_OPTIONS
+    ? animal?.status === 'adopted'
+      ? ANIMAL_STATUS_OPTIONS.filter((option) => option.value === 'adopted')
+      : ANIMAL_STATUS_OPTIONS
     : ANIMAL_STATUS_OPTIONS.filter((option) =>
       option.value === 'available' || option.value === 'under_review',
     )
+  const statusHint = animal?.status === 'adopted' ? ADOPTION_REVERSAL_HELPER : undefined
   const profileHelper =
     [
       sex ? SEX_LABELS[sex] : null,
@@ -674,14 +685,15 @@ export function AnimalFormPage() {
                 name="status"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    label="Status"
-                    options={statusOptions}
-                    value={field.value}
-                    onChange={(v) => handleStatusChange(v, field.onChange)}
-                    onBlur={field.onBlur}
-                    required
-                  />
+	                  <Select
+	                    label="Status"
+	                    options={statusOptions}
+	                    value={field.value}
+	                    onChange={(v) => handleStatusChange(v, field.onChange)}
+	                    onBlur={field.onBlur}
+	                    hint={statusHint}
+	                    required
+	                  />
                 )}
               />
 
@@ -807,6 +819,10 @@ function getAnimalSaveErrorMessage(err: unknown): string {
 
   if (err.message.includes('permission-denied')) {
     return 'Você não tem permissão para salvar animais.'
+  }
+
+  if (err.message.includes('reversão de uma adoção')) {
+    return ADOPTION_REVERSAL_HELPER
   }
 
   if (err.message.includes('storage/unauthorized')) {

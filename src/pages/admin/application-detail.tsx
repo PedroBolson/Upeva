@@ -138,6 +138,7 @@ export function ApplicationDetailPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
   const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false)
+  const [isApprovalRemovalConfirmOpen, setIsApprovalRemovalConfirmOpen] = useState(false)
   const [isAnimalModalOpen, setIsAnimalModalOpen] = useState(false)
   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false)
   const [isStatusInfoOpen, setIsStatusInfoOpen] = useState(false)
@@ -282,6 +283,14 @@ export function ApplicationDetailPage() {
       return
     }
 
+    const removingStoredApproval = app?.status === 'approved' &&
+      currentStatus !== 'approved' &&
+      (Boolean(app.contractArchiveFileId) || app.contractGenerationStatus === 'stored')
+    if (removingStoredApproval) {
+      setIsApprovalRemovalConfirmOpen(true)
+      return
+    }
+
     if (currentStatus === 'approved' && currentAnimalId) {
       setIsApprovalConfirmOpen(true)
       return
@@ -389,6 +398,21 @@ export function ApplicationDetailPage() {
           </div>
         )}
       </ConfirmModal>
+
+      <ConfirmModal
+        open={isApprovalRemovalConfirmOpen}
+        onClose={() => setIsApprovalRemovalConfirmOpen(false)}
+        onConfirm={() => {
+          setIsApprovalRemovalConfirmOpen(false)
+          saveReview()
+        }}
+        title="Remover aprovação da adoção?"
+        description="Esta candidatura já foi aprovada e possui um termo de adoção gerado. Ao continuar, a candidatura sairá do estado de aprovada, o animal voltará ao fluxo de adoção e o termo de adoção arquivado será removido. Esta ação não deve ser feita se o contrato já foi assinado e a adoção continua válida."
+        confirmLabel="Confirmar alteração"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isPending}
+      />
 
       <ConfirmModal
         open={isRelinkConfirmOpen}
