@@ -147,7 +147,9 @@ export function ApplicationDetailPage() {
   const { mutate: generateContract, isPending: isGeneratingContract } = useMutation({
     mutationFn: () => generateAdoptionContractNow(id!),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['application', id] })
+      void queryClient.invalidateQueries({ queryKey: ['applications', 'detail', id] })
+      void queryClient.invalidateQueries({ queryKey: ['archive-files'] })
+      void refetch()
       setContractError(null)
     },
     onError: () => {
@@ -834,7 +836,11 @@ export function ApplicationDetailPage() {
                     {isGeneratingContract
                       ? <Loader2 size={14} className="animate-spin" />
                       : <RefreshCw size={14} />}
-                    {isGeneratingContract ? 'Gerando…' : 'Gerar termo'}
+                    {isGeneratingContract
+                      ? 'Gerando…'
+                      : app.contractGenerationStatus === 'failed'
+                        ? 'Gerar termo novamente'
+                        : 'Gerar termo'}
                   </Button>
                 )}
                 {contractError && (
@@ -848,6 +854,11 @@ export function ApplicationDetailPage() {
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Os dados completos da candidatura serão mantidos temporariamente para conferência operacional. Após o prazo de retenção, poderá permanecer apenas o termo arquivado com acesso restrito.
                 </p>
+                {!app.contractArchiveFileId && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Se o termo foi removido manualmente, é possível gerar um novo termo enquanto a candidatura permanecer aprovada.
+                  </p>
+                )}
               </div>
             </Card>
           )}

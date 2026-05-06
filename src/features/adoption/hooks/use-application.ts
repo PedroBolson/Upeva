@@ -7,5 +7,6 @@ export function useApplication(id: string | undefined) {
     queryFn: () => getApplicationById(id!),
     enabled: !!id,
     staleTime: 1000 * 60 * 5,
+    refetchOnMount: 'always',
   })
 }
