@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy.sh — Smart local deploy: build → tests → git push + firebase deploy
+# deploy.sh — Smart local deploy: build → tests → git push → firebase deploy
 
 set -uo pipefail
 
@@ -104,63 +104,31 @@ fi
 echo ""
 info "Firebase targets detectados: ${BOLD}${YELLOW}${TARGETS}${NC}"
 
-# ─── Step 5: Git Push + Firebase Deploy em paralelo ────────────────────────────
+# ─── Step 5: Git Push ──────────────────────────────────────────────────────────
 divider
-info "Etapa 5/5 — ${BOLD}git push${NC} + ${BOLD}firebase deploy${NC} ${DIM}(--only ${TARGETS}, paralelo)${NC}"
+info "Etapa 5/6 — ${BOLD}git push${NC}"
 divider
 
-# Diretório de logs temporários
-LOG_DIR=$(mktemp -d)
-GIT_LOG="${LOG_DIR}/git.log"
-FB_LOG="${LOG_DIR}/firebase.log"
+if ! git push 2>&1 | prefix_lines "$MAGENTA" " GIT  "; then
+  error "git push falhou. Deploy abortado."
+  exit 1
+fi
 
-# Job: git push
-(
-  git push 2>&1 | prefix_lines "$MAGENTA" " GIT  "
-  echo "${PIPESTATUS[0]}" > "${LOG_DIR}/git_exit"
-) &
-GIT_PID=$!
+success "git push concluído."
 
-# Job: firebase deploy
-(
-  firebase deploy --only "$TARGETS" 2>&1 | prefix_lines "$CYAN" "FIREBASE"
-  echo "${PIPESTATUS[0]}" > "${LOG_DIR}/fb_exit"
-) &
-FB_PID=$!
+# ─── Step 6: Firebase Deploy ───────────────────────────────────────────────────
+divider
+info "Etapa 6/6 — ${BOLD}firebase deploy${NC} ${DIM}(--only ${TARGETS})${NC}"
+divider
 
-# Aguarda ambos terminarem
-wait $GIT_PID
-wait $FB_PID
+if ! firebase deploy --only "$TARGETS" 2>&1 | prefix_lines "$CYAN" "FIREBASE"; then
+  error "firebase deploy falhou. Deploy abortado."
+  exit 1
+fi
 
-# Lê exit codes reais capturados dentro dos subshells
-GIT_EXIT=$(cat "${LOG_DIR}/git_exit" 2>/dev/null || echo "1")
-FB_EXIT=$(cat "${LOG_DIR}/fb_exit" 2>/dev/null || echo "1")
-
-rm -rf "$LOG_DIR"
+success "firebase deploy [${TARGETS}] concluído."
 
 # ─── Resultado final ────────────────────────────────────────────────────────────
 divider
-OVERALL_OK=true
-
-if [ "$GIT_EXIT" -eq 0 ]; then
-  success "git push concluído."
-else
-  error "git push falhou (exit ${GIT_EXIT})."
-  OVERALL_OK=false
-fi
-
-if [ "$FB_EXIT" -eq 0 ]; then
-  success "firebase deploy [${TARGETS}] concluído."
-else
-  error "firebase deploy falhou (exit ${FB_EXIT})."
-  OVERALL_OK=false
-fi
-
-divider
-if $OVERALL_OK; then
-  success "${BOLD}Deploy completo! 🚀${NC}"
-  exit 0
-else
-  error "${BOLD}Deploy concluído com erros.${NC}"
-  exit 1
-fi
+success "${BOLD}Deploy completo! 🚀${NC}"
+exit 0

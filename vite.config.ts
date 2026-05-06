@@ -4,6 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath } from 'node:url'
 
+type WorkboxRouteMatch = {
+  request: {
+    destination?: string
+  }
+  url: URL
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -33,7 +40,50 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,
+            urlPattern: ({ request, url }: WorkboxRouteMatch) => {
+              if (
+                url.origin !== 'https://firebasestorage.googleapis.com' ||
+                request.destination !== 'image'
+              ) {
+                return false
+              }
+
+              const signedStorageParams = new Set([
+                'expires',
+                'googleaccessid',
+                'signature',
+                'x-goog-algorithm',
+                'x-goog-credential',
+                'x-goog-date',
+                'x-goog-expires',
+                'x-goog-signature',
+                'x-goog-signedheaders',
+              ])
+
+              for (const key of url.searchParams.keys()) {
+                if (signedStorageParams.has(key.toLowerCase())) {
+                  return false
+                }
+              }
+
+              const encodedObjectPath = url.pathname.split('/o/')[1]
+
+              if (!encodedObjectPath) {
+                return false
+              }
+
+              let objectPath: string
+              try {
+                objectPath = decodeURIComponent(encodedObjectPath)
+              } catch {
+                return false
+              }
+
+              return (
+                objectPath.startsWith('animals/') &&
+                /\.(jpe?g|png|webp)$/i.test(objectPath)
+              )
+            },
             handler: 'CacheFirst',
             options: {
               cacheName: 'firebase-storage-images',
