@@ -68,7 +68,7 @@ export function TermsOfUsePage() {
           <ul className="list-disc list-inside flex flex-col gap-1">
             <li>Fornecer informações <strong className="text-foreground">verdadeiras, completas e atualizadas</strong> — informações falsas resultam em cancelamento imediato da candidatura e possibilidade de flag para futuras solicitações</li>
             <li>Não <strong className="text-foreground">vender, rifar, trocar ou repassar</strong> o animal adotado a terceiros sem autorização expressa da Upeva</li>
-            <li>Devolver o animal à Upeva caso não possa mais mantê-lo, em vez de descartá-lo</li>
+            <li>Devolver o animal à Upeva caso não possa mais mantê-lo, em vez de abandoná-lo</li>
             <li>Castrar o animal dentro do prazo estabelecido no contrato de adoção, caso ainda não seja castrado</li>
             <li>Aceitar visitas e contatos de acompanhamento pós-adoção realizados pela equipe da Upeva</li>
             <li>Assumir <strong className="text-foreground">responsabilidade civil total</strong> pelo animal após a assinatura do contrato, incluindo danos ou incidentes causados pelo animal</li>

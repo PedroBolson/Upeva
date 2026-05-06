@@ -87,15 +87,19 @@ export function PrivacyPolicyPage() {
               <p className="font-medium text-foreground">2. Geração do termo oficial de adoção</p>
               <p>
                 Quando uma candidatura é aprovada, um Termo de Adoção Responsável é gerado imediatamente e arquivado
-                de forma privada com acesso restrito à equipe da Upeva. O termo formaliza o compromisso de adoção e
-                permanece arquivado mesmo após a remoção dos dados operacionais. Base legal: consentimento e legítimo interesse (LGPD Art. 7, I e IX).
+                de forma privada com acesso restrito à equipe da Upeva. Esse termo pode conter os dados pessoais
+                necessários para formalizar a adoção, como nome, CPF, data de nascimento, endereço, telefone e dados
+                do animal. Após o prazo de retenção operacional, os dados completos da candidatura podem ser removidos
+                do banco de dados, permanecendo o termo arquivado de forma privada e restrita.
+                Base legal: consentimento e legítimo interesse (LGPD Art. 7, I e IX).
               </p>
             </div>
             <div className="rounded-lg border border-border bg-muted/40 p-3 flex flex-col gap-1">
               <p className="font-medium text-foreground">3. Segurança histórica e prevenção de fraudes</p>
               <p>
-                Candidaturas com rejeição definitiva geram um registro anônimo (apenas hash do CPF e e-mail — sem dados pessoais legíveis)
-                para proteger futuros animais. Base legal: legítimo interesse (LGPD Art. 7, IX).
+                Candidaturas com rejeição definitiva podem gerar um registro pseudonimizado, usando identificadores
+                protegidos por HMAC, sem CPF ou e-mail legíveis, para proteger futuros animais.
+                Base legal: legítimo interesse (LGPD Art. 7, IX).
               </p>
             </div>
           </div>
@@ -104,8 +108,8 @@ export function PrivacyPolicyPage() {
         <Section title="Retenção e exclusão" icon={Trash2}>
           <p>Seguimos o princípio de minimização de dados: nenhum dado pessoal fica além do necessário.</p>
           <ul className="list-disc list-inside flex flex-col gap-1">
-            <li><strong className="text-foreground">Candidatura aprovada:</strong> ao aprovar, o termo oficial de adoção é gerado imediatamente e arquivado de forma privada. Os dados completos da candidatura ficam disponíveis temporariamente para conferência operacional ({APPROVED_RETENTION_DAYS} dias) e depois são removidos do banco de dados. O termo permanece arquivado com acesso restrito.</li>
-            <li><strong className="text-foreground">Candidatura com rejeição definitiva:</strong> exportada como PDF interno → excluída do banco; resta apenas um registro anônimo sem PII</li>
+            <li><strong className="text-foreground">Candidatura aprovada:</strong> ao aprovar, o termo oficial de adoção é gerado imediatamente e arquivado de forma privada. Esse termo contém os dados necessários para formalizar a adoção. Os dados completos da candidatura ficam disponíveis temporariamente para conferência operacional ({APPROVED_RETENTION_DAYS} dias) e depois podem ser removidos do banco de dados, permanecendo o termo arquivado com acesso restrito.</li>
+            <li><strong className="text-foreground">Candidatura com rejeição definitiva:</strong> exportada como PDF interno → excluída do banco; resta apenas um registro pseudonimizado sem CPF ou e-mail legíveis</li>
             <li><strong className="text-foreground">Candidatura recusada ou desistência:</strong> excluída sem geração de PDF ou registro</li>
             <li><strong className="text-foreground">Animal arquivado:</strong> {ARCHIVED_ANIMAL_RETENTION_DAYS} dias após arquivamento → exportado como PDF → excluído do banco</li>
           </ul>
@@ -117,7 +121,7 @@ export function PrivacyPolicyPage() {
             <li>Confirmação de que seus dados estão sendo tratados</li>
             <li>Acesso aos dados que armazenamos sobre você</li>
             <li>Correção de dados incompletos ou desatualizados</li>
-            <li>Exclusão dos dados (direito ao esquecimento)</li>
+            <li>Exclusão dos dados, quando aplicável</li>
             <li>Portabilidade dos dados a outro controlador</li>
             <li>Revogação do consentimento</li>
           </ul>
