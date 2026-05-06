@@ -1,7 +1,7 @@
 export { onUserCreated } from "./triggers/auth.js";
 export { createUser, updateUserRole, deleteUser, refreshUserClaims } from "./callables/users.js";
 export { createApplication, updateApplicationReview, recalibrateQueuePositions, getApplicationPII, checkRejectionFlag, deleteRejectionFlag } from "./callables/applications.js";
-export { recalibrateCounts, updateFeaturedAnimals, archiveAnimal, updateAnimalStatus } from "./callables/animals.js";
+export { recalibrateCounts, updateFeaturedAnimals, archiveAnimal, updateAnimalStatus, deleteAnimal } from "./callables/animals.js";
 export { recalibrateArchiveFileFilters, getArchiveFileUrl, deleteArchiveFile, generateAdoptionContractNow } from "./callables/archive.js";
 export { backfillApplicationPrivacyIndexes, previewPrivacyRequest, deletePrivacyApplicationData, deletePrivacyRejectionFlag, deletePrivacyArchiveFile } from "./callables/privacy.js";
 export { onApplicationStatusChanged } from "./triggers/applications.js";

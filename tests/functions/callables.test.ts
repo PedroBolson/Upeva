@@ -618,6 +618,29 @@ describe('updateApplicationReview', () => {
     ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
   })
 
+  it('deleteAnimal blocks animals with linked applications', async () => {
+    await signInAsReviewer()
+
+    await adminDb.collection('animals').doc('cat-delete-blocked').set(availableAnimalDoc())
+    await adminDb.collection('applications').doc('app-delete-blocker').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-delete-blocked',
+        animalName: 'Test Cat',
+        status: 'pending',
+      }),
+    )
+
+    await expect(
+      callable('deleteAnimal')({
+        animalId: 'cat-delete-blocked',
+        reason: 'Cadastro duplicado criado em teste interno',
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+
+    const animalDoc = await adminDb.collection('animals').doc('cat-delete-blocked').get()
+    expect(animalDoc.exists).toBe(true)
+  })
+
   it('removes adopted animals from similarity caches and deletes their own cache doc', async () => {
     await signInAsAdmin()
 
@@ -806,6 +829,82 @@ describe('Privacy/LGPD callables', () => {
     expect(audit.birthDate).toBeUndefined()
     expect(audit.address).toBeUndefined()
     expect(audit.fullName).toBeUndefined()
+  })
+
+  it('deletePrivacyApplicationData deletes an active application and recomputes animal queue state', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-lgpd-queue').set(
+      availableAnimalDoc({ status: 'under_review', activeApplicationCount: 2 }),
+    )
+    await adminDb.collection('applications').doc('app-lgpd-delete-active').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-lgpd-queue',
+        animalName: 'Test Cat',
+        status: 'pending',
+        queuePosition: 2,
+        waitlistEntry: true,
+      }),
+    )
+    await adminDb.collection('applications').doc('app-lgpd-remaining').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-lgpd-queue',
+        animalName: 'Test Cat',
+        status: 'pending',
+        queuePosition: 5,
+        waitlistEntry: true,
+      }),
+    )
+
+    const result = await callable('deletePrivacyApplicationData')({
+      applicationId: 'app-lgpd-delete-active',
+      reason: REASON,
+    })
+    expect((result.data as { success: boolean; animalRecomputed?: boolean }).success).toBe(true)
+    expect((result.data as { animalRecomputed?: boolean }).animalRecomputed).toBe(true)
+
+    const [deletedDoc, remainingDoc, animalDoc] = await Promise.all([
+      adminDb.collection('applications').doc('app-lgpd-delete-active').get(),
+      adminDb.collection('applications').doc('app-lgpd-remaining').get(),
+      adminDb.collection('animals').doc('cat-lgpd-queue').get(),
+    ])
+
+    expect(deletedDoc.exists).toBe(false)
+    expect(remainingDoc.data()?.queuePosition).toBe(1)
+    expect(remainingDoc.data()?.waitlistEntry).toBe(false)
+    expect(animalDoc.data()?.activeApplicationCount).toBe(1)
+    expect(animalDoc.data()?.status).toBe('available')
+  })
+
+  it('deletePrivacyApplicationData blocks approved applications pending adoption-record decision', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-lgpd-approved').set(
+      availableAnimalDoc({ status: 'adopted', adoptedApplicationId: 'app-lgpd-approved' }),
+    )
+    await adminDb.collection('applications').doc('app-lgpd-approved').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-lgpd-approved',
+        animalName: 'Test Cat',
+        status: 'approved',
+        contractArchiveFileId: 'archive-contract-lgpd',
+      }),
+    )
+
+    await expect(
+      callable('deletePrivacyApplicationData')({
+        applicationId: 'app-lgpd-approved',
+        reason: REASON,
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+
+    const [appDoc, animalDoc] = await Promise.all([
+      adminDb.collection('applications').doc('app-lgpd-approved').get(),
+      adminDb.collection('animals').doc('cat-lgpd-approved').get(),
+    ])
+    expect(appDoc.exists).toBe(true)
+    expect(animalDoc.data()?.status).toBe('adopted')
+    expect(animalDoc.data()?.adoptedApplicationId).toBe('app-lgpd-approved')
   })
 
   // ── deletePrivacyArchiveFile ────────────────────────────────────────────────

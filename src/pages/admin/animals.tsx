@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { Button, Card, Input, AnimalStatusBadge, ResponsiveDataList, Select } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
+import { Textarea } from '@/components/ui/textarea'
 import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
 import { AnimalPhotoThumbnail } from '@/features/animals/components/animal-photo-thumbnail'
 import type { Column } from '@/components/ui'
@@ -48,6 +49,7 @@ export function AdminAnimalsPage() {
   const [sortColumn, setSortColumn] = useState<string>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [animalToDelete, setAnimalToDelete] = useState<Animal | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [animalToArchive, setAnimalToArchive] = useState<Animal | null>(null)
   const [archiveError, setArchiveError] = useState<string | null>(null)
@@ -147,17 +149,19 @@ export function AdminAnimalsPage() {
 
     setDeleteError(null)
     deleteAnimal(
-      { id: animalToDelete.id, photoUrls: animalToDelete.photos },
+      { animalId: animalToDelete.id, reason: deleteReason },
       {
         onSuccess: () => {
           setAnimalToDelete(null)
+          setDeleteReason('')
         },
         onError: (err) => {
-          const message = err instanceof Error && err.message.includes('linked-applications')
+          const message = err instanceof Error && err.message.includes('candidaturas vinculadas')
             ? 'Este animal possui candidaturas vinculadas e não pode ser excluído.'
             : 'Não foi possível excluir o animal. Tente novamente.'
           setDeleteError(message)
           setAnimalToDelete(null)
+          setDeleteReason('')
         },
       },
     )
@@ -323,6 +327,7 @@ export function AdminAnimalsPage() {
             aria-label={`Excluir ${a.name}`}
             onClick={() => {
               setDeleteError(null)
+              setDeleteReason('')
               setAnimalToDelete(a)
             }}
           >
@@ -337,7 +342,10 @@ export function AdminAnimalsPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <ConfirmModal
         open={animalToDelete !== null}
-        onClose={() => setAnimalToDelete(null)}
+        onClose={() => {
+          setAnimalToDelete(null)
+          setDeleteReason('')
+        }}
         onConfirm={handleConfirmDelete}
         title="Excluir animal?"
         description={
@@ -349,7 +357,17 @@ export function AdminAnimalsPage() {
         cancelLabel="Cancelar"
         variant="danger"
         loading={isDeletingAnimal}
-      />
+        confirmDisabled={!deleteReason.trim()}
+      >
+        <Textarea
+          label="Motivo da exclusão"
+          value={deleteReason}
+          onChange={(event) => setDeleteReason(event.target.value)}
+          rows={4}
+          placeholder="Informe o motivo administrativo"
+          disabled={isDeletingAnimal}
+        />
+      </ConfirmModal>
 
       <ArchiveAnimalModal
         open={animalToArchive !== null}

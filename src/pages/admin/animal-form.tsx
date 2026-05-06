@@ -80,6 +80,7 @@ export function AnimalFormPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleteAnimalModalOpen, setIsDeleteAnimalModalOpen] = useState(false)
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false)
@@ -313,13 +314,15 @@ export function AnimalFormPage() {
     setDeleteError(null)
 
     try {
-      await deleteAnimal({ id: animal.id, photoUrls: animal.photos })
+      await deleteAnimal({ animalId: animal.id, reason: deleteReason })
+      setDeleteReason('')
       navigate('/admin/animais')
     } catch (err) {
-      const message = err instanceof Error && err.message.includes('linked-applications')
+      const message = err instanceof Error && err.message.includes('candidaturas vinculadas')
         ? 'Este animal possui candidaturas vinculadas e não pode ser excluído.'
         : 'Não foi possível excluir o animal. Tente novamente.'
       setDeleteError(message)
+      setDeleteReason('')
       setIsDeleteAnimalModalOpen(false)
     }
   }
@@ -347,7 +350,10 @@ export function AnimalFormPage() {
 
       <ConfirmModal
         open={isDeleteAnimalModalOpen}
-        onClose={() => setIsDeleteAnimalModalOpen(false)}
+        onClose={() => {
+          setIsDeleteAnimalModalOpen(false)
+          setDeleteReason('')
+        }}
         onConfirm={handleDeleteAnimal}
         title="Excluir animal?"
         description="Essa ação remove o animal do sistema e apaga as fotos vinculadas. Não é possível desfazer."
@@ -355,7 +361,17 @@ export function AnimalFormPage() {
         cancelLabel="Cancelar"
         variant="danger"
         loading={isDeletingAnimal}
-      />
+        confirmDisabled={!deleteReason.trim()}
+      >
+        <Textarea
+          label="Motivo da exclusão"
+          value={deleteReason}
+          onChange={(event) => setDeleteReason(event.target.value)}
+          rows={4}
+          placeholder="Informe o motivo administrativo"
+          disabled={isDeletingAnimal}
+        />
+      </ConfirmModal>
 
       {isEditing ? (
         <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center">
@@ -777,7 +793,11 @@ export function AnimalFormPage() {
                   type="button"
                   variant="danger"
                   className="w-full gap-1.5 sm:col-span-2"
-                  onClick={() => setIsDeleteAnimalModalOpen(true)}
+                  onClick={() => {
+                    setDeleteError(null)
+                    setDeleteReason('')
+                    setIsDeleteAnimalModalOpen(true)
+                  }}
                 >
                   <Trash2 size={16} />
                   Excluir animal

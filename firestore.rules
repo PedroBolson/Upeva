@@ -69,7 +69,7 @@ service cloud.firestore {
 
     // ── Animals ────────────────────────────────────────────────────────────────
     // Public read only for public-safe statuses; staff can read all and
-    // create/edit/delete.
+    // create/edit. Deletes go through Cloud Functions for cleanup/audit.
     // Create validates required fields and enum values (Melhoria 5).
 
     match /animals/{animalId} {
@@ -89,7 +89,7 @@ service cloud.firestore {
         && !hasAnimalStatusWrite(request.resource.data.diff(resource.data).affectedKeys())
         && (!('breed' in request.resource.data) || (request.resource.data.breed is string && request.resource.data.breed.size() <= 100))
         && (!('coatColor' in request.resource.data) || (request.resource.data.coatColor is string && request.resource.data.coatColor.size() <= 100));
-      allow delete: if isStaff();
+      allow delete: if false; // Cloud Function only
     }
 
     // ── Adoption applications ──────────────────────────────────────────────────
@@ -101,7 +101,9 @@ service cloud.firestore {
     match /applications/{appId} {
       allow create: if false; // Cloud Function only
 
-      allow read, delete: if isStaff();
+      allow read: if isStaff();
+
+      allow delete: if false; // Cloud Function only
 
       allow update: if false; // Cloud Function only
     }

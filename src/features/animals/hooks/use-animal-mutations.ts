@@ -9,6 +9,7 @@ import {
   archiveAnimal,
   type AnimalPayload,
   type ArchiveAnimalInput,
+  type DeleteAnimalInput,
 } from '../services/animals.service'
 
 function invalidate() {
@@ -51,8 +52,7 @@ export function useArchiveAnimal() {
 
 export function useDeleteAnimal() {
   return useMutation({
-    mutationFn: ({ id, photoUrls }: { id: string; photoUrls?: string[] }) =>
-      deleteAnimal(id, photoUrls),
+    mutationFn: (input: DeleteAnimalInput) => deleteAnimal(input),
     onSuccess: invalidate,
   })
 }

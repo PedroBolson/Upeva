@@ -22,6 +22,8 @@ import {
   piiEncryptionKey,
   PRIVACY_BACKFILL_BATCH_SIZE,
   PrivacySearchType,
+  recalibrateAnimalQueue,
+  recomputeAnimalState,
   safeRole,
   validatePrivacyReason,
   writePrivacyAudit,
@@ -442,7 +444,36 @@ export const deletePrivacyApplicationData = onCall(
         return { success: true, result: "already_missing" };
       }
 
+      const application = snap.data() as {
+        animalId?: unknown;
+        status?: unknown;
+        queuePosition?: unknown;
+        waitlistEntry?: unknown;
+        contractArchiveFileId?: unknown;
+      };
+      const animalId = typeof application.animalId === "string" && application.animalId.trim() ?
+        application.animalId.trim() :
+        undefined;
+      const status = typeof application.status === "string" ? application.status : undefined;
+      const hadQueueState =
+        typeof application.queuePosition === "number" ||
+        typeof application.waitlistEntry === "boolean";
+      const hadContractArchive =
+        typeof application.contractArchiveFileId === "string" &&
+        Boolean(application.contractArchiveFileId.trim());
+
+      if (status === "approved") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Candidaturas aprovadas não são excluídas por esta rotina: revise a decisão de produto para preservar o vínculo de adoção e o contrato privado."
+        );
+      }
+
       await ref.delete();
+      if (animalId) {
+        await recomputeAnimalState(animalId);
+        await recalibrateAnimalQueue(animalId);
+      }
       await writePrivacyAudit({
         action: "delete_application",
         actorUid: request.auth.uid,
@@ -453,8 +484,21 @@ export const deletePrivacyApplicationData = onCall(
         result: "deleted",
       }).catch(() => undefined);
 
-      logOperationSuccess({ operation, uid: request.auth.uid, actorRole: safeRole(callerRole) });
-      return { success: true, result: "deleted" };
+      logOperationSuccess({
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        result: "deleted",
+        animalRecomputed: Boolean(animalId),
+        hadQueueState,
+        hadContractArchive,
+      });
+      return {
+        success: true,
+        result: "deleted",
+        animalRecomputed: Boolean(animalId),
+      };
     } catch (err) {
       await writePrivacyAudit({
         action: "delete_application",

@@ -1,7 +1,6 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -17,7 +16,6 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
-import { deleteAnimalPhoto } from './animal-storage.service'
 import { getFeaturedAnimalsCache } from './featured-animals.service'
 import type { AnimalStatus, Sex, Size, Species, ArchiveReason } from '@/types/common'
 import type { Animal, AnimalFilters } from '../types/animal.types'
@@ -299,16 +297,12 @@ export async function archiveAnimal(input: ArchiveAnimalInput): Promise<void> {
   await fn(input)
 }
 
-export async function deleteAnimal(id: string, photoUrls: string[] = []): Promise<void> {
-  const linkedApplications = await getDocs(
-    query(collection(db, 'applications'), where('animalId', '==', id), limit(1)),
-  )
+export type DeleteAnimalInput = {
+  animalId: string
+  reason: string
+}
 
-  if (!linkedApplications.empty) {
-    throw new Error('linked-applications')
-  }
-
-  await Promise.all(photoUrls.map(deleteAnimalPhoto))
-
-  await deleteDoc(doc(db, 'animals', id))
+export async function deleteAnimal(input: DeleteAnimalInput): Promise<void> {
+  const fn = httpsCallable<DeleteAnimalInput, { success: true }>(functions, 'deleteAnimal')
+  await fn(input)
 }

@@ -5,6 +5,7 @@ import {
   assertAdminRateLimit,
   assertMaxLength,
   db,
+  deleteStorageFilesFromUrls,
   FieldValue,
   getActorLabel,
   HttpsError,
@@ -16,6 +17,8 @@ import {
   logPermissionDenied,
   onCall,
   publicAnimalInternalFieldDeletes,
+  removeFromAnimalSimilarityCaches,
+  removeFromFeaturedAnimalsCache,
   safeRole,
   stripInternalTraceability,
 } from "../lib/shared.js";
@@ -358,6 +361,101 @@ export const updateAnimalStatus = onCall(
         actorRole: safeRole(callerRole),
         targetId,
         status,
+      });
+      throw err;
+    }
+  }
+);
+
+// ── deleteAnimal: destructive animal deletion with server-side cleanup ───────
+// Direct client deletes are blocked in Firestore rules. This callable preserves
+// the product guard that animals with linked applications cannot be deleted.
+export const deleteAnimal = onCall(
+  { region: "southamerica-east1", maxInstances: 3 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("animal.delete", request.auth.uid, callerRole);
+      throw new HttpsError("permission-denied", "Only staff can delete animals.");
+    }
+
+    await assertAdminRateLimit(request.auth.uid, "animal.delete", 20);
+
+    const { animalId } = request.data as { animalId?: unknown };
+    const reason = typeof (request.data as { reason?: unknown }).reason === "string" ?
+      (request.data as { reason: string }).reason.trim() :
+      "";
+
+    if (typeof animalId !== "string" || !animalId.trim()) {
+      throw new HttpsError("invalid-argument", "ID do animal inválido.");
+    }
+    if (!reason) {
+      throw new HttpsError("invalid-argument", "Motivo da exclusão obrigatório.");
+    }
+    assertMaxLength(reason, 1000, "reason");
+
+    const targetId = animalId.trim();
+    const operation = "animal.delete";
+    logOperationStart({
+      operation,
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId,
+    });
+
+    try {
+      const animalRef = db.collection("animals").doc(targetId);
+      const animalSnap = await animalRef.get();
+      if (!animalSnap.exists) {
+        logOperationSuccess({
+          operation,
+          uid: request.auth.uid,
+          actorRole: safeRole(callerRole),
+          targetId,
+          result: "already_missing",
+        });
+        return { success: true, result: "already_missing" };
+      }
+
+      const linkedApplicationsSnap = await db.collection("applications")
+        .where("animalId", "==", targetId)
+        .limit(1)
+        .get();
+      if (!linkedApplicationsSnap.empty) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Este animal possui candidaturas vinculadas e não pode ser excluído."
+        );
+      }
+
+      const animal = animalSnap.data() as AnimalRecord & { photos?: unknown };
+      await animalRef.delete();
+
+      await Promise.all([
+        deleteStorageFilesFromUrls(animal.photos),
+        removeFromAnimalSimilarityCaches(targetId, { deleteOwn: true }),
+        removeFromFeaturedAnimalsCache(targetId),
+      ]);
+
+      logOperationSuccess({
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        result: "deleted",
+      });
+
+      return { success: true, result: "deleted" };
+    } catch (err) {
+      logOperationError(err, {
+        operation,
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
       });
       throw err;
     }

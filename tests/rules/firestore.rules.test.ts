@@ -179,6 +179,7 @@ describe('Firestore security rules', () => {
       }))
       await assertFails(reviewerDb.doc('animals/available-safe').update({ status: 'under_review' }))
       await assertFails(reviewerDb.doc('animals/available-safe').update({ updatedBy: 'reviewer' }))
+      await assertFails(reviewerDb.doc('animals/available-safe').delete())
       await assertFails(userDb.doc('animals/not-staff-created').set({
         name: 'Blocked',
         species: 'cat',
@@ -197,6 +198,7 @@ describe('Firestore security rules', () => {
       await assertFails(anonymousDb.doc('applications/from-client').set({ status: 'pending' }))
       await assertFails(staffDb.doc('applications/from-staff-client').set({ status: 'pending' }))
       await assertFails(staffDb.doc('applications/application-1').update({ status: 'approved' }))
+      await assertFails(staffDb.doc('applications/application-1').delete())
     })
 
     it('preserves staff/admin read contracts for operational collections', async () => {
