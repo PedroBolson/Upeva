@@ -99,7 +99,7 @@ export function ArchiveFilesPage() {
         onClose={() => setFileToDelete(null)}
         onConfirm={handleDeleteArchiveFile}
         title="Excluir arquivo arquivado?"
-        description="Esta ação excluirá o PDF privado e o registro de arquivo arquivado. Ela não altera automaticamente o status da candidatura, do animal ou de qualquer processo relacionado. Se este arquivo estiver referenciado por uma candidatura, animal ou flag, apenas as referências ao arquivo serão removidas quando possível. Use apenas para corrigir arquivos gerados por engano ou testes."
+        description="Esta ação excluirá o PDF privado e o registro de arquivamento. Ela não altera automaticamente o status da candidatura, do animal ou de qualquer processo relacionado. Se este arquivo estiver referenciado por uma candidatura, animal ou flag, apenas as referências ao arquivo serão removidas quando possível. Use apenas para corrigir arquivos gerados por engano ou testes."
         confirmLabel="Excluir arquivo"
         cancelLabel="Cancelar"
         variant="danger"

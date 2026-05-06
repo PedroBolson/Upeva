@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { UserPlus, Shield, Eye, Trash2, Search } from 'lucide-react'
+import { UserPlus, Shield, Eye, Trash2, Search, Loader2 } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
-import { Button, Card, Input, Select, ResponsiveDataList, ConfirmModal } from '@/components/ui'
+import { Button, Card, Input, Select, ResponsiveDataList, ConfirmModal, useToast } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { AdminListSkeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/error-state'
@@ -51,6 +51,7 @@ export function UsersPage() {
   useDocumentTitle(buildAdminTitle('Usuários'))
 
   const { userProfile: currentUser } = useAuth()
+  const { toast } = useToast()
   const {
     data,
     isLoading,
@@ -80,6 +81,8 @@ export function UsersPage() {
   const [search, setSearch] = useState('')
   const [sortColumn, setSortColumn] = useState<string>('displayName')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [updatingRoleIds, setUpdatingRoleIds] = useState<Set<string>>(new Set())
+  const [roleErrors, setRoleErrors] = useState<Record<string, string>>({})
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const {
@@ -125,6 +128,42 @@ export function UsersPage() {
   }
 
   const isAdmin = currentUser?.role === 'admin'
+
+  function isRoleUpdating(uid: string): boolean {
+    return updatingRoleIds.has(uid)
+  }
+
+  function handleRoleChange(user: UserProfile, role: UserRole) {
+    if (user.role === role || isRoleUpdating(user.uid)) return
+
+    setRoleErrors((current) => {
+      const next = { ...current }
+      delete next[user.uid]
+      return next
+    })
+    setUpdatingRoleIds((current) => new Set(current).add(user.uid))
+
+    updateRole(
+      { uid: user.uid, role },
+      {
+        onSuccess: () => {
+          toast.success('Permissão atualizada com sucesso.')
+          void refetch()
+        },
+        onError: (error) => {
+          const message = getRoleUpdateErrorMessage(error)
+          setRoleErrors((current) => ({ ...current, [user.uid]: message }))
+        },
+        onSettled: () => {
+          setUpdatingRoleIds((current) => {
+            const next = new Set(current)
+            next.delete(user.uid)
+            return next
+          })
+        },
+      },
+    )
+  }
 
   function handleSort(key: string) {
     if (sortColumn === key) {
@@ -194,17 +233,29 @@ export function UsersPage() {
       className: 'w-52',
       cell: (u) => {
         const isSelf = u.uid === currentUser?.uid
+        const isUpdating = isRoleUpdating(u.uid)
         return (
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <div className="flex-1">
               <Select
                 options={ROLE_OPTIONS}
                 value={u.role}
-                disabled={isSelf || !isAdmin}
-                onChange={(value) => updateRole({ uid: u.uid, role: value as UserRole })}
+                disabled={isSelf || !isAdmin || isUpdating}
+                onChange={(value) => handleRoleChange(u, value as UserRole)}
                 className="text-xs py-1"
                 aria-label="Alterar papel"
               />
+              {isUpdating && (
+                <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 size={12} className="animate-spin" />
+                  Atualizando...
+                </p>
+              )}
+              {roleErrors[u.uid] && (
+                <p role="alert" className="mt-1 text-xs text-danger">
+                  {roleErrors[u.uid]}
+                </p>
+              )}
               {isSelf && (
                 <p className="text-xs text-muted-foreground mt-0.5">Você mesmo</p>
               )}
@@ -213,7 +264,7 @@ export function UsersPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={isSelf}
+                disabled={isSelf || isUpdating}
                 onClick={() => setDeleteTarget(u)}
                 className="h-10 w-10 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10 shrink-0"
                 aria-label={`Excluir ${u.displayName}`}
@@ -410,7 +461,9 @@ export function UsersPage() {
                   isAdmin={isAdmin}
                   roleUpdatedAt={formatTraceDate(user.roleUpdatedAt)}
                   roleUpdatedBy={formatActorLabel(user.roleUpdatedByLabel)}
-                  onRoleChange={(role) => updateRole({ uid: user.uid, role })}
+                  isUpdatingRole={isRoleUpdating(user.uid)}
+                  roleError={roleErrors[user.uid]}
+                  onRoleChange={(role) => handleRoleChange(user, role)}
                   onDelete={() => setDeleteTarget(user)}
                 />
               )}
@@ -471,6 +524,8 @@ function UserMobileCard({
   isAdmin,
   roleUpdatedAt,
   roleUpdatedBy,
+  isUpdatingRole,
+  roleError,
   onRoleChange,
   onDelete,
 }: {
@@ -479,6 +534,8 @@ function UserMobileCard({
   isAdmin: boolean
   roleUpdatedAt: string
   roleUpdatedBy: string
+  isUpdatingRole: boolean
+  roleError?: string
   onRoleChange: (role: UserRole) => void
   onDelete: () => void
 }) {
@@ -504,11 +561,22 @@ function UserMobileCard({
           <Select
             options={ROLE_OPTIONS}
             value={user.role}
-            disabled={isSelf || !isAdmin}
+            disabled={isSelf || !isAdmin || isUpdatingRole}
             onChange={(value) => onRoleChange(value as UserRole)}
             className="h-11 rounded-xl text-sm"
             aria-label={`Alterar papel de ${user.displayName}`}
           />
+          {isUpdatingRole && (
+            <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 size={12} className="animate-spin" />
+              Atualizando...
+            </p>
+          )}
+          {roleError && (
+            <p role="alert" className="mt-2 text-xs text-danger">
+              {roleError}
+            </p>
+          )}
           {isSelf && (
             <p className="mt-2 text-xs text-muted-foreground">Você mesmo</p>
           )}
@@ -518,6 +586,7 @@ function UserMobileCard({
             variant="ghost"
             size="sm"
             onClick={onDelete}
+            disabled={isUpdatingRole}
             className="h-11 w-11 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10 shrink-0 rounded-xl"
             aria-label={`Excluir ${user.displayName}`}
           >
@@ -527,4 +596,24 @@ function UserMobileCard({
       </div>
     </Card>
   )
+}
+
+function getRoleUpdateErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Não foi possível atualizar a permissão. Tente novamente.'
+  }
+
+  if (error.message.includes('permission-denied')) {
+    return 'Sem permissão para atualizar usuários.'
+  }
+
+  if (error.message.includes('invalid-argument')) {
+    return 'Permissão inválida. Recarregue a página e tente novamente.'
+  }
+
+  if (error.message.includes('not-found')) {
+    return 'Usuário não encontrado.'
+  }
+
+  return 'Não foi possível atualizar a permissão. Tente novamente.'
 }
