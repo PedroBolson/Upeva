@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy.sh — Smart parallel deploy: build → git push + firebase deploy
+# deploy.sh — Smart local deploy: build → tests → git push + firebase deploy
 
 set -uo pipefail
 
@@ -31,7 +31,7 @@ prefix_lines() {
 
 # ─── Step 1: Build ─────────────────────────────────────────────────────────────
 divider
-info "Etapa 1/4 — ${BOLD}Build${NC}"
+info "Etapa 1/5 — ${BOLD}Build${NC}"
 divider
 
 if ! npm run build 2>&1; then
@@ -43,7 +43,7 @@ success "Build concluído."
 
 # ─── Step 2: Security rules tests ──────────────────────────────────────────────
 divider
-info "Etapa 2/4 — ${BOLD}Testes de regras de segurança${NC}"
+info "Etapa 2/5 — ${BOLD}Testes de regras de segurança${NC}"
 divider
 
 if ! npm run test:rules 2>&1; then
@@ -53,9 +53,21 @@ fi
 
 success "Testes de regras aprovados."
 
-# ─── Step 3: Detectar targets Firebase ─────────────────────────────────────────
+# ─── Step 3: Functions/callables tests ─────────────────────────────────────────
 divider
-info "Etapa 3/4 — ${BOLD}Detectando targets do Firebase${NC}"
+info "Etapa 3/5 — ${BOLD}Testes de functions/callables${NC}"
+divider
+
+if ! npm run test:functions 2>&1; then
+  error "Testes de functions/callables falharam. Deploy abortado."
+  exit 1
+fi
+
+success "Testes de functions/callables aprovados."
+
+# ─── Step 4: Detectar targets Firebase ─────────────────────────────────────────
+divider
+info "Etapa 4/5 — ${BOLD}Detectando targets do Firebase${NC}"
 divider
 
 # Arquivos alterados em todos os commits ainda não enviados ao remote.
@@ -92,9 +104,9 @@ fi
 echo ""
 info "Firebase targets detectados: ${BOLD}${YELLOW}${TARGETS}${NC}"
 
-# ─── Step 4: Git Push + Firebase Deploy em paralelo ────────────────────────────
+# ─── Step 5: Git Push + Firebase Deploy em paralelo ────────────────────────────
 divider
-info "Etapa 4/4 — ${BOLD}git push${NC} + ${BOLD}firebase deploy --only ${TARGETS}${NC} ${DIM}(paralelo)${NC}"
+info "Etapa 5/5 — ${BOLD}git push${NC} + ${BOLD}firebase deploy${NC} ${DIM}(--only ${TARGETS}, paralelo)${NC}"
 divider
 
 # Diretório de logs temporários
