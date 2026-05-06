@@ -3,7 +3,10 @@ import {
   buildAndCacheSimilarAnimals,
   db,
   FieldValue,
+  isPublicAnimalDetailStatus,
+  isSimilarAnimalItemStatus,
   markEventProcessed,
+  removeFromAnimalSimilarityCaches,
   onDocumentWritten,
   removeFromFeaturedAnimalsCache,
   Sex,
@@ -50,9 +53,9 @@ export const onAnimalChanged = onDocumentWritten(
       );
     }
 
-    // Rebuild similar-animals cache when the animal becomes (un)available
+    // Rebuild/remove similar-animals cache when public visibility changes.
     const animalId = event.params.animalId;
-    if (after && (after.status === "available" || after.status === "under_review") && after.species) {
+    if (after && isPublicAnimalDetailStatus(after.status) && after.species) {
       await buildAndCacheSimilarAnimals(animalId, {
         species: after.species,
         sex: after.sex,
@@ -66,6 +69,12 @@ export const onAnimalChanged = onDocumentWritten(
       } catch {
         // Cache entry may not exist — safe to ignore
       }
+    }
+
+    if (!after || !isSimilarAnimalItemStatus(after.status)) {
+      await removeFromAnimalSimilarityCaches(animalId, {
+        deleteOwn: !after || !isPublicAnimalDetailStatus(after.status),
+      });
     }
   }
 );

@@ -4,6 +4,7 @@ import {
   logOperationStart,
   logOperationSuccess,
   onSchedule,
+  pruneAnimalSimilarityCache,
   Timestamp,
 } from "../lib/shared.js";
 
@@ -32,15 +33,8 @@ export const cleanOperationalData = onSchedule(
         .limit(BATCH_MAX)
         .get();
 
-      // animalSimilarityCache órfão — animal não existe mais
-      const cacheSnap = await db.collection("animalSimilarityCache").limit(500).get();
-      const orphanCacheRefs: FirebaseFirestore.DocumentReference[] = [];
-      for (const cacheDoc of cacheSnap.docs) {
-        const animalSnap = await db.collection("animals").doc(cacheDoc.id).get();
-        if (!animalSnap.exists) {
-          orphanCacheRefs.push(cacheDoc.ref);
-        }
-      }
+      // animalSimilarityCache stale docs/items — bounded pass over 500 cache docs.
+      const similarityCacheCleanup = await pruneAnimalSimilarityCache(500);
 
       let batch = db.batch();
       let opCount = 0;
@@ -57,7 +51,6 @@ export const cleanOperationalData = onSchedule(
 
       for (const doc of rateLimitsSnap.docs) await addToBatch(doc.ref);
       for (const doc of processedEventsSnap.docs) await addToBatch(doc.ref);
-      for (const ref of orphanCacheRefs) await addToBatch(ref);
 
       if (opCount > 0) await batch.commit();
 
@@ -65,7 +58,9 @@ export const cleanOperationalData = onSchedule(
         operation,
         rateLimitsDeleted: rateLimitsSnap.size,
         processedEventsDeleted: processedEventsSnap.size,
-        orphanCacheDeleted: orphanCacheRefs.length,
+        similarityCacheDeleted: similarityCacheCleanup.deleted,
+        similarityCacheUpdated: similarityCacheCleanup.updated,
+        staleSimilarityItemsRemoved: similarityCacheCleanup.staleItemsRemoved,
       });
     } catch (err) {
       logOperationError(err, { operation });

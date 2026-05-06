@@ -245,6 +245,26 @@ function callable(name: string) {
   return httpsCallable(fns, name)
 }
 
+async function waitFor(
+  assertion: () => Promise<void>,
+  timeoutMs: number = 10_000,
+): Promise<void> {
+  const startedAt = Date.now()
+  let lastError: unknown
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      await assertion()
+      return
+    } catch (err) {
+      lastError = err
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  throw lastError
+}
+
 // ── Global setup / teardown ───────────────────────────────────────────────────
 
 beforeAll(() => {
@@ -596,6 +616,53 @@ describe('updateApplicationReview', () => {
     await expect(
       callable('updateAnimalStatus')({ animalId: 'cat-adopted-guard', status: 'available' }),
     ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('removes adopted animals from similarity caches and deletes their own cache doc', async () => {
+    await signInAsAdmin()
+
+    const targetRef = adminDb.collection('animals').doc('dog-target')
+    const candidateRef = adminDb.collection('animals').doc('dog-candidate')
+    await targetRef.set(
+      availableAnimalDoc({
+        name: 'Target Dog',
+        species: 'dog',
+        sex: 'male',
+        size: 'medium',
+        status: 'under_review',
+      }),
+    )
+    await candidateRef.set(
+      availableAnimalDoc({ name: 'Candidate Dog', species: 'dog', sex: 'male', size: 'medium' }),
+    )
+    await callable('updateAnimalStatus')({ animalId: 'dog-target', status: 'available' })
+
+    await waitFor(async () => {
+      const cacheDoc = await adminDb.collection('animalSimilarityCache').doc('dog-target').get()
+      const items = (cacheDoc.data()?.items as Array<Record<string, unknown>> | undefined) ?? []
+      expect(items.some((item) => item.id === 'dog-candidate')).toBe(true)
+    })
+
+    await adminDb.collection('animalSimilarityCache').doc('dog-candidate').set({
+      items: [{ id: 'dog-target', status: 'available' }],
+      itemIds: ['dog-target'],
+      updatedAt: Timestamp.now(),
+    })
+
+    await callable('updateAnimalStatus')({ animalId: 'dog-candidate', status: 'adopted' })
+
+    await waitFor(async () => {
+      const [targetCache, candidateCache] = await Promise.all([
+        adminDb.collection('animalSimilarityCache').doc('dog-target').get(),
+        adminDb.collection('animalSimilarityCache').doc('dog-candidate').get(),
+      ])
+      const items = (targetCache.data()?.items as Array<Record<string, unknown>> | undefined) ?? []
+      const itemIds = (targetCache.data()?.itemIds as string[] | undefined) ?? []
+
+      expect(items.some((item) => item.id === 'dog-candidate')).toBe(false)
+      expect(itemIds).not.toContain('dog-candidate')
+      expect(candidateCache.exists).toBe(false)
+    })
   })
 })
 

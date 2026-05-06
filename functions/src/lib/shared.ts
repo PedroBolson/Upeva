@@ -76,6 +76,8 @@ const VALID_REJECTION_REASONS = new Set<RejectionReason>([
 
 export const REJECTION_DETAILS_MIN_LENGTH = 100;
 export type AnimalStatus = "available" | "under_review" | "adopted" | "archived";
+export const PUBLIC_ANIMAL_DETAIL_STATUSES: AnimalStatus[] = ["available", "under_review"];
+export const SIMILAR_ANIMAL_ITEM_STATUSES: AnimalStatus[] = ["available"];
 type ArchiveFileType = "contract" | "rejection" | "archivedAnimal";
 export type PrivacySearchType = "cpf" | "email";
 type PrivacyAuditAction =
@@ -278,6 +280,14 @@ export function isApplicationStatus(value: unknown): value is ApplicationStatus 
 
 export function isAnimalStatus(value: unknown): value is AnimalStatus {
   return ["available", "under_review", "adopted", "archived"].includes(String(value));
+}
+
+export function isPublicAnimalDetailStatus(value: unknown): value is AnimalStatus {
+  return PUBLIC_ANIMAL_DETAIL_STATUSES.includes(value as AnimalStatus);
+}
+
+export function isSimilarAnimalItemStatus(value: unknown): value is AnimalStatus {
+  return SIMILAR_ANIMAL_ITEM_STATUSES.includes(value as AnimalStatus);
 }
 
 export function isRejectionReason(value: unknown): value is RejectionReason {
@@ -842,7 +852,8 @@ export async function buildAndCacheSimilarAnimals(
   for (const plan of uniquePlans) {
     if (matches.length >= COUNT) break;
 
-    const base = db.collection("animals").where("status", "==", "available");
+    const base = db.collection("animals")
+      .where("status", "==", SIMILAR_ANIMAL_ITEM_STATUSES[0]);
     const withSpecies = base.where("species", "==", plan.species);
     const withSex = plan.sex ? withSpecies.where("sex", "==", plan.sex) : withSpecies;
     const withSize = plan.size ? withSex.where("size", "==", plan.size) : withSex;
@@ -858,8 +869,211 @@ export async function buildAndCacheSimilarAnimals(
 
   await db.collection("animalSimilarityCache").doc(animalId).set({
     items: matches,
+    itemIds: matches
+      .map((item) => item.id)
+      .filter((id): id is string => typeof id === "string"),
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+type SimilarityCacheMutation = {
+  deleted: number;
+  updated: number;
+  scanned: number;
+  staleItemsRemoved: number;
+};
+
+type SimilarityCacheDoc = {
+  id: string;
+  ref: DocumentReference;
+  data(): Record<string, unknown>;
+};
+
+function similarityCacheItems(data: Record<string, unknown>): Record<string, unknown>[] {
+  if (!Array.isArray(data.items)) return [];
+  return data.items.filter(isPlainObject);
+}
+
+function similarityCacheItemIds(items: Record<string, unknown>[]): string[] {
+  return items
+    .map((item) => item.id)
+    .filter((id): id is string => typeof id === "string");
+}
+
+function pruneSimilarityItems(
+  items: Record<string, unknown>[],
+  isItemAllowed: (id: string, item: Record<string, unknown>) => boolean,
+): Record<string, unknown>[] {
+  return items.filter((item) => {
+    const id = item.id;
+    return typeof id === "string" && isItemAllowed(id, item);
+  });
+}
+
+async function commitSimilarityCacheUpdates(
+  updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }>,
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += 450) {
+    const batch = db.batch();
+    for (const update of updates.slice(i, i + 450)) {
+      batch.set(update.ref, update.data, { merge: true });
+    }
+    await batch.commit();
+  }
+}
+
+export async function removeFromAnimalSimilarityCaches(
+  animalId: string,
+  options: { legacyScanLimit?: number; deleteOwn?: boolean } = {},
+): Promise<SimilarityCacheMutation> {
+  const legacyScanLimit = options.legacyScanLimit ?? 500;
+  const deleteOwn = options.deleteOwn ?? true;
+  const docsByPath = new Map<string, SimilarityCacheDoc>();
+  const refDocsSnap = await db.collection("animalSimilarityCache")
+    .where("itemIds", "array-contains", animalId)
+    .limit(100)
+    .get();
+
+  for (const docSnap of refDocsSnap.docs) docsByPath.set(docSnap.ref.path, docSnap);
+
+  const legacySnap = await db.collection("animalSimilarityCache")
+    .limit(legacyScanLimit)
+    .get();
+  for (const docSnap of legacySnap.docs) docsByPath.set(docSnap.ref.path, docSnap);
+
+  const deletes: DocumentReference[] = [];
+  const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+  let staleItemsRemoved = 0;
+
+  for (const docSnap of docsByPath.values()) {
+    const data = docSnap.data();
+    const items = similarityCacheItems(data);
+
+    if (docSnap.id === animalId && deleteOwn) {
+      deletes.push(docSnap.ref);
+      staleItemsRemoved += items.length;
+      continue;
+    }
+
+    const prunedItems = pruneSimilarityItems(items, (id, item) =>
+      id !== animalId && isSimilarAnimalItemStatus(item.status)
+    );
+    const changed = prunedItems.length !== items.length ||
+      !Array.isArray(data.itemIds);
+    if (!changed) continue;
+
+    staleItemsRemoved += items.length - prunedItems.length;
+    updates.push({
+      ref: docSnap.ref,
+      data: {
+        items: prunedItems,
+        itemIds: similarityCacheItemIds(prunedItems),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  for (let i = 0; i < deletes.length; i += 450) {
+    const batch = db.batch();
+    for (const ref of deletes.slice(i, i + 450)) batch.delete(ref);
+    await batch.commit();
+  }
+  await commitSimilarityCacheUpdates(updates);
+
+  return {
+    deleted: deletes.length,
+    updated: updates.length,
+    scanned: docsByPath.size,
+    staleItemsRemoved,
+  };
+}
+
+async function getAnimalStatusMap(ids: string[]): Promise<Map<string, AnimalStatus | null>> {
+  const statuses = new Map<string, AnimalStatus | null>();
+  const uniqueIds = [...new Set(ids)];
+
+  for (let i = 0; i < uniqueIds.length; i += 300) {
+    const refs = uniqueIds.slice(i, i + 300)
+      .map((id) => db.collection("animals").doc(id));
+    const snaps = refs.length > 0 ? await db.getAll(...refs) : [];
+    for (const snap of snaps) {
+      const status = snap.exists ? snap.data()?.status : null;
+      statuses.set(snap.id, isAnimalStatus(status) ? status : null);
+    }
+  }
+
+  return statuses;
+}
+
+export async function pruneAnimalSimilarityCache(
+  limit = 500,
+): Promise<SimilarityCacheMutation> {
+  const cacheSnap = await db.collection("animalSimilarityCache").limit(limit).get();
+  const docs = cacheSnap.docs as SimilarityCacheDoc[];
+  const animalIds = new Set<string>();
+
+  for (const docSnap of docs) {
+    animalIds.add(docSnap.id);
+    const data = docSnap.data();
+    for (const id of similarityCacheItemIds(similarityCacheItems(data))) animalIds.add(id);
+    if (Array.isArray(data.itemIds)) {
+      for (const id of data.itemIds) {
+        if (typeof id === "string") animalIds.add(id);
+      }
+    }
+  }
+
+  const statuses = await getAnimalStatusMap([...animalIds]);
+  const deletes: DocumentReference[] = [];
+  const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+  let staleItemsRemoved = 0;
+
+  for (const docSnap of docs) {
+    const ownerStatus = statuses.get(docSnap.id) ?? null;
+    const data = docSnap.data();
+    const items = similarityCacheItems(data);
+
+    if (!isPublicAnimalDetailStatus(ownerStatus)) {
+      deletes.push(docSnap.ref);
+      staleItemsRemoved += items.length;
+      continue;
+    }
+
+    const prunedItems = pruneSimilarityItems(items, (id) =>
+      isSimilarAnimalItemStatus(statuses.get(id) ?? null)
+    );
+    const prunedItemIds = similarityCacheItemIds(prunedItems);
+    const existingItemIds = Array.isArray(data.itemIds) ?
+      data.itemIds.filter((id): id is string => typeof id === "string") :
+      [];
+    const changed = prunedItems.length !== items.length ||
+      prunedItemIds.join("\u0000") !== existingItemIds.join("\u0000");
+    if (!changed) continue;
+
+    staleItemsRemoved += items.length - prunedItems.length;
+    updates.push({
+      ref: docSnap.ref,
+      data: {
+        items: prunedItems,
+        itemIds: prunedItemIds,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  for (let i = 0; i < deletes.length; i += 450) {
+    const batch = db.batch();
+    for (const ref of deletes.slice(i, i + 450)) batch.delete(ref);
+    await batch.commit();
+  }
+  await commitSimilarityCacheUpdates(updates);
+
+  return {
+    deleted: deletes.length,
+    updated: updates.length,
+    scanned: docs.length,
+    staleItemsRemoved,
+  };
 }
 
 export async function removeFromFeaturedAnimalsCache(animalId: string): Promise<void> {
@@ -1082,8 +1296,9 @@ export async function appendToAnimalQueue(animalId: string, appId: string): Prom
 // preventing duplicate processing of retried Firestore trigger events.
 export async function markEventProcessed(eventId: string): Promise<boolean> {
   const ref = db.collection("_processedEvents").doc(eventId);
-  // expiresAt = 7 days from now — safe margin above the 24h retry window
-  const expiresAt = new Timestamp(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, 0);
+  // expiresAt = 2 days from now, above the 24h retry window without retaining
+  // operational deduplication docs for a full week.
+  const expiresAt = new Timestamp(Math.floor(Date.now() / 1000) + 2 * 24 * 60 * 60, 0);
   try {
     await ref.create({ processedAt: FieldValue.serverTimestamp(), expiresAt });
     return true; // First time — safe to proceed
