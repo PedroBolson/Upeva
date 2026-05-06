@@ -104,7 +104,7 @@ export function RejectionModal({ open, onClose, onDecline, onReject, loading }: 
         </p>
         <p className="mt-1 text-muted-foreground">
           <strong className="text-foreground">Rejeitar definitivamente</strong> — gera um registro de alerta
-          permanente para a equipe com o motivo documentado. <br />(A candidatura será arquivada no Drive e também registrada (criptografada) no histórico da ONG para flags futuras.)
+          permanente para a equipe com o motivo documentado. <br />(A candidatura será arquivada de forma privada e também registrada (criptografada) no histórico da ONG para flags futuras.)
         </p>
       </div>
 

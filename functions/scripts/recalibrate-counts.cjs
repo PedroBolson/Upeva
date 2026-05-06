@@ -4,7 +4,7 @@
  * Requer: gcloud auth application-default login (já feito se você usa Firebase CLI)
  */
 
-const { initializeApp, cert, applicationDefault } = require('firebase-admin/app')
+const { initializeApp, applicationDefault } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 
 initializeApp({ credential: applicationDefault(), projectId: 'upevapets' })

@@ -91,7 +91,7 @@ export function ArchiveAnimalModal({
       <div className="flex flex-col gap-4">
         <p id={descriptionId} className="text-sm text-muted-foreground">
           O arquivamento é permanente. Informe o motivo e a data do ocorrido para o histórico da ONG.
-          O PDF de arquivamento será gerado e salvo no Drive no próximo ciclo semanal.
+          O PDF de arquivamento será gerado e arquivado de forma privada no próximo ciclo semanal.
         </p>
 
         <Select

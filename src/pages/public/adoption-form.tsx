@@ -112,7 +112,11 @@ export function AdoptionFormPage() {
         )}
       </div>
 
-      <ConsentModal open={!consentGiven} onAccept={() => setConsentGiven(true)} />
+      <ConsentModal
+        open={!consentGiven}
+        onAccept={() => setConsentGiven(true)}
+        onDecline={() => navigate(`/animais/${animal.id}`)}
+      />
       <AdoptionForm animal={animal} />
     </div>
   )

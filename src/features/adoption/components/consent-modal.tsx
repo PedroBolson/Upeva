@@ -8,9 +8,10 @@ import { Button } from '@/components/ui'
 interface Props {
   open: boolean
   onAccept: () => void
+  onDecline: () => void
 }
 
-export function ConsentModal({ open, onAccept }: Props) {
+export function ConsentModal({ open, onAccept, onDecline }: Props) {
   const titleId = useId()
   const descriptionId = useId()
   const [consentProcess, setConsentProcess] = useState(false)
@@ -28,9 +29,14 @@ export function ConsentModal({ open, onAccept }: Props) {
       ariaDescribedBy={descriptionId}
       size="md"
       footer={
-        <Button onClick={onAccept} disabled={!canProceed} className="w-full sm:w-auto">
-          Aceitar e continuar
-        </Button>
+        <>
+          <Button variant="ghost" onClick={onDecline} className="flex-1 sm:flex-none">
+            Recusar e cancelar
+          </Button>
+          <Button onClick={onAccept} disabled={!canProceed} className="flex-1 sm:flex-none">
+            Aceitar e continuar
+          </Button>
+        </>
       }
     >
       <div className="flex flex-col gap-5">

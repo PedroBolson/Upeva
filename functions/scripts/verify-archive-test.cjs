@@ -169,9 +169,9 @@ async function run() {
       warn(`  cannot validate archiveFileId (rejectionFile not found above)`)
 
     if (!flagWithArchive.driveUrl)
-      pass(`  no driveUrl field (Drive dependency removed)`)
+      pass(`  no legacy driveUrl field`)
     else
-      fail(`  driveUrl still present — Drive migration incomplete`)
+      fail(`  legacy driveUrl field still present`)
 
     if (!flagWithArchive.cpf && !flagWithArchive.email && !flagWithArchive.phone)
       pass(`  no plaintext PII in rejectionFlag`)

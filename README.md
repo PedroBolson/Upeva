@@ -182,13 +182,13 @@ Comportamento de dados legados: documentos existentes não recebem backfill. Os 
 ### Fluxo de exportação e deleção (cron semanal — domingo 2h)
 
 ```
-applications (approved, > 30 dias)  → PDF contrato  → Drive → deletar Firestore + Storage
-applications (rejected, pendingExport) → PDF rejeição → Drive → criar flag HMAC → deletar Firestore
+applications (approved, > 30 dias)  → PDF contrato → Storage privado + archiveFiles → deletar Firestore + fotos
+applications (rejected, pendingExport) → PDF rejeição → Storage privado + archiveFiles → criar flag HMAC → deletar Firestore
 applications (withdrawn, > 30 dias) → deletar Firestore (sem PDF, sem flag)
-animals (archived, > 30 dias)       → PDF arquivamento → Drive → deletar Firestore + Storage
+animals (archived, > 30 dias)       → PDF arquivamento → Storage privado + archiveFiles → deletar Firestore + fotos
 ```
 
-Nenhum dado pessoal legível permanece no Firestore após o período de retenção. Os PDFs ficam no Google Drive da ONG, acessíveis apenas à equipe.
+Nenhum dado pessoal legível permanece no Firestore após o período de retenção. Os PDFs ficam em `private-pdfs/**` no Firebase Storage, com metadados seguros em `archiveFiles` e acesso via Cloud Functions autenticadas.
 
 ### Constantes de retenção
 
@@ -293,9 +293,7 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
   - `onUserCreated` — 1st gen (trigger de Auth)
   - demais functions — 2nd gen
 - Google Cloud Secret Manager (chaves de criptografia AES-256-GCM e HMAC)
-- Google Drive API v3 (exportação de PDFs via OAuth2 + Secret Manager)
 - `pdf-lib` (geração de PDFs em memória, server-side)
-- `@googleapis/drive` (cliente Drive autenticado por refresh token)
 
 ---
 
@@ -354,8 +352,8 @@ A redefinição de senha está disponível em `/admin/reset-password` via Fireba
 As functions ficam em [`functions/src/index.ts`](functions/src/index.ts). Helpers em [`functions/src/lib/`](functions/src/lib/):
 
 - `crypto.util.ts` — AES-256-GCM (`encrypt`/`decrypt`) e HMAC-SHA256 (`hmac`)
-- `pdf.helper.ts` — geração de PDFs em memória com `pdf-lib` (3 templates)
-- `drive.helper.ts` — upload para Google Drive com OAuth2 e subpastas anuais
+- `pdf.helper.ts` — geração de PDFs em memória com `pdf-lib`
+- `storage-archive.helper.ts` — upload privado de PDFs para Firebase Storage e URLs assinadas
 
 ### `onUserCreated`
 Trigger de Auth (1st gen) — faz apenas o bootstrap seguro do primeiro administrador. O primeiro usuário criado recebe `role: "admin"`; usuários criados depois não recebem role automática e devem ser provisionados pela tela `/admin/usuarios`.
@@ -420,10 +418,10 @@ Remove documentos operacionais expirados que os TTLs do Firestore possam deixar 
 ### `archiveAndCleanup` (cron semanal — domingo 2h)
 Exporta e limpa dados conforme as políticas de retenção LGPD:
 
-1. **Candidaturas aprovadas** com mais de 30 dias → PDF contrato → Drive → excluir Firestore + fotos do Storage
-2. **Candidaturas rejeitadas** (`pendingExport: true`) → PDF rejeição → Drive → criar flag HMAC em `rejectionFlags` → excluir Firestore
+1. **Candidaturas aprovadas** com mais de 30 dias → verificar/gerar PDF contrato em Storage privado → excluir Firestore + fotos do Storage
+2. **Candidaturas rejeitadas** (`pendingExport: true`) → PDF rejeição em Storage privado → criar flag HMAC em `rejectionFlags` → excluir Firestore
 3. **Candidaturas `withdrawn`** com mais de 30 dias → excluir Firestore (sem PDF, sem flag)
-4. **Animais arquivados** com mais de 30 dias → PDF arquivamento → Drive → excluir Firestore + fotos do Storage
+4. **Animais arquivados** com mais de 30 dias → PDF arquivamento em Storage privado → excluir Firestore + fotos do Storage
 5. Recalibrar `metadata/counts` após cada lote de deleções
 
 ---
@@ -439,6 +437,7 @@ Exporta e limpa dados conforme as políticas de retenção LGPD:
 | `users` | Perfis da equipe (espelho do Firebase Auth) |
 | `metadata/featuredAnimals` | Cache do pool de destaques da home (leitura pública) |
 | `metadata/counts` | Contadores agregados para o dashboard (staff only) |
+| `archiveFiles` | Metadados seguros de PDFs privados em Storage |
 | `rejectionFlags` | Flags HMAC de rejeição definitiva (sem PII em texto plano) |
 | `rateLimits` | Estado do rate limiting por HMAC de e-mail |
 | `_processedEvents` | IDs de eventos de trigger já processados (deduplicação) |
@@ -476,7 +475,7 @@ Status possíveis: `pending` · `in_review` · `approved` · `rejected` · `with
 ```
 id: hmac(cpf)         — chave do documento
 emailHash: hmac(email)
-rejectedAt, rejectionCount, driveUrl, reason
+rejectedAt, rejectionCount, archiveFileId?, reason
 ```
 
 Nenhum dado pessoal legível. O documento é identificado e consultado pelo HMAC do CPF.
@@ -500,21 +499,22 @@ Fotos dos animais em `animals/{animalId}/{timestamp}_{filename}`.
 | `applications` | `animalId ASC` + `status ASC` + `createdAt ASC` |
 | `applications` | `animalId ASC` + `status ASC` + `queuePosition ASC` |
 
-### Google Drive — estrutura de pastas
+### PDFs privados — Firebase Storage
 
 ```
-Contratos de Adoção/
-  2026/
-    application_{id}_{year}.pdf
-Rejeições Definitivas/
-  2026/
-    rejection_{id}_{year}.pdf
-Animais Arquivados/
-  2026/
-    animal_{id}_{year}.pdf
+private-pdfs/
+  contracts/
+    2026/
+      contrato_adocao_{animal}_{data}_{id}.pdf
+  rejections/
+    2026/
+      rejection_{id}_{year}.pdf
+  archived-animals/
+    2026/
+      animal_{id}_{year}.pdf
 ```
 
-Subpastas anuais criadas automaticamente pelo helper `getYearlyFolderId()`.
+Os metadados ficam em `archiveFiles/{id}` e o acesso aos PDFs é mediado por Cloud Functions que validam role e retornam URL assinada temporária.
 
 ---
 
@@ -549,7 +549,7 @@ functions/src/
   lib/
     crypto.util.ts   # AES-256-GCM + HMAC-SHA256
     pdf.helper.ts    # geração de PDFs (3 templates com pdf-lib)
-    drive.helper.ts  # Google Drive API (upload + subpastas anuais)
+    storage-archive.helper.ts  # upload privado de PDFs + URLs assinadas
 ```
 
 ---
@@ -575,9 +575,6 @@ As chaves sensíveis das Cloud Functions ficam **exclusivamente no Google Cloud 
 |---|---|
 | `PII_ENCRYPTION_KEY` | Chave AES-256 (hex 64 chars) para cifrar CPF, telefone, endereço e data de nascimento |
 | `HMAC_SECRET_KEY` | Chave HMAC-SHA256 para hashes de CPF e email em `rejectionFlags` e `rateLimits` |
-| `DRIVE_OAUTH_CLIENT_ID` | Client ID OAuth2 usado pelo helper de upload para o Google Drive |
-| `DRIVE_OAUTH_CLIENT_SECRET` | Client secret OAuth2 usado pelo helper de upload para o Google Drive |
-| `DRIVE_OAUTH_REFRESH_TOKEN` | Refresh token da conta autorizada a gravar nas pastas internas da ONG |
 
 ---
 
@@ -624,6 +621,18 @@ npm run dev       # servidor de desenvolvimento
 npm run build     # build de produção (tsc + vite)
 npm run lint      # eslint
 npm run preview   # preview do build
+npm run deploy    # build + testes + git push + deploy Firebase seletivo
+npm run test:rules      # testes de Firestore/Storage Rules nos emuladores
+npm run test:functions  # build das Functions + testes de callables nos emuladores
+```
+
+Scripts auxiliares de arquivo/LGPD para emuladores:
+
+```bash
+npm run seed:archive-test
+npm run run:archive-test
+npm run verify:archive-test
+npm run clean:archive-test
 ```
 
 ### Functions
@@ -675,7 +684,7 @@ A partir daí, novos usuários devem ser criados pela tela `/admin/usuarios`.
 
 ## 📝 Observações
 
-- Não há suite automatizada de testes configurada no momento
+- A suite automatizada cobre regras de segurança e callables nos emuladores Firebase
 - A região padrão do projeto para Firestore e Functions é `southamerica-east1`
 - `onUserCreated` usa 1st gen (único trigger de Auth disponível nessa geração); as demais functions usam 2nd gen
 - O arquivo [`.claude/ROADMAP.md`](.claude/ROADMAP.md) documenta o histórico de implementação por fase e sprint

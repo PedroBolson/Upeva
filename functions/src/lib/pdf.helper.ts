@@ -11,22 +11,6 @@ export type AddressData = {
   complement?: string;
 };
 
-export type ContractPdfData = {
-  applicationId: string;
-  fullName: string;
-  email: string;
-  cpf: string;
-  phone: string;
-  birthDate: string;
-  address: AddressData;
-  animalId: string;
-  animalName: string;
-  species: string;
-  approvedAt: Date;
-  reviewerName?: string;
-  ongName: string;
-};
-
 export type RejectionPdfData = {
   applicationId: string;
   fullName: string;
@@ -83,11 +67,6 @@ function formatDateTime(date: Date): string {
     minute: "2-digit",
     timeZone: "America/Sao_Paulo",
   });
-}
-
-function formatAddress(addr: AddressData): string {
-  const base = `${addr.street}, ${addr.number} - ${addr.neighborhood}, ${addr.city}/${addr.state}`;
-  return addr.complement ? `${base} (${addr.complement})` : base;
 }
 
 function speciesLabel(species: string): string {
@@ -241,53 +220,6 @@ async function createBase(): Promise<{ doc: PDFDocument; font: PDFFont; boldFont
 }
 
 // ── PDF generators ────────────────────────────────────────────────────────────
-
-/**
- * Contrato de Adoção — gerado quando uma candidatura aprovada é arquivada
- * após 30 dias. Registra o compromisso formal de adoção.
- * @param {object} data - Dados do contrato (adotante, animal, datas).
- * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
- */
-export async function generateContractPdf(data: ContractPdfData): Promise<Buffer> {
-  const { doc, font, boldFont, page } = await createBase();
-  const generatedAt = formatDateTime(new Date());
-
-  const ctx: PageContext = { page, font, boldFont, y: 0 };
-
-  drawHeader(
-    ctx,
-    "Contrato de Adoção",
-    `Candidatura #${data.applicationId} — aprovada em ${formatDate(data.approvedAt)}`,
-    data.ongName
-  );
-
-  drawSection(ctx, "Dados do Adotante");
-  drawField(ctx, "Nome completo", data.fullName);
-  drawField(ctx, "CPF", data.cpf);
-  drawField(ctx, "Telefone", data.phone);
-  drawField(ctx, "E-mail", data.email);
-  drawField(ctx, "Data de nascimento", data.birthDate);
-  drawField(ctx, "Endereço", formatAddress(data.address));
-
-  ctx.y -= SECTION_GAP;
-  drawSection(ctx, "Animal Adotado");
-  drawField(ctx, "Nome", data.animalName);
-  drawField(ctx, "Espécie", speciesLabel(data.species));
-  drawField(ctx, "ID no sistema", data.animalId);
-
-  ctx.y -= SECTION_GAP;
-  drawSection(ctx, "Registro");
-  if (data.reviewerName) {
-    drawField(ctx, "Responsável pela aprovação", data.reviewerName);
-  }
-  drawField(ctx, "Data de aprovação", formatDate(data.approvedAt));
-  drawField(ctx, "Gerado em", generatedAt);
-
-  drawFooter(page, font, generatedAt, data.applicationId);
-
-  const bytes = await doc.save();
-  return Buffer.from(bytes);
-}
 
 /**
  * Registro de Rejeição Definitiva — gerado quando uma candidatura com status
@@ -776,10 +708,9 @@ export async function generateAdoptionContractPdfOfficial(
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
-export type PdfTemplate = "contract" | "rejection" | "archivedAnimal" | "officialContract";
+export type PdfTemplate = "rejection" | "archivedAnimal" | "officialContract";
 
 type PdfDataMap = {
-  contract: ContractPdfData;
   rejection: RejectionPdfData;
   archivedAnimal: ArchivedAnimalPdfData;
   officialContract: OfficialContractPdfData;
@@ -797,8 +728,6 @@ export async function generatePdf<T extends PdfTemplate>(
   data: PdfDataMap[T]
 ): Promise<Buffer> {
   switch (template) {
-  case "contract":
-    return generateContractPdf(data as ContractPdfData);
   case "rejection":
     return generateRejectionPdf(data as RejectionPdfData);
   case "archivedAnimal":
