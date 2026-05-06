@@ -381,20 +381,437 @@ export async function generateArchivedAnimalPdf(data: ArchivedAnimalPdfData): Pr
   return Buffer.from(bytes);
 }
 
+// ── Official adoption contract (Termo de Adoção Responsável) ─────────────────
+
+export type OfficialContractPdfData = {
+  applicationId: string;
+  fullName: string;
+  cpf: string;
+  birthDate: string;
+  phone: string;
+  address: AddressData;
+  animalName: string;
+  species: string;
+  breed: string;
+  sex?: string;
+  estimatedAge?: string;
+  coatColor: string;
+  size?: string;
+  neutered?: boolean;
+  approvedAt: Date;
+  ongName: string;
+};
+
+function officialSizeLabel(size?: string): string {
+  if (size === "small") return "P";
+  if (size === "medium") return "M";
+  if (size === "large") return "G";
+  return "";
+}
+
+function officialSpeciesLabel(species: string): string {
+  if (species === "dog") return "Canina";
+  if (species === "cat") return "Felina";
+  return species;
+}
+
+function formatApprovalDate(date: Date): string {
+  const d = date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  });
+  return d.replace(/\//g, "/");
+}
+
+function drawUnderline(page: PDFPage, x: number, y: number, width: number): void {
+  page.drawLine({
+    start: { x, y: y - 2 },
+    end: { x: x + width, y: y - 2 },
+    thickness: 0.5,
+    color: rgb(0.3, 0.3, 0.3),
+  });
+}
+
+function drawFilledLine(
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  lineWidth: number,
+  fontSize = 10
+): void {
+  const labelW = boldFont.widthOfTextAtSize(label, fontSize);
+  page.drawText(label, { x, y, size: fontSize, font: boldFont, color: rgb(0, 0, 0) });
+  page.drawText(value, { x: x + labelW, y, size: fontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, x + labelW, y, lineWidth - labelW);
+}
+
+// Wraps justified body text within a given width.
+function drawWrappedText(
+  page: PDFPage,
+  font: PDFFont,
+  text: string,
+  x: number,
+  startY: number,
+  maxWidth: number,
+  fontSize: number,
+  lineH: number,
+  indent = 0
+): number {
+  const words = text.split(" ");
+  let line = "";
+  let y = startY;
+  let firstLineOfParagraph = true;
+
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(test, fontSize) > maxWidth - (firstLineOfParagraph ? indent : 0) && line) {
+      page.drawText(line, {
+        x: x + (firstLineOfParagraph ? indent : 0),
+        y,
+        size: fontSize,
+        font,
+        color: rgb(0, 0, 0),
+      });
+      y -= lineH;
+      line = word;
+      firstLineOfParagraph = false;
+    } else {
+      line = test;
+    }
+  }
+
+  if (line) {
+    page.drawText(line, {
+      x: x + (firstLineOfParagraph ? indent : 0),
+      y,
+      size: fontSize,
+      font,
+      color: rgb(0, 0, 0),
+    });
+    y -= lineH;
+  }
+
+  return y;
+}
+
+function checkbox(checked: boolean): string {
+  return checked ? "(X)" : "( )";
+}
+
+/**
+ * Gera o Termo de Adoção Responsável oficial, seguindo o modelo físico da Upeva.
+ * Reproduz título, bloco de dados do responsável, tabela de características do
+ * animal, cláusulas de responsabilidade e linhas de assinatura.
+ * @param {object} data - Dados do contrato (adotante, animal, aprovação).
+ * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
+ */
+export async function generateAdoptionContractPdfOfficial(
+  data: OfficialContractPdfData
+): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const [font, boldFont] = await Promise.all([
+    doc.embedFont(StandardFonts.Helvetica),
+    doc.embedFont(StandardFonts.HelveticaBold),
+  ]);
+  const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+
+  const M = 60; // left/right margin
+  const contentW = PAGE_WIDTH - M * 2;
+  const bodyFontSize = 10;
+  const lineH = 15;
+  const smallSize = 9;
+
+  let y = PAGE_HEIGHT - M;
+
+  // ── Título ────────────────────────────────────────────────────────────────
+  const title = "TERMO DE ADOÇÃO RESPONSÁVEL";
+  const titleW = boldFont.widthOfTextAtSize(title, 13);
+  page.drawText(title, {
+    x: M + (contentW - titleW) / 2,
+    y,
+    size: 13,
+    font: boldFont,
+    color: rgb(0, 0, 0),
+  });
+  y -= 30;
+
+  // ── Bloco do responsável ──────────────────────────────────────────────────
+  // "Foi concedido a(o) Sr.(a) _______, portador(a) do CPF sob nº _______,"
+  const dateStr = formatApprovalDate(data.approvedAt);
+  const [day, month, year] = dateStr.split("/");
+  const city = data.address.city || "Flores da Cunha";
+
+  // Line 1: Foi concedido a(o) Sr.(a) [name]
+  const intro1 = "Foi concedido a(o) Sr.(a) ";
+  page.drawText(intro1, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  const intro1W = font.widthOfTextAtSize(intro1, bodyFontSize);
+  page.drawText(data.fullName, {
+    x: M + intro1W,
+    y,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+  const nameW = font.widthOfTextAtSize(data.fullName, bodyFontSize);
+  page.drawText(",", {
+    x: M + intro1W + nameW,
+    y,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+  drawUnderline(page, M + intro1W, y, contentW - intro1W);
+  y -= lineH;
+
+  // Line 2: portador(a) do CPF sob nº [cpf], nascido(a) em [birthDate],
+  const line2a = "portador(a) do CPF sob nº ";
+  const line2b = `${data.cpf}, `;
+  const line2c = "nascido(a) em ";
+  const line2d = `${data.birthDate},`;
+  const line2aW = font.widthOfTextAtSize(line2a, bodyFontSize);
+  const line2bW = font.widthOfTextAtSize(line2b, bodyFontSize);
+  const line2cW = font.widthOfTextAtSize(line2c, bodyFontSize);
+  page.drawText(line2a, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(data.cpf, { x: M + line2aW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(", ", { x: M + line2aW + font.widthOfTextAtSize(data.cpf, bodyFontSize), y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  const afterCpf = M + line2aW + line2bW;
+  page.drawText(line2c, { x: afterCpf, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(line2d, { x: afterCpf + line2cW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, M + line2aW, y, line2bW - 2);
+  drawUnderline(page, afterCpf + line2cW, y, contentW - (afterCpf + line2cW - M));
+  y -= lineH;
+
+  // Line 3: residente à Rua [street], nº [number], bairro [neighborhood]
+  const streetLabel = "residente à Rua ";
+  const streetVal = `${data.address.street}, `;
+  const numberLabel = "nº ";
+  const numberVal = `${data.address.number}, bairro `;
+  const neighVal = `${data.address.neighborhood ?? ""}`;
+  const streetLabelW = font.widthOfTextAtSize(streetLabel, bodyFontSize);
+  const streetValW = font.widthOfTextAtSize(streetVal, bodyFontSize);
+  const numberLabelW = font.widthOfTextAtSize(numberLabel, bodyFontSize);
+  const numberValW = font.widthOfTextAtSize(numberVal, bodyFontSize);
+  page.drawText(streetLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(streetVal, { x: M + streetLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(numberLabel, { x: M + streetLabelW + streetValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(numberVal, { x: M + streetLabelW + streetValW + numberLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(neighVal, {
+    x: M + streetLabelW + streetValW + numberLabelW + numberValW,
+    y,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+  drawUnderline(page, M + streetLabelW, y, streetValW - 2);
+  drawUnderline(page, M + streetLabelW + streetValW + numberLabelW, y, numberValW - 2);
+  drawUnderline(
+    page,
+    M + streetLabelW + streetValW + numberLabelW + numberValW,
+    y,
+    contentW - (streetLabelW + streetValW + numberLabelW + numberValW)
+  );
+  y -= lineH;
+
+  // Line 4 (continuation of address): cidade de [city], estado [state],
+  const cityLabel = "                                , cidade de ";
+  const cityVal = `${city}, `;
+  const stateLabel = "estado ";
+  const stateVal = `${data.address.state},`;
+  const cityLabelW = font.widthOfTextAtSize(cityLabel, bodyFontSize);
+  const cityValW = font.widthOfTextAtSize(cityVal, bodyFontSize);
+  const stateLabelW = font.widthOfTextAtSize(stateLabel, bodyFontSize);
+  page.drawText(cityLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(cityVal, { x: M + cityLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(stateLabel, { x: M + cityLabelW + cityValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(stateVal, { x: M + cityLabelW + cityValW + stateLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, M, y, cityLabelW - 2);
+  drawUnderline(page, M + cityLabelW, y, cityValW - 2);
+  drawUnderline(page, M + cityLabelW + cityValW + stateLabelW, y, contentW - (cityLabelW + cityValW + stateLabelW));
+  y -= lineH;
+
+  // Line 5: telefone [phone] a guarda responsável do animal com as seguintes características:
+  const telLabel = "telefone ";
+  const telVal = `${data.phone} `;
+  const telSuffix = "a guarda responsável do animal com as seguintes";
+  const telLabelW = font.widthOfTextAtSize(telLabel, bodyFontSize);
+  const telValW = font.widthOfTextAtSize(telVal, bodyFontSize);
+  page.drawText(telLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(telVal, { x: M + telLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  page.drawText(telSuffix, { x: M + telLabelW + telValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, M + telLabelW, y, telValW - 2);
+  y -= lineH;
+
+  // "características:"
+  page.drawText("características:", { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  y -= 20;
+
+  // ── Tabela de características do animal ───────────────────────────────────
+  const col1X = M;
+  const col2X = M + contentW / 2;
+  const charLineH = 18;
+
+  // Row 1: Nome | Espécie
+  drawFilledLine(page, font, boldFont, "Nome: ", data.animalName, col1X, y, contentW / 2 - 10, bodyFontSize);
+  drawFilledLine(page, font, boldFont, "Espécie: ", officialSpeciesLabel(data.species), col2X, y, contentW / 2, bodyFontSize);
+  y -= charLineH;
+
+  // Row 2: Raça (checkbox SRD / Outra)
+  const isSrd = data.breed === "Sem raça definida";
+  const racaLabel = "Raça: ";
+  const racaLabelW = boldFont.widthOfTextAtSize(racaLabel, bodyFontSize);
+  page.drawText(racaLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const srdBox = `${checkbox(isSrd)} Sem raça definida   ${checkbox(!isSrd)} Outra: `;
+  page.drawText(srdBox, { x: col1X + racaLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  if (!isSrd) {
+    const srdBoxW = font.widthOfTextAtSize(srdBox, smallSize);
+    page.drawText(data.breed, { x: col1X + racaLabelW + srdBoxW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+    drawUnderline(page, col1X + racaLabelW + srdBoxW, y, contentW - racaLabelW - srdBoxW);
+  }
+  y -= charLineH;
+
+  // Row 3: Sexo | Idade
+  const sexLabel = "Sexo: ";
+  const sexLabelW = boldFont.widthOfTextAtSize(sexLabel, bodyFontSize);
+  page.drawText(sexLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const sexF = data.sex === "female";
+  const sexM = data.sex === "male";
+  const sexStr = `${checkbox(sexF)} F   ${checkbox(sexM)} M`;
+  page.drawText(sexStr, { x: col1X + sexLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+
+  const idadeLabel = "Idade: ";
+  const idadeLabelW = boldFont.widthOfTextAtSize(idadeLabel, bodyFontSize);
+  page.drawText(idadeLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const idadeVal = data.estimatedAge ?? "";
+  page.drawText(idadeVal, { x: col2X + idadeLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, col2X + idadeLabelW, y, contentW / 2 - idadeLabelW);
+  y -= charLineH;
+
+  // Row 4: Pelagem e cor | Porte
+  const pelagemLabel = "Pelagem e cor: ";
+  const pelagemLabelW = boldFont.widthOfTextAtSize(pelagemLabel, bodyFontSize);
+  page.drawText(pelagemLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  page.drawText(data.coatColor, { x: col1X + pelagemLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, col1X + pelagemLabelW, y, contentW / 2 - 10 - pelagemLabelW);
+
+  const porteLabel = "Porte: ";
+  const porteLabelW = boldFont.widthOfTextAtSize(porteLabel, bodyFontSize);
+  page.drawText(porteLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const sizeCode = officialSizeLabel(data.size);
+  const porteStr = `${checkbox(sizeCode === "P")} P   ${checkbox(sizeCode === "M")} M   ${checkbox(sizeCode === "G")} G`;
+  page.drawText(porteStr, { x: col2X + porteLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  y -= charLineH;
+
+  // Row 5: Castrado(a)
+  const castLabel = "Castrado(a): ";
+  const castLabelW = boldFont.widthOfTextAtSize(castLabel, bodyFontSize);
+  page.drawText(castLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const isNeutered = data.neutered === true;
+  const castStr = `${checkbox(isNeutered)} S   ${checkbox(!isNeutered)} N`;
+  page.drawText(castStr, { x: col1X + castLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  y -= 22;
+
+  // ── Cláusulas ─────────────────────────────────────────────────────────────
+  const paragraphIndent = 18;
+
+  const p1 = "O agora responsável pelo animal citado acima, compromete-se por este termo, a cuidar da saúde do animal, dando-lhe alimentação, abrigo e condições adequadas de sobrevivência, não sendo permitido ministrar-lhe ensino com maus-tratos, abandonar, doar, vender a outros ou maltratar o animal.";
+  y = drawWrappedText(page, font, p1, M, y, contentW, bodyFontSize, lineH, paragraphIndent);
+  y -= 6;
+
+  const p2 = "Todo e qualquer destino que tenha ocorrido ao animal tais como mudança de endereço, desaparecimento ou morte deve ser comunicado à Upeva.";
+  y = drawWrappedText(page, font, p2, M, y, contentW, bodyFontSize, lineH, paragraphIndent);
+  y -= 6;
+
+  const p3 = "A Upeva reserva-se no direito de efetuar visitas para verificar as condições em que se encontra o animal, assim como a retirada do mesmo, caso não se encontre em situações adequadas.";
+  y = drawWrappedText(page, font, p3, M, y, contentW, bodyFontSize, lineH, paragraphIndent);
+  y -= 6;
+
+  const p4 = "A adoção de um animal é um compromisso para a vida inteira. Porém, por uma combinação de imprevistos, não sendo mais possível permanecer com o animal, a Upeva deve ser contatada para que junto ao atual tutor encontrem um novo lar para ele.";
+  y = drawWrappedText(page, font, p4, M, y, contentW, bodyFontSize, lineH, paragraphIndent);
+  y -= 30;
+
+  // ── Assinaturas ───────────────────────────────────────────────────────────
+  const sigLineW = 120;
+  const midX = PAGE_WIDTH / 2;
+
+  // Left signature: Upeva
+  const upevaSigX = midX - sigLineW - 20;
+  drawUnderline(page, upevaSigX, y, sigLineW);
+  const upevaLabel = "Upeva";
+  const upevaLabelW = font.widthOfTextAtSize(upevaLabel, bodyFontSize);
+  page.drawText(upevaLabel, {
+    x: upevaSigX + (sigLineW - upevaLabelW) / 2,
+    y: y - 14,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+
+  // Right signature: Responsável pelo animal
+  const respSigX = midX + 20;
+  drawUnderline(page, respSigX, y, sigLineW);
+  const respLabel = "Responsável pelo animal";
+  const respLabelW = font.widthOfTextAtSize(respLabel, bodyFontSize);
+  page.drawText(respLabel, {
+    x: respSigX + (sigLineW - respLabelW) / 2,
+    y: y - 14,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+  y -= 40;
+
+  // ── Local e data ──────────────────────────────────────────────────────────
+  const localDateStr = `${city}, ${day}/${month}/${year}`;
+  const localDateW = font.widthOfTextAtSize(localDateStr, bodyFontSize);
+  page.drawText(localDateStr, {
+    x: PAGE_WIDTH - M - localDateW,
+    y,
+    size: bodyFontSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+
+  // ── Rodapé interno ────────────────────────────────────────────────────────
+  page.drawLine({
+    start: { x: M, y: 35 },
+    end: { x: PAGE_WIDTH - M, y: 35 },
+    thickness: 0.3,
+    color: rgb(0.7, 0.7, 0.7),
+  });
+  const footerText = `Ref. candidatura ${data.applicationId} — documento gerado automaticamente — ${data.ongName}`;
+  page.drawText(footerText, {
+    x: M,
+    y: 22,
+    size: 7,
+    font,
+    color: rgb(0.55, 0.55, 0.55),
+  });
+
+  const bytes = await doc.save();
+  return Buffer.from(bytes);
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
-export type PdfTemplate = "contract" | "rejection" | "archivedAnimal";
+export type PdfTemplate = "contract" | "rejection" | "archivedAnimal" | "officialContract";
 
 type PdfDataMap = {
   contract: ContractPdfData;
   rejection: RejectionPdfData;
   archivedAnimal: ArchivedAnimalPdfData;
+  officialContract: OfficialContractPdfData;
 };
 
 /**
  * Dispatcher reutilizável: escolhe o template correto pelo nome e retorna
  * o Buffer do PDF gerado em memória.
- * @param {string} template - Nome do template: contract, rejection ou archivedAnimal.
+ * @param {string} template - Nome do template.
  * @param {object} data - Dados tipados conforme o template escolhido.
  * @return {Promise<Buffer>} Buffer do PDF gerado em memória.
  */
@@ -409,6 +826,8 @@ export async function generatePdf<T extends PdfTemplate>(
     return generateRejectionPdf(data as RejectionPdfData);
   case "archivedAnimal":
     return generateArchivedAnimalPdf(data as ArchivedAnimalPdfData);
+  case "officialContract":
+    return generateAdoptionContractPdfOfficial(data as OfficialContractPdfData);
   default:
     throw new Error(`Template de PDF desconhecido: ${template}`);
   }

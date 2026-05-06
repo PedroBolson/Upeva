@@ -79,12 +79,16 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['name', 'species', 'status', 'sex', 'description'])
         && !hasTraceabilityWrite(request.resource.data.keys())
         && request.resource.data.status in ['available', 'under_review']
-        && request.resource.data.species in ['dog', 'cat'];
+        && request.resource.data.species in ['dog', 'cat']
+        && (!('breed' in request.resource.data) || (request.resource.data.breed is string && request.resource.data.breed.size() <= 100))
+        && (!('coatColor' in request.resource.data) || (request.resource.data.coatColor is string && request.resource.data.coatColor.size() <= 100));
 
       allow update: if isStaff()
         && !isArchivedTransition()
         && !hasTraceabilityWrite(request.resource.data.diff(resource.data).affectedKeys())
-        && !hasAnimalStatusWrite(request.resource.data.diff(resource.data).affectedKeys());
+        && !hasAnimalStatusWrite(request.resource.data.diff(resource.data).affectedKeys())
+        && (!('breed' in request.resource.data) || (request.resource.data.breed is string && request.resource.data.breed.size() <= 100))
+        && (!('coatColor' in request.resource.data) || (request.resource.data.coatColor is string && request.resource.data.coatColor.size() <= 100));
       allow delete: if isStaff();
     }
 

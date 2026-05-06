@@ -7,6 +7,7 @@ export interface Animal {
   sex: Sex
   size?: Size
   breed?: string
+  coatColor?: string
   estimatedAge?: string
   description: string
   photos: string[]
@@ -17,6 +18,7 @@ export interface Animal {
   specialNeeds?: string
   adoptedApplicationId?: string
   adoptedAt?: Timestamp
+  adoptionContractArchiveFileId?: string
   activeApplicationCount?: number
   archiveReason?: ArchiveReason
   archiveDetails?: string

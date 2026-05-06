@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, type LucideIcon } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
 import { AnimalQuickViewModal } from '@/features/animals/components/animal-quick-view-modal'
@@ -18,6 +18,7 @@ import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
+import { getArchiveFileUrl, generateAdoptionContractNow } from '@/features/admin/services/archive.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import { formatDate } from '@/utils/format'
@@ -121,6 +122,7 @@ function Bool({ value }: { value: boolean | undefined }) {
 export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: app, isLoading, error, refetch } = useApplication(id)
   const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
   const { data: flagResult } = useRejectionFlag(id)
@@ -139,6 +141,25 @@ export function ApplicationDetailPage() {
   const [isAnimalModalOpen, setIsAnimalModalOpen] = useState(false)
   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false)
   const [isStatusInfoOpen, setIsStatusInfoOpen] = useState(false)
+  const [contractError, setContractError] = useState<string | null>(null)
+
+  const { mutate: generateContract, isPending: isGeneratingContract } = useMutation({
+    mutationFn: () => generateAdoptionContractNow(id!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['application', id] })
+      setContractError(null)
+    },
+    onError: () => {
+      setContractError('Não foi possível gerar o termo. Tente novamente.')
+    },
+  })
+
+  function handleOpenContract() {
+    if (!app?.contractArchiveFileId) return
+    getArchiveFileUrl(app.contractArchiveFileId)
+      .then((url) => window.open(url, '_blank', 'noopener,noreferrer'))
+      .catch(() => setContractError('Não foi possível abrir o termo. Tente novamente.'))
+  }
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -345,26 +366,27 @@ export function ApplicationDetailPage() {
           setIsApprovalConfirmOpen(false)
           saveReview()
         }}
-        title="Confirmar adoção?"
-        description={
-          affectedCandidates.length > 0
-            ? `${affectedCandidates.length} candidato${affectedCandidates.length !== 1 ? 's' : ''} aguardando ${app.animalName ?? 'este animal'} ${affectedCandidates.length !== 1 ? 'serão convertidos' : 'será convertido'} para interesse geral:`
-            : `Nenhum outro candidato aguarda ${app.animalName ?? 'este animal'}.`
-        }
-        confirmLabel="Aprovar e converter"
+        title="Confirmar aprovação da adoção?"
+        description="Ao confirmar, esta candidatura será aprovada, o animal será marcado como adotado e o termo oficial de adoção será gerado e arquivado com acesso restrito. Os dados completos da candidatura serão mantidos temporariamente para conferência operacional e, após o prazo de retenção, poderá permanecer apenas o termo arquivado. Confirme apenas se a análise já foi concluída."
+        confirmLabel="Confirmar aprovação"
         cancelLabel="Cancelar"
         variant="warning"
         loading={isPending}
       >
         {affectedCandidates.length > 0 && (
-          <ul className="mt-1 flex flex-col gap-1.5">
-            {affectedCandidates.map((c) => (
-              <li key={c.id} className="flex items-center gap-2 text-sm text-foreground">
-                <span className="text-muted-foreground">#{c.queuePosition}</span>
-                {c.fullName}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3 flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              {affectedCandidates.length} candidato{affectedCandidates.length !== 1 ? 's' : ''} aguardando {app.animalName ?? 'este animal'} {affectedCandidates.length !== 1 ? 'serão convertidos' : 'será convertido'} para interesse geral:
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {affectedCandidates.map((c) => (
+                <li key={c.id} className="flex items-center gap-2 text-sm text-foreground">
+                  <span className="text-muted-foreground">#{c.queuePosition}</span>
+                  {c.fullName}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </ConfirmModal>
 
@@ -631,7 +653,7 @@ export function ApplicationDetailPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  No próximo ciclo semanal: PDF gerado, arquivado no Drive e removido do sistema.
+                  No próximo ciclo semanal: PDF gerado, arquivado de forma privada e removido do banco de dados.
                 </p>
               </div>
             ) : (
@@ -654,7 +676,7 @@ export function ApplicationDetailPage() {
                       <div className="rounded-lg border border-border bg-muted/50 p-3 text-xs text-muted-foreground flex flex-col gap-1.5">
                         <p><strong className="text-foreground">Pendente</strong> — recebido, aguardando triagem</p>
                         <p><strong className="text-foreground">Em análise</strong> — em avaliação ativa pela equipe</p>
-                        <p><strong className="text-foreground">Aprovada</strong> — adoção confirmada · PDF gerado e arquivado em 30 dias</p>
+                        <p><strong className="text-foreground">Aprovada</strong> — adoção confirmada · termo oficial gerado imediatamente · dados operacionais mantidos temporariamente</p>
                         <p><strong className="text-foreground">Retirada</strong> — candidato desistiu · removido automaticamente em 30 dias</p>
                         <p><strong className="text-foreground">Recusar candidatura</strong> — use o botão abaixo para declinar (sem registro) ou rejeitar definitivamente (com alerta permanente)</p>
                       </div>
@@ -761,6 +783,50 @@ export function ApplicationDetailPage() {
               <SidebarField label="Contato" value={`${app.email} · ${piiLoading ? '•••' : (pii?.phone ?? '—')}`} />
             </div>
           </Card>
+
+          {app.status === 'approved' && (
+            <Card className="border-border/80 p-5">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Termo de adoção</h2>
+              </div>
+              <div className="mt-4 flex flex-col gap-3">
+                {app.contractArchiveFileId ? (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-1.5"
+                    onClick={handleOpenContract}
+                  >
+                    <FileText size={14} />
+                    Abrir termo
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-1.5"
+                    onClick={() => generateContract()}
+                    disabled={isGeneratingContract}
+                  >
+                    {isGeneratingContract
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <RefreshCw size={14} />}
+                    {isGeneratingContract ? 'Gerando…' : 'Gerar termo'}
+                  </Button>
+                )}
+                {contractError && (
+                  <p className="text-xs text-danger">{contractError}</p>
+                )}
+                {app.contractGenerationStatus === 'failed' && !contractError && (
+                  <p className="text-xs text-warning">
+                    A geração anterior falhou. Use "Gerar termo" para tentar novamente.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Os dados completos da candidatura serão mantidos temporariamente para conferência operacional. Após o prazo de retenção, poderá permanecer apenas o termo arquivado com acesso restrito.
+                </p>
+              </div>
+            </Card>
+          )}
 
           <TraceabilityCard
             title="Rastreabilidade da revisão"

@@ -84,7 +84,15 @@ export function PrivacyPolicyPage() {
               <p>Avaliar se o perfil do candidato é adequado para o animal. Base legal: consentimento (LGPD Art. 7, I).</p>
             </div>
             <div className="rounded-lg border border-border bg-muted/40 p-3 flex flex-col gap-1">
-              <p className="font-medium text-foreground">2. Segurança histórica e prevenção de fraudes</p>
+              <p className="font-medium text-foreground">2. Geração do termo oficial de adoção</p>
+              <p>
+                Quando uma candidatura é aprovada, um Termo de Adoção Responsável é gerado imediatamente e arquivado
+                de forma privada com acesso restrito à equipe da Upeva. O termo formaliza o compromisso de adoção e
+                permanece arquivado mesmo após a remoção dos dados operacionais. Base legal: consentimento e legítimo interesse (LGPD Art. 7, I e IX).
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/40 p-3 flex flex-col gap-1">
+              <p className="font-medium text-foreground">3. Segurança histórica e prevenção de fraudes</p>
               <p>
                 Candidaturas com rejeição definitiva geram um registro anônimo (apenas hash do CPF e e-mail — sem dados pessoais legíveis)
                 para proteger futuros animais. Base legal: legítimo interesse (LGPD Art. 7, IX).
@@ -96,8 +104,8 @@ export function PrivacyPolicyPage() {
         <Section title="Retenção e exclusão" icon={Trash2}>
           <p>Seguimos o princípio de minimização de dados: nenhum dado pessoal fica além do necessário.</p>
           <ul className="list-disc list-inside flex flex-col gap-1">
-            <li><strong className="text-foreground">Candidatura aprovada:</strong> {APPROVED_RETENTION_DAYS} dias após aprovação → exportada como PDF para armazenamento interno → excluída do banco de dados</li>
-            <li><strong className="text-foreground">Candidatura com rejeição definitiva:</strong> exportada como PDF → excluída do banco; resta apenas um registro anônimo sem PII</li>
+            <li><strong className="text-foreground">Candidatura aprovada:</strong> ao aprovar, o termo oficial de adoção é gerado imediatamente e arquivado de forma privada. Os dados completos da candidatura ficam disponíveis temporariamente para conferência operacional ({APPROVED_RETENTION_DAYS} dias) e depois são removidos do banco de dados. O termo permanece arquivado com acesso restrito.</li>
+            <li><strong className="text-foreground">Candidatura com rejeição definitiva:</strong> exportada como PDF interno → excluída do banco; resta apenas um registro anônimo sem PII</li>
             <li><strong className="text-foreground">Candidatura recusada ou desistência:</strong> excluída sem geração de PDF ou registro</li>
             <li><strong className="text-foreground">Animal arquivado:</strong> {ARCHIVED_ANIMAL_RETENTION_DAYS} dias após arquivamento → exportado como PDF → excluído do banco</li>
           </ul>

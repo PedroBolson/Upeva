@@ -15,7 +15,7 @@ import { logger } from "firebase-functions/v2";
 import * as functionsV1 from "firebase-functions/v1";
 import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./lib/crypto.util.js";
 import { assertAdminRateLimit } from "./lib/rate-limit.util.js";
-import { generatePdf, type AddressData } from "./lib/pdf.helper.js";
+import { generatePdf, generateAdoptionContractPdfOfficial, type AddressData, type OfficialContractPdfData } from "./lib/pdf.helper.js";
 import { uploadArchivePdf, getArchiveSignedUrl } from "./lib/storage-archive.helper.js";
 
 initializeApp();
@@ -135,9 +135,14 @@ type AnimalRecord = {
   species?: Species;
   sex?: Sex;
   size?: Size;
+  breed?: string;
+  coatColor?: string;
+  estimatedAge?: string;
+  neutered?: boolean;
   status?: AnimalStatus;
   adoptedApplicationId?: string;
   adoptedAt?: unknown;
+  adoptionContractArchiveFileId?: string;
   activeApplicationCount?: number;
 };
 
@@ -1421,8 +1426,81 @@ export const createApplication = onCall(
   }
 );
 
+// ── generateAndStoreAdoptionContract: helper compartilhado ───────────────────
+// Gera o Termo de Adoção Responsável imediatamente após aprovação (ou retry).
+// Idempotente: retorna o ID existente se o contrato já foi gerado.
+// Nunca faz rollback da aprovação se falhar — apenas marca contractGenerationStatus.
+async function generateAndStoreAdoptionContract(
+  applicationId: string,
+  applicationData: Record<string, unknown>,
+  animalData: AnimalRecord,
+  reviewerLabel?: string
+): Promise<{ archiveFileId: string }> {
+  const pii = readApplicationPIIForArchive(applicationData);
+  const approvedAt = applicationData.reviewedAt instanceof Timestamp ?
+    (applicationData.reviewedAt as Timestamp).toDate() :
+    applicationData.updatedAt instanceof Timestamp ?
+      (applicationData.updatedAt as Timestamp).toDate() :
+      new Date();
+
+  const animalSlug = slugify((animalData.name ?? "animal") as string);
+  const dateStr = approvedAt.toISOString().split("T")[0];
+  const shortId = applicationId.slice(0, 6);
+  const fileName = `contrato_adocao_${animalSlug}_${dateStr}_${shortId}.pdf`;
+  const year = approvedAt.getFullYear();
+
+  const pdfData: OfficialContractPdfData = {
+    applicationId,
+    fullName: applicationData.fullName as string,
+    cpf: pii.cpf,
+    birthDate: pii.birthDate,
+    phone: pii.phone,
+    address: pii.address as AddressData,
+    animalName: (animalData.name ?? "Animal") as string,
+    species: (animalData.species ?? "dog") as string,
+    breed: (animalData.breed ?? "Sem raça definida") as string,
+    sex: animalData.sex as string | undefined,
+    estimatedAge: animalData.estimatedAge as string | undefined,
+    coatColor: (animalData.coatColor ?? "") as string,
+    size: animalData.size as string | undefined,
+    neutered: animalData.neutered as boolean | undefined,
+    approvedAt,
+    ongName: "Upeva Adoções",
+  };
+
+  const pdfBuffer = await generateAdoptionContractPdfOfficial(pdfData);
+
+  const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
+    type: "contracts",
+    fileName,
+    year,
+  });
+
+  const archiveRef = await db.collection("archiveFiles").add({
+    type: "contract",
+    storagePath,
+    fileName,
+    contentType: "application/pdf",
+    sizeBytes,
+    year,
+    applicationId,
+    animalId: (applicationData.animalId as string | undefined) ?? null,
+    animalName: (animalData.name as string | undefined) ?? null,
+    species: (animalData.species as string | undefined) ?? null,
+    reviewerLabel: reviewerLabel ?? null,
+    createdAt: FieldValue.serverTimestamp(),
+    status: "stored",
+  });
+
+  return { archiveFileId: archiveRef.id };
+}
+
 export const updateApplicationReview = onCall(
-  { region: "southamerica-east1", maxInstances: 10 },
+  {
+    region: "southamerica-east1",
+    maxInstances: 10,
+    secrets: [piiEncryptionKey, hmacSecretKey],
+  },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Not authenticated.");
@@ -1739,6 +1817,55 @@ export const updateApplicationReview = onCall(
             batch.update(docSnap.ref, update);
           }
           await batch.commit();
+        }
+      }
+
+      // Gerar o Termo de Adoção imediatamente após a aprovação.
+      // Se falhar, não reverte a aprovação — marca contractGenerationStatus: "failed".
+      if (status === "approved" && resolvedAnimalId) {
+        try {
+          const [appSnap, animalSnap] = await Promise.all([
+            db.collection("applications").doc(targetId).get(),
+            db.collection("animals").doc(resolvedAnimalId).get(),
+          ]);
+          const appData = appSnap.data() as Record<string, unknown> | undefined;
+          const animalSnapData = animalSnap.data() as AnimalRecord | undefined;
+          if (appData && animalSnapData) {
+            const { archiveFileId } = await generateAndStoreAdoptionContract(
+              targetId,
+              appData,
+              animalSnapData,
+              actorLabel
+            );
+            const contractBatch = db.batch();
+            contractBatch.update(db.collection("applications").doc(targetId), {
+              contractArchiveFileId: archiveFileId,
+              contractGeneratedAt: FieldValue.serverTimestamp(),
+              contractGenerationStatus: "stored",
+            });
+            contractBatch.update(db.collection("animals").doc(resolvedAnimalId), {
+              adoptionContractArchiveFileId: archiveFileId,
+            });
+            await contractBatch.commit();
+            logOperationSuccess({
+              operation: "contract.generate",
+              targetId,
+              archiveFileId,
+            });
+          }
+        } catch (contractErr) {
+          logOperationError(contractErr, {
+            operation: "contract.generate",
+            targetId,
+            status: "contract_generation_failed",
+          });
+          try {
+            await db.collection("applications").doc(targetId).update({
+              contractGenerationStatus: "failed",
+            });
+          } catch {
+            // best-effort; do not mask the approval success
+          }
         }
       }
 
@@ -2715,7 +2842,10 @@ export async function runArchiveAndCleanup(): Promise<void> {
     const ONG_NAME = "Upeva Adoções";
     const year = new Date().getFullYear();
 
-    // ── 1. approved > 30 dias → PDF contrato → Storage → archiveFiles → deletar
+    // ── 1. approved > 30 dias → verificar/gerar contrato → deletar ──────────
+    // Geração imediata acontece em updateApplicationReview. O cron só gera
+    // se contractArchiveFileId estiver ausente (fallback/recovery).
+    // Nunca deleta a candidatura sem ter o contrato arquivado com segurança.
     const approvedCutoff = new Timestamp(Math.floor((now - DAYS_30) / 1000), 0);
     const approvedSnap = await db.collection("applications")
       .where("status", "==", "approved")
@@ -2725,61 +2855,60 @@ export async function runArchiveAndCleanup(): Promise<void> {
 
     for (const docSnap of approvedSnap.docs) {
       const data = docSnap.data() as Record<string, unknown>;
-      const pii = readApplicationPIIForArchive(data);
-      const approvedAt = data.reviewedAt instanceof Timestamp ?
-        data.reviewedAt.toDate() :
-        (data.updatedAt as Timestamp).toDate();
-      const fileName = `contrato_adocao_${slugify((data.animalName as string) || "animal")}_${approvedAt.toISOString().split("T")[0]}_${docSnap.id.slice(0, 6)}.pdf`;
-      const pdfBuffer = await generatePdf("contract", {
-        applicationId: docSnap.id,
-        fullName: data.fullName as string,
-        email: data.email as string,
-        cpf: pii.cpf,
-        phone: pii.phone,
-        birthDate: pii.birthDate,
-        address: pii.address as AddressData,
-        animalId: (data.animalId as string) ?? "",
-        animalName: (data.animalName as string) ?? "Animal",
-        species: (data.species as string) ?? "dog",
-        approvedAt,
-        reviewerName: (data.reviewedByLabel as string | undefined) ?? "Equipe Upeva",
-        ongName: ONG_NAME,
-      });
+      const animalId = data.animalId as string | undefined;
 
-      let uploaded = false;
-      try {
-        const { storagePath, sizeBytes } = await uploadArchivePdf(pdfBuffer, {
-          type: "contracts",
-          fileName,
-          year,
-        });
-        await db.collection("archiveFiles").add({
-          type: "contract",
-          storagePath,
-          fileName,
-          contentType: "application/pdf",
-          sizeBytes,
-          year,
-          applicationId: docSnap.id,
-          animalId: (data.animalId as string | undefined) ?? null,
-          animalName: (data.animalName as string | undefined) ?? null,
-          species: (data.species as string | undefined) ?? null,
-          reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
-          createdAt: FieldValue.serverTimestamp(),
-          status: "stored",
-        });
-        uploaded = true;
-      } catch (err) {
-        logOperationError(err, {
-          operation: "storage.archive.contract.upload",
-          targetId: docSnap.id,
-          status: "upload_failed",
-        });
+      let contractArchiveFileId = data.contractArchiveFileId as string | undefined;
+
+      // Verificar se o contrato já está arquivado com segurança
+      if (contractArchiveFileId) {
+        const existingArchive = await db.collection("archiveFiles").doc(contractArchiveFileId).get();
+        if (!existingArchive.exists) {
+          // ID registrado mas arquivo ausente — regenerar
+          contractArchiveFileId = undefined;
+          logOperationError(new Error("contractArchiveFileId aponta para arquivo inexistente"), {
+            operation: "storage.archive.contract.verify",
+            targetId: docSnap.id,
+            status: "archive_file_missing",
+          });
+        }
       }
 
-      if (!uploaded) continue;
+      // Gerar contrato se ainda não existir (fallback)
+      if (!contractArchiveFileId) {
+        try {
+          const animalSnap = animalId ?
+            await db.collection("animals").doc(animalId).get() :
+            null;
+          const animalData = (animalSnap?.exists ? animalSnap.data() : {}) as AnimalRecord;
+          const { archiveFileId } = await generateAndStoreAdoptionContract(
+            docSnap.id,
+            data,
+            animalData,
+            (data.reviewedByLabel as string | undefined)
+          );
+          contractArchiveFileId = archiveFileId;
+          await docSnap.ref.update({
+            contractArchiveFileId: archiveFileId,
+            contractGeneratedAt: FieldValue.serverTimestamp(),
+            contractGenerationStatus: "stored",
+          });
+          if (animalId && animalSnap?.exists) {
+            await db.collection("animals").doc(animalId).update({
+              adoptionContractArchiveFileId: archiveFileId,
+            });
+          }
+        } catch (err) {
+          logOperationError(err, {
+            operation: "storage.archive.contract.fallback",
+            targetId: docSnap.id,
+            status: "fallback_generation_failed",
+          });
+          // Não deletar se o contrato não pôde ser gerado; cron tentará novamente
+          continue;
+        }
+      }
 
-      const animalId = data.animalId as string | undefined;
+      // Contrato existe — pode deletar a candidatura e o animal
       if (animalId) {
         const animalSnap = await db.collection("animals").doc(animalId).get();
         if (animalSnap.exists) {
@@ -3043,5 +3172,117 @@ export const getArchiveFileUrl = onCall(
     });
 
     return { url: signedUrl };
+  }
+);
+
+// ── generateAdoptionContractNow: retry manual do termo de adoção ──────────────
+// Usado quando a geração automática falhou após aprovação.
+// Idempotente: se o contrato já existe retorna o ID sem duplicar.
+export const generateAdoptionContractNow = onCall(
+  {
+    region: "southamerica-east1",
+    maxInstances: 5,
+    secrets: [piiEncryptionKey, hmacSecretKey],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("contract.generate.now", request.auth.uid, callerRole);
+      throw new HttpsError("permission-denied", "Only staff can generate adoption contracts.");
+    }
+
+    await assertAdminRateLimit(request.auth.uid, "contract.generate.now", 20);
+
+    const { applicationId } = request.data as { applicationId?: string };
+    if (typeof applicationId !== "string" || !applicationId.trim()) {
+      throw new HttpsError("invalid-argument", "applicationId inválido.");
+    }
+
+    const targetId = applicationId.trim();
+    const actorLabel = getActorLabel(request.auth);
+
+    logOperationStart({
+      operation: "contract.generate.now",
+      uid: request.auth.uid,
+      actorRole: safeRole(callerRole),
+      targetId,
+    });
+
+    try {
+      const appSnap = await db.collection("applications").doc(targetId).get();
+      if (!appSnap.exists) {
+        throw new HttpsError("not-found", "Candidatura não encontrada.");
+      }
+
+      const appData = appSnap.data() as Record<string, unknown>;
+      if (appData.status !== "approved") {
+        throw new HttpsError("failed-precondition", "Apenas candidaturas aprovadas podem ter termo gerado.");
+      }
+
+      // Idempotência: contrato já existe
+      if (typeof appData.contractArchiveFileId === "string" && appData.contractArchiveFileId) {
+        const existing = await db.collection("archiveFiles").doc(appData.contractArchiveFileId).get();
+        if (existing.exists) {
+          logOperationSuccess({
+            operation: "contract.generate.now",
+            uid: request.auth.uid,
+            targetId,
+            result: "already_exists",
+          });
+          return { archiveFileId: appData.contractArchiveFileId, alreadyExists: true };
+        }
+      }
+
+      const animalId = appData.animalId as string | undefined;
+      if (!animalId) {
+        throw new HttpsError("failed-precondition", "Candidatura aprovada sem animal vinculado.");
+      }
+
+      const animalSnap = await db.collection("animals").doc(animalId).get();
+      if (!animalSnap.exists) {
+        throw new HttpsError("not-found", "Animal vinculado não encontrado.");
+      }
+      const animalData = animalSnap.data() as AnimalRecord;
+
+      const { archiveFileId } = await generateAndStoreAdoptionContract(
+        targetId,
+        appData,
+        animalData,
+        actorLabel
+      );
+
+      const contractBatch = db.batch();
+      contractBatch.update(appSnap.ref, {
+        contractArchiveFileId: archiveFileId,
+        contractGeneratedAt: FieldValue.serverTimestamp(),
+        contractGenerationStatus: "stored",
+      });
+      contractBatch.update(db.collection("animals").doc(animalId), {
+        adoptionContractArchiveFileId: archiveFileId,
+      });
+      await contractBatch.commit();
+
+      logOperationSuccess({
+        operation: "contract.generate.now",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+        archiveFileId,
+      });
+
+      return { archiveFileId, alreadyExists: false };
+    } catch (err) {
+      logOperationError(err, {
+        operation: "contract.generate.now",
+        uid: request.auth.uid,
+        actorRole: safeRole(callerRole),
+        targetId,
+      });
+      throw err;
+    }
   }
 );

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Controller, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, ClipboardList, Loader2, Plus, Star, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, FileText, Loader2, Plus, Star, Trash2, X } from 'lucide-react'
 import { AnimalStatusBadge, Button, Card, Checkbox, Input, Select, useToast } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,6 +15,7 @@ import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
+import { getArchiveFileUrl } from '@/features/admin/services/archive.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS, STATUS_LABELS } from '@/features/animals/types/animal.types'
@@ -79,6 +80,7 @@ export function AnimalFormPage() {
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleteAnimalModalOpen, setIsDeleteAnimalModalOpen] = useState(false)
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false)
+  const [isSrd, setIsSrd] = useState(false)
 
   const {
     control,
@@ -86,6 +88,7 @@ export function AnimalFormPage() {
     watch,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<AnimalFormData>({
     // Cast needed: z.boolean().default() in Zod v4 infers differently in resolver type
@@ -106,12 +109,16 @@ export function AnimalFormPage() {
     setExistingPhotos(animal.photos)
     setVaccines(animal.vaccines.length > 0 ? animal.vaccines : [''])
     setCoverIndex(animal.coverPhotoIndex)
+    const srd = animal.breed === 'Sem raça definida'
+    setIsSrd(srd)
     reset({
       name: animal.name,
       species: animal.species,
       sex: animal.sex,
       size: animal.size,
+      isSrd: srd,
       breed: animal.breed ?? '',
+      coatColor: animal.coatColor ?? '',
       estimatedAge: animal.estimatedAge ?? '',
       description: animal.description,
       neutered: animal.neutered,
@@ -156,6 +163,9 @@ export function AnimalFormPage() {
         .map((v) => v.trim())
         .filter(Boolean)
 
+      const resolvedBreed = data.isSrd ? 'Sem raça definida' : data.breed.trim()
+      const resolvedCoatColor = data.coatColor.trim()
+
       if (isEditing && animal) {
         // Upload new photos
         const uploadedUrls = await Promise.all(
@@ -174,7 +184,8 @@ export function AnimalFormPage() {
             species: data.species,
             sex: data.sex,
             size: data.size,
-            breed: data.breed || undefined,
+            breed: resolvedBreed,
+            coatColor: resolvedCoatColor,
             estimatedAge: data.estimatedAge || undefined,
             description: data.description,
             neutered: data.neutered,
@@ -202,7 +213,8 @@ export function AnimalFormPage() {
           species: data.species,
           sex: data.sex,
           size: data.size,
-          breed: data.breed || undefined,
+          breed: resolvedBreed,
+          coatColor: resolvedCoatColor,
           estimatedAge: data.estimatedAge || undefined,
           description: data.description,
           neutered: data.neutered,
@@ -455,10 +467,33 @@ export function AnimalFormPage() {
                 />
               )}
 
+              <div className="flex flex-col gap-2">
+                <Checkbox
+                  label="Sem raça definida (SRD)"
+                  checked={isSrd}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setIsSrd(checked)
+                    setValue('breed', checked ? 'Sem raça definida' : '', { shouldValidate: false })
+                  }}
+                />
+                {!isSrd && (
+                  <Input
+                    label="Raça"
+                    placeholder="Ex: Siamês, Labrador..."
+                    error={errors.breed?.message}
+                    required
+                    {...register('breed')}
+                  />
+                )}
+              </div>
+
               <Input
-                label="Raça"
-                placeholder="Ex: Vira-lata (opcional)"
-                {...register('breed')}
+                label="Pelagem e cor"
+                placeholder="Ex: Pelo curto preto e branco"
+                error={errors.coatColor?.message}
+                required
+                {...register('coatColor')}
               />
 
               <Input
@@ -675,6 +710,33 @@ export function AnimalFormPage() {
                 { label: 'Detalhes do arquivamento', value: animal.archiveDetails },
               ]}
             />
+          )}
+
+          {isEditing && animal && animal.adoptionContractArchiveFileId && (
+            <Card className="border-border/80 p-5">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Termo de adoção</h2>
+              </div>
+              <div className="mt-4 flex flex-col gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-1.5"
+                  onClick={() => {
+                    getArchiveFileUrl(animal.adoptionContractArchiveFileId!)
+                      .then((url) => window.open(url, '_blank', 'noopener,noreferrer'))
+                      .catch(() => {/* silently ignore; user can retry */})
+                  }}
+                >
+                  <FileText size={14} />
+                  Abrir termo
+                </Button>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  O registro operacional poderá ser removido após o prazo de retenção. O termo permanecerá arquivado com acesso restrito.
+                </p>
+              </div>
+            </Card>
           )}
 
           <Card className="border-border/80 p-5">

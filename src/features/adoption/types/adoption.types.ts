@@ -80,6 +80,9 @@ export interface AdoptionApplication extends AdoptionFormData {
   reviewedAt?: Timestamp
   reviewAction?: ApplicationStatus
   pendingExport?: boolean
+  contractArchiveFileId?: string
+  contractGeneratedAt?: Timestamp
+  contractGenerationStatus?: 'stored' | 'failed'
   createdAt: Timestamp
   updatedAt: Timestamp
   updatedBy?: string

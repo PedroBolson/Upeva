@@ -69,3 +69,14 @@ export async function getArchiveFileUrl(archiveFileId: string): Promise<string> 
   const result = await fn({ archiveFileId })
   return result.data.url
 }
+
+export async function generateAdoptionContractNow(
+  applicationId: string,
+): Promise<{ archiveFileId: string; alreadyExists?: boolean }> {
+  const fn = httpsCallable<
+    { applicationId: string },
+    { archiveFileId: string; alreadyExists?: boolean }
+  >(functions, 'generateAdoptionContractNow')
+  const result = await fn({ applicationId })
+  return result.data
+}
