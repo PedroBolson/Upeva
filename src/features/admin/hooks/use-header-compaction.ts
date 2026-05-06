@@ -28,20 +28,11 @@ export function useHeaderCompaction() {
     resizeObserver.observe(containerEl)
     resizeObserver.observe(measureEl)
 
-    const mutationObserver = new MutationObserver(update)
-    mutationObserver.observe(measureEl, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-    })
-
     window.addEventListener('resize', update)
 
     return () => {
       cancelAnimationFrame(frameId)
       resizeObserver.disconnect()
-      mutationObserver.disconnect()
       window.removeEventListener('resize', update)
     }
   }, [containerEl, measureEl])

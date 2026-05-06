@@ -174,7 +174,7 @@ Comportamento de dados legados: documentos existentes não recebem backfill. Os 
 | Consentimento granular (Art. 7, I) | Modal de duplo checkbox antes do formulário — finalidades separadas |
 | Minimização de dados | PII cifrado em repouso; excluído após prazo de retenção |
 | Retenção limitada | Candidaturas aprovadas e animais arquivados: 30 dias → exportados como PDF → excluídos |
-| Direito ao esquecimento (Art. 18) | Endpoint `deleteRejectionFlag` + UI de remoção no painel admin |
+| Direito ao esquecimento (Art. 18) | Painel `/admin/privacidade` com preview e exclusão de candidaturas, flags de rejeição e PDFs arquivados via `previewPrivacyRequest`, `deletePrivacyApplicationData`, `deletePrivacyRejectionFlag`, `deletePrivacyArchiveFile`; remoção direta de flag via `deleteRejectionFlag` no painel `/admin/alertas` |
 | Encarregado de Dados (DPO) | Identificado na Política de Privacidade (coordenação da ONG) |
 | Accountability (Art. 37) | Dados mapeados neste README; constantes de retenção em `src/types/common.ts` |
 | Política pública | `/politica-de-privacidade` e `/termos-de-uso` disponíveis a qualquer visitante |
@@ -236,6 +236,7 @@ Cada Cloud Function tem seu próprio limite de instâncias:
 | `updateApplicationReview` | 10 |
 | `onApplicationStatusChanged` | 5 |
 | `onAnimalChanged` | 5 |
+| `onArchiveFileChanged` | 5 |
 | `refreshUserClaims` | 5 |
 | `createUser` | 3 |
 | `updateUserRole` | 3 |
@@ -243,10 +244,21 @@ Cada Cloud Function tem seu próprio limite de instâncias:
 | `recalibrateCounts` | 3 |
 | `recalibrateQueuePositions` | 3 |
 | `archiveAnimal` | 5 |
+| `updateAnimalStatus` | 5 |
+| `deleteAnimal` | 3 |
 | `getApplicationPII` | 10 |
 | `checkRejectionFlag` | 10 |
 | `deleteRejectionFlag` | 3 |
 | `updateFeaturedAnimals` | 3 |
+| `getArchiveFileUrl` | 10 |
+| `deleteArchiveFile` | 5 |
+| `generateAdoptionContractNow` | 5 |
+| `recalibrateArchiveFileFilters` | 3 |
+| `backfillApplicationPrivacyIndexes` | 2 |
+| `previewPrivacyRequest` | 5 |
+| `deletePrivacyApplicationData` | 3 |
+| `deletePrivacyRejectionFlag` | 3 |
+| `deletePrivacyArchiveFile` | 3 |
 | `cleanOperationalData` (cron diário) | 1 |
 | `archiveAndCleanup` (cron semanal) | 1 |
 
@@ -327,7 +339,9 @@ O cliente web usa `persistentLocalCache` (IndexedDB) com suporte multi-tab — r
 | `/admin/candidaturas/:id` | staff |
 | `/admin/destaques` | staff |
 | `/admin/alertas` | admin only |
+| `/admin/arquivos` | staff |
 | `/admin/usuarios` | admin only |
+| `/admin/privacidade` | admin only |
 | `/admin/configuracoes` | staff |
 
 ---
@@ -339,7 +353,7 @@ A autenticação usa `email/senha` no Firebase Auth com **Custom Claims** para a
 | Role | Acesso |
 |---|---|
 | `admin` | acesso total, incluindo gestão de usuários, alertas de flags e configurações destrutivas |
-| `reviewer` | dashboard, animais, candidaturas, destaques e configurações de manutenção |
+| `reviewer` | dashboard, animais, candidaturas, destaques, arquivos e configurações de manutenção |
 
 O login valida se o usuário tem um perfil em `users/{uid}` com role válido. Se o token não contiver o claim `role` (usuários anteriores ao deploy dos Custom Claims), a function `refreshUserClaims` é chamada automaticamente para sincronizar.
 
@@ -351,6 +365,7 @@ A redefinição de senha está disponível em `/admin/reset-password` via Fireba
 
 As functions ficam em [`functions/src/index.ts`](functions/src/index.ts). Helpers em [`functions/src/lib/`](functions/src/lib/):
 
+- `shared.ts` — lógica de negócio compartilhada, helpers de Firestore, exports centralizados
 - `crypto.util.ts` — AES-256-GCM (`encrypt`/`decrypt`) e HMAC-SHA256 (`hmac`)
 - `pdf.helper.ts` — geração de PDFs em memória com `pdf-lib`
 - `storage-archive.helper.ts` — upload privado de PDFs para Firebase Storage e URLs assinadas
@@ -388,8 +403,23 @@ Callable — staff. Arquiva um animal com motivo obrigatório (`archiveReason` e
 ### `updateAnimalStatus`
 Callable — staff. Atualiza status não arquivado e limpa metadados internos quando um animal volta a status público (`available`/`under_review`), evitando exposição de UIDs de equipe.
 
+### `deleteAnimal`
+Callable — admin/reviewer. Remove um animal do Firestore (e suas fotos do Storage). Requer campo `reason` obrigatório para rastreabilidade. Bloqueado se o animal tiver candidaturas ativas vinculadas.
+
 ### `updateFeaturedAnimals`
 Callable — staff. Valida e grava o pool de animais em destaque em `metadata/featuredAnimals` (cache denormalizado lido pela home pública).
+
+### `recalibrateArchiveFileFilters`
+Callable — staff. Reconstrói `metadata/archiveFileFilters` com os tipos e anos de arquivos existentes em `archiveFiles`. Usado após migrações de dados ou deploy inicial quando já existem arquivos.
+
+### `getArchiveFileUrl`
+Callable — staff. Valida o `archiveFileId`, confirma que o `storagePath` começa com `private-pdfs/` e retorna uma URL assinada de 10 minutos de duração. A URL nunca é armazenada no Firestore.
+
+### `deleteArchiveFile`
+Callable — somente `admin`. Remove o metadado em `archiveFiles` e o arquivo PDF em `private-pdfs/**`. Também limpa referências em `rejectionFlags` se existirem. Não altera status de candidatura ou animal.
+
+### `generateAdoptionContractNow`
+Callable — staff. Retry manual da geração do Termo de Adoção para candidaturas aprovadas onde a geração automática falhou. Idempotente: retorna o `archiveFileId` existente sem duplicar o PDF.
 
 ### `refreshUserClaims`
 Callable — usuário autenticado. Sincroniza Custom Claims a partir do Firestore para usuários que não os possuem no token.
@@ -410,7 +440,27 @@ Trigger em `applications/{appId}` — mantém contadores em `metadata/counts` e 
 ### `onAnimalChanged`
 Trigger em `animals/{animalId}` — mantém contadores de animais em `metadata/counts` por status.
 
+### `onArchiveFileChanged`
+Trigger em `archiveFiles/{fileId}` — mantém `metadata/archiveFileFilters` com o agregado de tipos e anos dos arquivos disponíveis, usado para filtros no painel de arquivos.
+
 > Ambos os triggers usam deduplicação por `event.id` para garantir idempotência.
+
+### Privacidade (LGPD) — callables
+
+### `backfillApplicationPrivacyIndexes`
+Callable — somente `admin`. Itera candidaturas sem `privacyIndex`, decifra o CPF e recomputa o HMAC para popular o campo. Paginado com estado persistido em `_privacyBackfillState` para execuções incrementais.
+
+### `previewPrivacyRequest`
+Callable — somente `admin`. Recebe CPF ou e-mail, computa o HMAC e retorna candidaturas, flags de rejeição e arquivos associados (sem PII em texto claro), junto com avisos de estado (candidatura aprovada, contrato arquivado, etc.).
+
+### `deletePrivacyApplicationData`
+Callable — somente `admin`. Exclui uma candidatura do Firestore em atendimento ao direito ao esquecimento. Bloqueado se a candidatura estiver com status `approved` (contrato preservado). Recomputa estado e fila do animal após a exclusão.
+
+### `deletePrivacyRejectionFlag`
+Callable — somente `admin`. Remove uma flag de rejeição em `rejectionFlags` para exercício do direito ao esquecimento (LGPD Art. 18). Requer campo `reason`.
+
+### `deletePrivacyArchiveFile`
+Callable — somente `admin`. Remove o PDF em `private-pdfs/**` e o metadado em `archiveFiles`, incluindo limpeza de referência em `rejectionFlags` se existir. Requer campo `reason`. Registra ação em `privacyRequestAudits`.
 
 ### `cleanOperationalData` (cron diário — 3h)
 Remove documentos operacionais expirados que os TTLs do Firestore possam deixar como resíduo: `rateLimits` expirados, `_processedEvents` expirados e entradas órfãs em `animalSimilarityCache`.
@@ -422,7 +472,6 @@ Exporta e limpa dados conforme as políticas de retenção LGPD:
 2. **Candidaturas rejeitadas** (`pendingExport: true`) → PDF rejeição em Storage privado → criar flag HMAC em `rejectionFlags` → excluir Firestore
 3. **Candidaturas `withdrawn`** com mais de 30 dias → excluir Firestore (sem PDF, sem flag)
 4. **Animais arquivados** com mais de 30 dias → PDF arquivamento em Storage privado → excluir Firestore + fotos do Storage
-5. Recalibrar `metadata/counts` após cada lote de deleções
 
 ---
 
@@ -437,8 +486,11 @@ Exporta e limpa dados conforme as políticas de retenção LGPD:
 | `users` | Perfis da equipe (espelho do Firebase Auth) |
 | `metadata/featuredAnimals` | Cache do pool de destaques da home (leitura pública) |
 | `metadata/counts` | Contadores agregados para o dashboard (staff only) |
+| `metadata/archiveFileFilters` | Agregado de tipos e anos dos arquivos para filtros do painel (staff only) |
 | `archiveFiles` | Metadados seguros de PDFs privados em Storage |
+| `animalSimilarityCache` | Cache pré-computado de animais similares por animal (leitura pública) |
 | `rejectionFlags` | Flags HMAC de rejeição definitiva (sem PII em texto plano) |
+| `privacyRequestAudits` | Trilha de auditoria de ações LGPD — somente Cloud Functions, sem leitura de cliente |
 | `rateLimits` | Estado do rate limiting por HMAC de e-mail |
 | `_processedEvents` | IDs de eventos de trigger já processados (deduplicação) |
 
@@ -459,12 +511,14 @@ Status possíveis: `available` · `under_review` · `adopted` · `archived`
 ```
 animalId?, animalName?, species, fullName, email,
 cpf (AES-256-GCM), phone (AES-256-GCM), birthDate (AES-256-GCM), address (AES-256-GCM),
+privacyIndex (HMAC: { cpfHash, emailHash }),
 [respostas completas do formulário de 8 etapas],
 status, queuePosition?, isWaitlisted?,
 previousAnimalId?, previousAnimalName?,
 rejectionReason?, rejectionDetails?,
 reviewedBy?, reviewedAt?, reviewAction?,
 pendingExport?,
+contractArchiveFileId?, contractGeneratedAt?, contractGenerationStatus?,
 adminNotes?, createdAt, updatedAt, updatedBy?
 ```
 
@@ -505,13 +559,13 @@ Fotos dos animais em `animals/{animalId}/{timestamp}_{filename}`.
 private-pdfs/
   contracts/
     2026/
-      contrato_adocao_{animal}_{data}_{id}.pdf
+      contrato_adocao_{animal}_{YYYY-MM-DD}_{id6}.pdf
   rejections/
     2026/
-      rejection_{id}_{year}.pdf
+      rejeicao_definitiva_{animal}_{YYYY-MM-DD}_{id6}.pdf
   archived-animals/
     2026/
-      animal_{id}_{year}.pdf
+      animal_arquivado_{name}_{YYYY-MM-DD}_{id6}.pdf
 ```
 
 Os metadados ficam em `archiveFiles/{id}` e o acesso aos PDFs é mediado por Cloud Functions que validam role e retornam URL assinada temporária.
@@ -546,9 +600,24 @@ src/
   utils/         # cn, animations, format
 functions/src/
   index.ts       # ponto de exportação de todas as Cloud Functions
+  callables/
+    users.ts        # createUser, updateUserRole, deleteUser, refreshUserClaims
+    applications.ts # createApplication, updateApplicationReview, getApplicationPII, …
+    animals.ts      # recalibrateCounts, archiveAnimal, updateAnimalStatus, deleteAnimal, …
+    archive.ts      # getArchiveFileUrl, deleteArchiveFile, generateAdoptionContractNow, …
+    privacy.ts      # previewPrivacyRequest, deletePrivacyApplicationData, …
+  triggers/
+    auth.ts            # onUserCreated
+    applications.ts    # onApplicationStatusChanged
+    animals.ts         # onAnimalChanged
+    archive-files.ts   # onArchiveFileChanged
+  scheduled/
+    clean-operational-data.ts  # cleanOperationalData (cron diário — 3h)
+    archive-and-cleanup.ts     # archiveAndCleanup (cron semanal — domingo 2h)
   lib/
-    crypto.util.ts   # AES-256-GCM + HMAC-SHA256
-    pdf.helper.ts    # geração de PDFs (3 templates com pdf-lib)
+    shared.ts                  # lógica de negócio compartilhada e exports centralizados
+    crypto.util.ts             # AES-256-GCM + HMAC-SHA256
+    pdf.helper.ts              # geração de PDFs (3 templates com pdf-lib)
     storage-archive.helper.ts  # upload privado de PDFs + URLs assinadas
 ```
 
