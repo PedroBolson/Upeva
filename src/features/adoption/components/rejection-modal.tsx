@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Info, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,7 @@ interface RejectionModalProps {
 }
 
 export function RejectionModal({ open, onClose, onDecline, onReject, loading }: RejectionModalProps) {
+  const descriptionId = useId()
   const [step, setStep] = useState<Step>('choose')
   const [reason, setReason] = useState<RejectionReason | ''>('')
   const [details, setDetails] = useState('')
@@ -71,8 +72,10 @@ export function RejectionModal({ open, onClose, onDecline, onReject, loading }: 
       open={open}
       onClose={handleClose}
       title="Recusar candidatura"
+      ariaDescribedBy={descriptionId}
       size="md"
       closeOnOverlay={!loading}
+      closeOnEscape={!loading}
       footer={
         step === 'reject-form' ? (
           <>
@@ -90,7 +93,7 @@ export function RejectionModal({ open, onClose, onDecline, onReject, loading }: 
         ) : undefined
       }
     >
-      <div className="mb-5 rounded-lg border border-border bg-muted/50 p-4 text-sm">
+      <div id={descriptionId} className="mb-5 rounded-lg border border-border bg-muted/50 p-4 text-sm">
         <p className="flex items-center gap-2 font-medium text-foreground mb-2">
           <Info size={14} className="shrink-0 text-muted-foreground" />
           Qual tipo de recusa?

@@ -41,6 +41,7 @@ export function AnimalQuickViewModal({
       open={open}
       onClose={onClose}
       title={animal?.name ?? animalName}
+      ariaLabel={animal?.name ?? animalName ?? 'Detalhes do animal'}
       size="xl"
       className="sm:max-w-2xl"
       footer={

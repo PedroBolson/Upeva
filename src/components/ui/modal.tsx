@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -11,11 +11,15 @@ interface ModalProps {
   onClose: () => void
   title?: string
   description?: string
+  ariaLabel?: string
+  ariaLabelledBy?: string
+  ariaDescribedBy?: string
   size?: ModalSize
   className?: string
   children: React.ReactNode
   footer?: React.ReactNode
   closeOnOverlay?: boolean
+  closeOnEscape?: boolean
 }
 
 const sizeClasses: Record<ModalSize, string> = {
@@ -31,29 +35,79 @@ export function Modal({
   onClose,
   title,
   description,
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
   size = 'md',
   className,
   children,
   footer,
   closeOnOverlay = true,
+  closeOnEscape = true,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
+  const dialogTitleId = title ? ariaLabelledBy ?? titleId : ariaLabelledBy
+  const dialogDescriptionId = description ? ariaDescribedBy ?? descriptionId : ariaDescribedBy
 
   useEffect(() => {
     if (!open) return
-    const prev = document.activeElement as HTMLElement
-    dialogRef.current?.focus()
-    return () => prev?.focus()
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const focusable = getFocusableElements(dialog)
+      const target = focusable[0] ?? dialog
+      target.focus()
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (prev && document.contains(prev)) prev.focus()
+    }
   }, [open])
 
   useEffect(() => {
     if (!open) return
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && closeOnEscape) {
+        e.preventDefault()
+        onClose()
+        return
+      }
+
+      if (e.key !== 'Tab') return
+
+      const dialog = dialogRef.current
+      if (!dialog) return
+
+      const focusable = getFocusableElements(dialog)
+      if (focusable.length === 0) {
+        e.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (e.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+        return
+      }
+
+      if (active === last || !dialog.contains(active)) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [open, onClose])
+  }, [closeOnEscape, open, onClose])
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
@@ -63,13 +117,7 @@ export function Modal({
   return (
     <AnimatePresence>
       {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={title ? 'modal-title' : undefined}
-          aria-describedby={description ? 'modal-desc' : undefined}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -81,6 +129,11 @@ export function Modal({
 
           <motion.div
             ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={dialogTitleId ? undefined : ariaLabel}
+            aria-labelledby={dialogTitleId}
+            aria-describedby={dialogDescriptionId}
             tabIndex={-1}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -97,12 +150,12 @@ export function Modal({
               <div className="flex items-start justify-between gap-4 p-6 pb-0">
                 <div className="flex flex-col gap-1">
                   {title && (
-                    <h2 id="modal-title" className="text-lg font-semibold text-card-foreground">
+                    <h2 id={titleId} className="text-lg font-semibold text-card-foreground">
                       {title}
                     </h2>
                   )}
                   {description && (
-                    <p id="modal-desc" className="text-sm text-muted-foreground">
+                    <p id={descriptionId} className="text-sm text-muted-foreground">
                       {description}
                     </p>
                   )}
@@ -131,4 +184,19 @@ export function Modal({
       )}
     </AnimatePresence>
   )
+}
+
+function getFocusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      [
+        'a[href]',
+        'button:not([disabled])',
+        'textarea:not([disabled])',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(','),
+    ),
+  ).filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'))
 }

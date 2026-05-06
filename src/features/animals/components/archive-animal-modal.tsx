@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ export function ArchiveAnimalModal({
   onConfirm,
   loading,
 }: ArchiveAnimalModalProps) {
+  const descriptionId = useId()
   const [reason, setReason] = useState<ArchiveReason | ''>('')
   const [details, setDetails] = useState('')
   const [archiveDate, setArchiveDate] = useState('')
@@ -71,8 +72,10 @@ export function ArchiveAnimalModal({
       open={open}
       onClose={handleClose}
       title={`Arquivar ${animalName}`}
+      ariaDescribedBy={descriptionId}
       size="md"
       closeOnOverlay={!loading}
+      closeOnEscape={!loading}
       footer={
         <>
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
@@ -86,7 +89,7 @@ export function ArchiveAnimalModal({
       }
     >
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
+        <p id={descriptionId} className="text-sm text-muted-foreground">
           O arquivamento é permanente. Informe o motivo e a data do ocorrido para o histórico da ONG.
           O PDF de arquivamento será gerado e salvo no Drive no próximo ciclo semanal.
         </p>

@@ -37,6 +37,7 @@ export function ConfirmModal({
       description={description}
       size="sm"
       closeOnOverlay={!loading}
+      closeOnEscape={!loading}
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={loading}>

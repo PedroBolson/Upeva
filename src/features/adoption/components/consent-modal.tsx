@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Shield } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
@@ -11,6 +11,8 @@ interface Props {
 }
 
 export function ConsentModal({ open, onAccept }: Props) {
+  const titleId = useId()
+  const descriptionId = useId()
   const [consentProcess, setConsentProcess] = useState(false)
   const [consentHistory, setConsentHistory] = useState(false)
 
@@ -21,6 +23,9 @@ export function ConsentModal({ open, onAccept }: Props) {
       open={open}
       onClose={() => { }}
       closeOnOverlay={false}
+      closeOnEscape={false}
+      ariaLabelledBy={titleId}
+      ariaDescribedBy={descriptionId}
       size="md"
       footer={
         <Button onClick={onAccept} disabled={!canProceed} className="w-full sm:w-auto">
@@ -34,10 +39,10 @@ export function ConsentModal({ open, onAccept }: Props) {
             <Shield size={20} className="text-primary" />
           </div>
           <div className="flex flex-col gap-1">
-            <h2 className="text-base font-semibold text-foreground">
+            <h2 id={titleId} className="text-base font-semibold text-foreground">
               Antes de continuar
             </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p id={descriptionId} className="text-sm text-muted-foreground leading-relaxed">
               Para processar sua candidatura à adoção, precisamos do seu consentimento
               para cada finalidade abaixo, conforme a LGPD (Lei 13.709/2018).
             </p>
