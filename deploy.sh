@@ -31,7 +31,7 @@ prefix_lines() {
 
 # ─── Step 1: Build ─────────────────────────────────────────────────────────────
 divider
-info "Etapa 1/3 — ${BOLD}Build${NC}"
+info "Etapa 1/4 — ${BOLD}Build${NC}"
 divider
 
 if ! npm run build 2>&1; then
@@ -41,9 +41,21 @@ fi
 
 success "Build concluído."
 
-# ─── Step 2: Detectar targets Firebase ─────────────────────────────────────────
+# ─── Step 2: Security rules tests ──────────────────────────────────────────────
 divider
-info "Etapa 2/3 — ${BOLD}Detectando targets do Firebase${NC}"
+info "Etapa 2/4 — ${BOLD}Testes de regras de segurança${NC}"
+divider
+
+if ! npm run test:rules 2>&1; then
+  error "Testes de regras falharam. Deploy abortado."
+  exit 1
+fi
+
+success "Testes de regras aprovados."
+
+# ─── Step 3: Detectar targets Firebase ─────────────────────────────────────────
+divider
+info "Etapa 3/4 — ${BOLD}Detectando targets do Firebase${NC}"
 divider
 
 # Arquivos alterados em todos os commits ainda não enviados ao remote.
@@ -80,9 +92,9 @@ fi
 echo ""
 info "Firebase targets detectados: ${BOLD}${YELLOW}${TARGETS}${NC}"
 
-# ─── Step 3: Git Push + Firebase Deploy em paralelo ────────────────────────────
+# ─── Step 4: Git Push + Firebase Deploy em paralelo ────────────────────────────
 divider
-info "Etapa 3/3 — ${BOLD}git push${NC} + ${BOLD}firebase deploy --only ${TARGETS}${NC} ${DIM}(paralelo)${NC}"
+info "Etapa 4/4 — ${BOLD}git push${NC} + ${BOLD}firebase deploy --only ${TARGETS}${NC} ${DIM}(paralelo)${NC}"
 divider
 
 # Diretório de logs temporários

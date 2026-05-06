@@ -228,7 +228,13 @@ function logOperationError(
   err: unknown,
   context: SafeLogContext,
 ): void {
-  const stack = err instanceof Error ? err.stack : undefined;
+  // Retain only call-frame lines — never the first line, which is the error message
+  // and could contain decrypted PII from decrypt/JSON.parse failures.
+  const rawStack = err instanceof Error ? err.stack : undefined;
+  const stack = rawStack
+    ?.split("\n")
+    .filter((line) => /^\s+at\s/.test(line))
+    .join("\n") || undefined;
   logger.error("cloud_function_operation_failed", safeLogContext({
     ...context,
     result: "error",
@@ -3971,7 +3977,17 @@ export async function runArchiveAndCleanup(): Promise<void> {
 
     for (const docSnap of rejectedSnap.docs) {
       const data = docSnap.data() as Record<string, unknown>;
-      const pii = readApplicationPIIForArchive(data);
+      let pii: ReturnType<typeof readApplicationPIIForArchive>;
+      try {
+        pii = readApplicationPIIForArchive(data);
+      } catch {
+        logOperationError(new Error("pii_decrypt_failed"), {
+          operation: "storage.archive.rejection.pii_decrypt",
+          targetId: docSnap.id,
+          status: "decrypt_failed",
+        });
+        continue;
+      }
       const rejectedAt = data.reviewedAt instanceof Timestamp ?
         data.reviewedAt.toDate() :
         (data.updatedAt as Timestamp).toDate();
