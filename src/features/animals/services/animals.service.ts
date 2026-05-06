@@ -33,15 +33,10 @@ export interface AnimalPage {
 const PUBLIC_PAGE_SIZE = 12
 const ADMIN_PAGE_SIZE = 25
 const LINKABLE_ANIMALS_LIMIT = 25
-const PUBLIC_SAFE_ANIMAL_STATUSES = new Set<AnimalStatus>(['available', 'under_review'])
 const SIMILAR_ANIMAL_STATUSES = new Set<AnimalStatus>(['available'])
 
 function docToAnimal(id: string, data: Record<string, unknown>): Animal {
   return { id, ...(data as Omit<Animal, 'id'>) }
-}
-
-function isPublicSafeAnimal(animal: Animal): boolean {
-  return PUBLIC_SAFE_ANIMAL_STATUSES.has(animal.status)
 }
 
 function isSimilarAnimal(animal: Animal): boolean {
