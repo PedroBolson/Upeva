@@ -52,6 +52,7 @@ const VALID_REJECTION_REASONS = new Set<RejectionReason>([
 
 const REJECTION_DETAILS_MIN_LENGTH = 100;
 type AnimalStatus = "available" | "under_review" | "adopted" | "archived";
+type ArchiveFileType = "contract" | "rejection" | "archivedAnimal";
 type Species = "dog" | "cat";
 type Sex = "male" | "female";
 type Size = "small" | "medium" | "large";
@@ -148,6 +149,7 @@ type AnimalRecord = {
 
 const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] = ["pending", "in_review"];
 const INACTIVE_APPLICATION_STATUSES: ApplicationStatus[] = ["rejected", "withdrawn"];
+const ARCHIVE_FILE_TYPES: ArchiveFileType[] = ["contract", "rejection", "archivedAnimal"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -973,6 +975,150 @@ async function markEventProcessed(eventId: string): Promise<boolean> {
   } catch {
     return false; // Already processed — skip
   }
+}
+
+type ArchiveFilterKey = {
+  type: ArchiveFileType;
+  year: number;
+};
+
+function isArchiveFileType(value: unknown): value is ArchiveFileType {
+  return typeof value === "string" &&
+    (ARCHIVE_FILE_TYPES as string[]).includes(value);
+}
+
+function getArchiveFilterKey(data: Record<string, unknown> | undefined): ArchiveFilterKey | null {
+  if (!data) return null;
+  if (!isArchiveFileType(data.type)) return null;
+  if (!Number.isInteger(data.year) || (data.year as number) <= 0) return null;
+
+  return {
+    type: data.type,
+    year: data.year as number,
+  };
+}
+
+function normalizeCountMap(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, count]) => typeof count === "number" && Number.isFinite(count) && count > 0)
+      .map(([year, count]) => [year, count as number])
+  );
+}
+
+function addArchiveYearCount(counts: Record<string, number>, year: number, delta: 1 | -1): void {
+  const key = String(year);
+  const next = (counts[key] ?? 0) + delta;
+  if (next > 0) {
+    counts[key] = next;
+  } else {
+    delete counts[key];
+  }
+}
+
+function yearsFromCountMap(counts: Record<string, number>): number[] {
+  return Object.keys(counts)
+    .map((year) => Number(year))
+    .filter((year) => Number.isInteger(year) && year > 0)
+    .sort((a, b) => b - a);
+}
+
+function emptyArchiveTypeYearCounts(): Record<ArchiveFileType, Record<string, number>> {
+  return Object.fromEntries(
+    ARCHIVE_FILE_TYPES.map((type) => [type, {}])
+  ) as Record<ArchiveFileType, Record<string, number>>;
+}
+
+function buildArchiveFilterMetadataPayload(
+  countsByYear: Record<string, number>,
+  countsByTypeYear: Record<ArchiveFileType, Record<string, number>>,
+): {
+  countsByYear: Record<string, number>;
+  countsByTypeYear: Record<ArchiveFileType, Record<string, number>>;
+  years: number[];
+  yearsByType: Record<ArchiveFileType, number[]>;
+} {
+  return {
+    countsByYear,
+    countsByTypeYear,
+    years: yearsFromCountMap(countsByYear),
+    yearsByType: Object.fromEntries(
+      ARCHIVE_FILE_TYPES.map((type) => [type, yearsFromCountMap(countsByTypeYear[type])])
+    ) as Record<ArchiveFileType, number[]>,
+  };
+}
+
+async function updateArchiveFilterMetadata(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+): Promise<void> {
+  const beforeKey = getArchiveFilterKey(before);
+  const afterKey = getArchiveFilterKey(after);
+  if (
+    beforeKey?.type === afterKey?.type &&
+    beforeKey?.year === afterKey?.year
+  ) {
+    return;
+  }
+
+  const filtersRef = db.collection("metadata").doc("archiveFileFilters");
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(filtersRef);
+    const current = snap.data() as {
+      countsByYear?: unknown;
+      countsByTypeYear?: Partial<Record<ArchiveFileType, unknown>>;
+    } | undefined;
+
+    const countsByYear = normalizeCountMap(current?.countsByYear);
+    const countsByTypeYear = emptyArchiveTypeYearCounts();
+    for (const type of ARCHIVE_FILE_TYPES) {
+      countsByTypeYear[type] = normalizeCountMap(current?.countsByTypeYear?.[type]);
+    }
+
+    if (beforeKey) {
+      addArchiveYearCount(countsByYear, beforeKey.year, -1);
+      addArchiveYearCount(countsByTypeYear[beforeKey.type], beforeKey.year, -1);
+    }
+
+    if (afterKey) {
+      addArchiveYearCount(countsByYear, afterKey.year, 1);
+      addArchiveYearCount(countsByTypeYear[afterKey.type], afterKey.year, 1);
+    }
+
+    tx.set(filtersRef, {
+      ...buildArchiveFilterMetadataPayload(countsByYear, countsByTypeYear),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
+async function rebuildArchiveFilterMetadata(): Promise<{
+  years: number[];
+  yearsByType: Record<ArchiveFileType, number[]>;
+}> {
+  const countsByYear: Record<string, number> = {};
+  const countsByTypeYear = emptyArchiveTypeYearCounts();
+  const snap = await db.collection("archiveFiles").select("type", "year").get();
+
+  for (const docSnap of snap.docs) {
+    const key = getArchiveFilterKey(docSnap.data() as Record<string, unknown>);
+    if (!key) continue;
+    addArchiveYearCount(countsByYear, key.year, 1);
+    addArchiveYearCount(countsByTypeYear[key.type], key.year, 1);
+  }
+
+  const payload = buildArchiveFilterMetadataPayload(countsByYear, countsByTypeYear);
+  await db.collection("metadata").doc("archiveFileFilters").set({
+    ...payload,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return {
+    years: payload.years,
+    yearsByType: payload.yearsByType,
+  };
 }
 
 function getStoragePathFromDownloadUrl(url: string): string | null {
@@ -2216,6 +2362,28 @@ export const recalibrateCounts = onCall(
   }
 );
 
+// ── recalibrateArchiveFileFilters: backfill metadata/archiveFileFilters ───────
+// Used when deploying the aggregate filter metadata after archive files already
+// exist. It reads only safe archive metadata fields (type/year).
+export const recalibrateArchiveFileFilters = onCall(
+  { region: "southamerica-east1", maxInstances: 3 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Not authenticated.");
+    }
+
+    const callerRole = request.auth.token?.role;
+    if (callerRole !== "admin" && callerRole !== "reviewer") {
+      logPermissionDenied("archive.filter_options.recalibrate", request.auth.uid, callerRole);
+      throw new HttpsError("permission-denied", "Only staff can recalibrate archive filters.");
+    }
+
+    await assertAdminRateLimit(request.auth.uid, "archive.filter_options.recalibrate", 20);
+
+    return rebuildArchiveFilterMetadata();
+  }
+);
+
 // ── recalibrateQueuePositions: backfill queuePosition on all existing apps ─────
 // Groups all specific-animal applications by animal, sorts by createdAt ASC,
 // and assigns queuePosition = 1, 2, 3… in submission order.
@@ -2522,6 +2690,22 @@ export const onAnimalChanged = onDocumentWritten(
         // Cache entry may not exist — safe to ignore
       }
     }
+  }
+);
+
+// ── onArchiveFileChanged: maintain safe aggregate filter options ──────────────
+// Stores only type/year counts in metadata so the admin UI can build filter
+// dropdowns without scanning archiveFiles or exposing PDF metadata broadly.
+export const onArchiveFileChanged = onDocumentWritten(
+  { document: "archiveFiles/{fileId}", region: "southamerica-east1", maxInstances: 5 },
+  async (event) => {
+    const processed = await markEventProcessed(event.id);
+    if (!processed) return;
+
+    const before = event.data?.before.data() as Record<string, unknown> | undefined;
+    const after = event.data?.after.data() as Record<string, unknown> | undefined;
+
+    await updateArchiveFilterMetadata(before, after);
   }
 );
 

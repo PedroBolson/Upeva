@@ -1,6 +1,8 @@
 import {
   collection,
+  doc,
   getDocs,
+  getDoc,
   orderBy,
   query,
   where,
@@ -33,6 +35,18 @@ export interface ArchiveFilesFilter {
   year?: number | null
 }
 
+export interface ArchiveFilterOptions {
+  years: number[]
+  yearsByType: Record<ArchiveFileType, number[]>
+}
+
+function normalizeYears(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((year): year is number => Number.isInteger(year) && year > 0)
+    .sort((a, b) => b - a)
+}
+
 export async function listArchiveFiles(filter: ArchiveFilesFilter = {}): Promise<ArchiveFile[]> {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')]
 
@@ -59,6 +73,28 @@ export async function listArchiveFiles(filter: ArchiveFilesFilter = {}): Promise
       status: (data.status as string) ?? 'stored',
     }
   })
+}
+
+export async function getArchiveFilterOptions(): Promise<ArchiveFilterOptions | null> {
+  const snap = await getDoc(doc(db, 'metadata', 'archiveFileFilters'))
+  if (!snap.exists()) return null
+  const data = snap.data()
+  const yearsByType = data?.yearsByType as Partial<Record<ArchiveFileType, unknown>> | undefined
+
+  return {
+    years: normalizeYears(data?.years),
+    yearsByType: {
+      contract: normalizeYears(yearsByType?.contract),
+      rejection: normalizeYears(yearsByType?.rejection),
+      archivedAnimal: normalizeYears(yearsByType?.archivedAnimal),
+    },
+  }
+}
+
+export async function recalibrateArchiveFilterOptions(): Promise<ArchiveFilterOptions> {
+  const fn = httpsCallable<void, ArchiveFilterOptions>(functions, 'recalibrateArchiveFileFilters')
+  const result = await fn()
+  return result.data
 }
 
 export async function getArchiveFileUrl(archiveFileId: string): Promise<string> {

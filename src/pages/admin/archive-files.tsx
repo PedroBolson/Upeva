@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Archive, ExternalLink, Trash2 } from 'lucide-react'
-import { Button, Card, ConfirmModal, useToast } from '@/components/ui'
+import { Button, Card, ConfirmModal, Select, useToast } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
+import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import {
   useDeleteArchiveFile,
+  useArchiveFilterOptions,
   useArchiveFiles,
   useGetArchiveFileUrl,
 } from '@/features/admin/hooks/use-archive-files'
@@ -19,10 +23,10 @@ const TYPE_LABELS: Record<ArchiveFileType, string> = {
 }
 
 const TYPE_OPTIONS: { value: ArchiveFileType | ''; label: string }[] = [
-  { value: '', label: 'Todos os tipos' },
+  { value: '', label: 'Todos' },
   { value: 'contract', label: 'Contratos' },
   { value: 'rejection', label: 'Rejeições' },
-  { value: 'archivedAnimal', label: 'Arquivamentos de animais' },
+  { value: 'archivedAnimal', label: 'Animais arquivados' },
 ]
 
 function formatBytes(bytes: number): string {
@@ -38,13 +42,11 @@ function formatArchiveDate(value: unknown): string {
   return '—'
 }
 
-const currentYear = new Date().getFullYear()
-const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => currentYear - i)
-
 export function ArchiveFilesPage() {
   useDocumentTitle(buildAdminTitle('Arquivos'))
   const { userProfile } = useAuthContext()
   const { toast } = useToast()
+  const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const [typeFilter, setTypeFilter] = useState<ArchiveFileType | ''>('')
   const [yearFilter, setYearFilter] = useState<number | ''>('')
@@ -53,14 +55,133 @@ export function ArchiveFilesPage() {
   const [fileToDelete, setFileToDelete] = useState<ArchiveFile | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const { data: files = [], isLoading, error, refetch } = useArchiveFiles({
-    type: typeFilter || null,
-    year: yearFilter || null,
-  })
+  const { data: filterOptions } = useArchiveFilterOptions()
 
   const { mutate: fetchUrl } = useGetArchiveFileUrl()
   const { mutate: deleteArchive, isPending: isDeletingArchive } = useDeleteArchiveFile()
   const isAdmin = userProfile?.role === 'admin'
+  const metadataYears = typeFilter ? filterOptions?.yearsByType[typeFilter] : filterOptions?.years
+  const hasMetadataYears = Boolean(metadataYears?.length)
+  const selectedYearHasData =
+    yearFilter === '' || !hasMetadataYears || metadataYears?.includes(yearFilter)
+  const effectiveYearFilter = selectedYearHasData ? yearFilter : ''
+  const yearFilterValue = effectiveYearFilter === '' ? '' : String(effectiveYearFilter)
+  const { data: files = [], isLoading, error, refetch } = useArchiveFiles({
+    type: typeFilter || null,
+    year: effectiveYearFilter || null,
+  })
+  const fallbackYears = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          files
+            .map((file) => file.year)
+            .filter((year): year is number => Number.isInteger(year) && year > 0),
+        ),
+      ).sort((a, b) => b - a),
+    [files],
+  )
+  const yearSelectOptions = useMemo(
+    () => {
+      const availableYears = hasMetadataYears ? metadataYears ?? [] : fallbackYears
+      return [
+        { value: '', label: 'Todos os anos' },
+        ...availableYears.map((year) => ({ value: String(year), label: String(year) })),
+      ]
+    },
+    [fallbackYears, hasMetadataYears, metadataYears],
+  )
+
+  const headerActions = useMemo(
+    () => (
+      <div ref={containerRef} className="relative flex min-w-0 items-center gap-2">
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
+        >
+          <div className="w-44 shrink-0">
+            <Select
+              options={TYPE_OPTIONS}
+              value={typeFilter}
+              onChange={() => undefined}
+              className="h-9 rounded-lg"
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <Select
+              options={yearSelectOptions}
+              value={yearFilterValue}
+              onChange={() => undefined}
+              className="h-9 rounded-lg"
+            />
+          </div>
+        </div>
+
+        {!isCompact && (
+          <>
+            <div className="w-44 shrink-0">
+              <Select
+                options={TYPE_OPTIONS}
+                value={typeFilter}
+                onChange={(value) => {
+                  setTypeFilter(value as ArchiveFileType | '')
+                  setYearFilter('')
+                }}
+                className="h-9 rounded-lg"
+                aria-label="Filtrar por tipo de arquivo"
+              />
+            </div>
+            <div className="w-36 shrink-0">
+              <Select
+                options={yearSelectOptions}
+                value={yearFilterValue}
+                onChange={(value) => setYearFilter(value ? Number(value) : '')}
+                className="h-9 rounded-lg"
+                aria-label="Filtrar por ano"
+              />
+            </div>
+          </>
+        )}
+
+        {isCompact && (
+          <AdminHeaderOverflow
+            label="Filtros"
+            active={typeFilter !== '' || effectiveYearFilter !== ''}
+          >
+            {(close) => (
+              <div className="grid gap-3">
+                <Select
+                  label="Tipo"
+                  options={TYPE_OPTIONS}
+                  value={typeFilter}
+                  onChange={(value) => {
+                    setTypeFilter(value as ArchiveFileType | '')
+                    setYearFilter('')
+                    close()
+                  }}
+                  className="h-10 rounded-lg"
+                />
+                <Select
+                  label="Ano"
+                  options={yearSelectOptions}
+                  value={yearFilterValue}
+                  onChange={(value) => {
+                    setYearFilter(value ? Number(value) : '')
+                    close()
+                  }}
+                  className="h-10 rounded-lg"
+                />
+              </div>
+            )}
+          </AdminHeaderOverflow>
+        )}
+      </div>
+    ),
+    [containerRef, effectiveYearFilter, isCompact, measureRef, typeFilter, yearFilterValue, yearSelectOptions],
+  )
+
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   function handleOpenPdf(archiveFileId: string) {
     setUrlError(null)
@@ -120,29 +241,6 @@ export function ArchiveFilesPage() {
         </div>
       </Card>
 
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as ArchiveFileType | '')}
-          className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
-          {TYPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-
-        <select
-          value={yearFilter}
-          onChange={(e) => setYearFilter(e.target.value ? Number(e.target.value) : '')}
-          className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
-          <option value="">Todos os anos</option>
-          {YEAR_OPTIONS.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
-      </div>
-
       {isLoading && (
         <div className="flex justify-center py-12">
           <Spinner size="md" />
@@ -162,8 +260,11 @@ export function ArchiveFilesPage() {
       {!isLoading && !error && files.length > 0 && (
         <Card className="border-border/80 divide-y divide-border">
           {files.map((file) => (
-            <div key={file.id} className="flex items-center justify-between gap-4 p-4">
-              <div className="flex flex-col gap-1 min-w-0">
+            <div
+              key={file.id}
+              className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-foreground truncate">
                     {file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
@@ -180,7 +281,7 @@ export function ArchiveFilesPage() {
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"

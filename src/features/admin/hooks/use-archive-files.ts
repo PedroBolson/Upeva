@@ -2,6 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { queryClient } from '@/lib/query-client'
 import {
   listArchiveFiles,
+  getArchiveFilterOptions,
+  recalibrateArchiveFilterOptions,
   getArchiveFileUrl,
   deleteArchiveFile,
   type ArchiveFilesFilter,
@@ -12,6 +14,17 @@ export function useArchiveFiles(filter: ArchiveFilesFilter = {}) {
     queryKey: ['archive-files', filter.type ?? null, filter.year ?? null],
     queryFn: () => listArchiveFiles(filter),
     staleTime: 1000 * 60 * 2,
+  })
+}
+
+export function useArchiveFilterOptions() {
+  return useQuery({
+    queryKey: ['archive-files', 'filter-options'],
+    queryFn: async () => {
+      const options = await getArchiveFilterOptions()
+      return options ?? recalibrateArchiveFilterOptions()
+    },
+    staleTime: 1000 * 60 * 10,
   })
 }
 
