@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import type { InfiniteData } from '@tanstack/react-query'
 import { queryClient } from '@/lib/query-client'
@@ -27,8 +28,17 @@ export function useArchiveFiles(filter: ArchiveFilesFilter = {}) {
     staleTime: 1000 * 60 * 2,
   })
 
+  // flatMap always produces a new array reference; memoize so downstream useMemos
+  // (fallbackYears → yearSelectOptions → headerActions → config) don't recompute on
+  // every render, which would otherwise trigger setHeader on every render and create
+  // an infinite re-render loop via the AdminHeaderContext subscription.
+  const files = useMemo(
+    () => result.data?.pages.flatMap((page) => page.files) ?? [],
+    [result.data],
+  )
+
   return {
-    files: result.data?.pages.flatMap((page) => page.files) ?? [],
+    files,
     hasMore: result.data?.pages[result.data.pages.length - 1]?.hasMore ?? false,
     isLoading: result.isLoading,
     isFetchingMore: result.isFetchingNextPage,

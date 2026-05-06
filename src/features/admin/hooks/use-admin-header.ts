@@ -13,6 +13,9 @@ export function useAdminPageHeader(config: AdminHeaderConfig) {
 
   useEffect(() => {
     setHeader({ ...defaultAdminHeader, ...config })
+  }, [config, setHeader])
+
+  useEffect(() => {
     return () => resetHeader()
-  }, [config, resetHeader, setHeader])
+  }, [resetHeader])
 }
