@@ -972,8 +972,9 @@ async function markEventProcessed(eventId: string): Promise<boolean> {
   try {
     await ref.create({ processedAt: FieldValue.serverTimestamp(), expiresAt });
     return true; // First time — safe to proceed
-  } catch {
-    return false; // Already processed — skip
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === "already-exists") return false;
+    throw err;
   }
 }
 
@@ -1429,10 +1430,12 @@ export const createUser = onCall(
 
       try {
         await db.collection("users").doc(newUser.uid).set(userPayload);
-
         await adminAuth.setCustomUserClaims(newUser.uid, { role });
       } catch (err) {
-        await adminAuth.deleteUser(newUser.uid).catch(() => undefined);
+        await Promise.allSettled([
+          adminAuth.deleteUser(newUser.uid),
+          db.collection("users").doc(newUser.uid).delete(),
+        ]);
         throw err;
       }
 
