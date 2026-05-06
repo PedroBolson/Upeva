@@ -2689,6 +2689,17 @@ export const cleanOperationalData = onSchedule(
   }
 );
 
+function slugify(text: string, maxLen = 40): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen)
+    .replace(/-+$/, "");
+}
+
 // ── archiveAndCleanup: cron semanal domingo às 2h — exporta e limpa dados ──────
 // Processa em ordem: candidaturas → animais. Cada tipo em lotes de 400.
 // PDFs ficam em private-pdfs/** no Firebase Storage (Admin SDK); metadados
@@ -2718,7 +2729,7 @@ export async function runArchiveAndCleanup(): Promise<void> {
       const approvedAt = data.reviewedAt instanceof Timestamp ?
         data.reviewedAt.toDate() :
         (data.updatedAt as Timestamp).toDate();
-      const fileName = `contrato_${docSnap.id}_${year}.pdf`;
+      const fileName = `contrato_adocao_${slugify((data.animalName as string) || "animal")}_${approvedAt.toISOString().split("T")[0]}_${docSnap.id.slice(0, 6)}.pdf`;
       const pdfBuffer = await generatePdf("contract", {
         applicationId: docSnap.id,
         fullName: data.fullName as string,
@@ -2793,7 +2804,7 @@ export async function runArchiveAndCleanup(): Promise<void> {
       const rejectedAt = data.reviewedAt instanceof Timestamp ?
         data.reviewedAt.toDate() :
         (data.updatedAt as Timestamp).toDate();
-      const fileName = `rejeicao_${docSnap.id}_${year}.pdf`;
+      const fileName = `rejeicao_definitiva_${slugify((data.animalName as string) || "candidatura")}_${rejectedAt.toISOString().split("T")[0]}_${docSnap.id.slice(0, 6)}.pdf`;
       const pdfBuffer = await generatePdf("rejection", {
         applicationId: docSnap.id,
         fullName: data.fullName as string,
@@ -2890,7 +2901,7 @@ export async function runArchiveAndCleanup(): Promise<void> {
       const archivedAt = data.archivedAt instanceof Timestamp ?
         (data.archivedAt as Timestamp).toDate() :
         new Date();
-      const fileName = `animal_${docSnap.id}_${year}.pdf`;
+      const fileName = `animal_arquivado_${slugify((data.name as string) || "animal")}_${archiveDate.slice(0, 10)}_${docSnap.id.slice(0, 6)}.pdf`;
       const pdfBuffer = await generatePdf("archivedAnimal", {
         animalId: docSnap.id,
         animalName: (data.name as string) ?? "Animal",
@@ -3009,6 +3020,20 @@ export const getArchiveFileUrl = onCall(
       throw new HttpsError("internal", "Caminho do arquivo inválido.");
     }
 
+    let signedUrl: string;
+    try {
+      signedUrl = await getArchiveSignedUrl(storagePath);
+    } catch (err) {
+      logOperationError(err, {
+        operation: "archive.signed_url.get",
+        uid: request.auth.uid,
+        targetId: archiveFileId.trim(),
+        storagePath,
+        status: "sign_failed",
+      });
+      throw new HttpsError("internal", "Erro ao gerar URL do arquivo.");
+    }
+
     logOperationSuccess({
       operation: "archive.signed_url.get",
       uid: request.auth.uid,
@@ -3017,7 +3042,6 @@ export const getArchiveFileUrl = onCall(
       status: "url_generated",
     });
 
-    const signedUrl = await getArchiveSignedUrl(storagePath);
     return { url: signedUrl };
   }
 );

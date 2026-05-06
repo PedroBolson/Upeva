@@ -131,15 +131,14 @@ export function ArchiveFilesPage() {
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-foreground truncate">
-                    {file.fileName}
+                    {file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
                   </span>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground shrink-0">
                     {TYPE_LABELS[file.type] ?? file.type}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span>{file.year}</span>
-                  {file.animalName && <span>{file.animalName}</span>}
+                  <span className="font-mono">{file.fileName.replace(/\.pdf$/i, '')}</span>
                   {file.reviewerLabel && <span>Responsável: {file.reviewerLabel}</span>}
                   <span>{formatBytes(file.sizeBytes)}</span>
                   <span>Arquivado em {formatArchiveDate(file.createdAt)}</span>
