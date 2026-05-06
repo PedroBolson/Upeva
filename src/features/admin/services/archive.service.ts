@@ -3,15 +3,20 @@ import {
   doc,
   getDocs,
   getDoc,
+  limit,
   orderBy,
   query,
+  startAfter,
   where,
+  type DocumentSnapshot,
   type QueryConstraint,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
 
 export type ArchiveFileType = 'contract' | 'rejection' | 'archivedAnimal'
+
+export const ARCHIVE_FILES_PAGE_SIZE = 25
 
 export interface ArchiveFile {
   id: string
@@ -40,6 +45,12 @@ export interface ArchiveFilterOptions {
   yearsByType: Record<ArchiveFileType, number[]>
 }
 
+export interface ArchiveFilesPageResult {
+  files: ArchiveFile[]
+  lastDoc: DocumentSnapshot | null
+  hasMore: boolean
+}
+
 function normalizeYears(value: unknown): number[] {
   if (!Array.isArray(value)) return []
   return value
@@ -47,32 +58,47 @@ function normalizeYears(value: unknown): number[] {
     .sort((a, b) => b - a)
 }
 
-export async function listArchiveFiles(filter: ArchiveFilesFilter = {}): Promise<ArchiveFile[]> {
-  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')]
+function docToArchiveFile(id: string, data: Record<string, unknown>): ArchiveFile {
+  return {
+    id,
+    type: data.type as ArchiveFileType,
+    storagePath: data.storagePath as string,
+    fileName: data.fileName as string,
+    contentType: data.contentType as string,
+    sizeBytes: (data.sizeBytes as number) ?? 0,
+    year: (data.year as number) ?? 0,
+    applicationId: (data.applicationId as string | null) ?? null,
+    animalId: (data.animalId as string | null) ?? null,
+    animalName: (data.animalName as string | null) ?? null,
+    species: (data.species as string | null) ?? null,
+    reviewerLabel: (data.reviewerLabel as string | null) ?? null,
+    createdAt: data.createdAt ?? null,
+    status: (data.status as string) ?? 'stored',
+  }
+}
 
-  if (filter.type) constraints.unshift(where('type', '==', filter.type))
-  if (filter.year) constraints.unshift(where('year', '==', filter.year))
+export async function listArchiveFilesPage(
+  filter: ArchiveFilesFilter = {},
+  cursor: DocumentSnapshot | null = null,
+  pageSize = ARCHIVE_FILES_PAGE_SIZE,
+): Promise<ArchiveFilesPageResult> {
+  const constraints: QueryConstraint[] = []
+
+  if (filter.type) constraints.push(where('type', '==', filter.type))
+  if (filter.year) constraints.push(where('year', '==', filter.year))
+
+  constraints.push(orderBy('createdAt', 'desc'))
+  constraints.push(limit(pageSize))
+  if (cursor) constraints.push(startAfter(cursor))
 
   const snap = await getDocs(query(collection(db, 'archiveFiles'), ...constraints))
-  return snap.docs.map((d) => {
-    const data = d.data()
-    return {
-      id: d.id,
-      type: data.type as ArchiveFileType,
-      storagePath: data.storagePath as string,
-      fileName: data.fileName as string,
-      contentType: data.contentType as string,
-      sizeBytes: (data.sizeBytes as number) ?? 0,
-      year: (data.year as number) ?? 0,
-      applicationId: (data.applicationId as string | null) ?? null,
-      animalId: (data.animalId as string | null) ?? null,
-      animalName: (data.animalName as string | null) ?? null,
-      species: (data.species as string | null) ?? null,
-      reviewerLabel: (data.reviewerLabel as string | null) ?? null,
-      createdAt: data.createdAt ?? null,
-      status: (data.status as string) ?? 'stored',
-    }
-  })
+  const docs = snap.docs
+
+  return {
+    files: docs.map((d) => docToArchiveFile(d.id, d.data())),
+    lastDoc: docs[docs.length - 1] ?? null,
+    hasMore: docs.length === pageSize,
+  }
 }
 
 export async function getArchiveFilterOptions(): Promise<ArchiveFilterOptions | null> {

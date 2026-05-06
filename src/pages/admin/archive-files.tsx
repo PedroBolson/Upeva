@@ -66,7 +66,15 @@ export function ArchiveFilesPage() {
     yearFilter === '' || !hasMetadataYears || metadataYears?.includes(yearFilter)
   const effectiveYearFilter = selectedYearHasData ? yearFilter : ''
   const yearFilterValue = effectiveYearFilter === '' ? '' : String(effectiveYearFilter)
-  const { data: files = [], isLoading, error, refetch } = useArchiveFiles({
+  const {
+    files,
+    hasMore,
+    isLoading,
+    isFetchingMore,
+    error,
+    fetchMore,
+    refetch,
+  } = useArchiveFiles({
     type: typeFilter || null,
     year: effectiveYearFilter || null,
   })
@@ -204,7 +212,6 @@ export function ArchiveFilesPage() {
     deleteArchive(fileToDelete.id, {
       onSuccess: () => {
         setFileToDelete(null)
-        void refetch()
         toast.success('Arquivo arquivado excluído.')
       },
       onError: () => {
@@ -258,62 +265,78 @@ export function ArchiveFilesPage() {
       )}
 
       {!isLoading && !error && files.length > 0 && (
-        <Card className="border-border/80 divide-y divide-border">
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 flex-col gap-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-foreground truncate">
-                    {file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
-                  </span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground shrink-0">
-                    {TYPE_LABELS[file.type] ?? file.type}
-                  </span>
+        <>
+          <Card className="border-border/80 divide-y divide-border">
+            {files.map((file) => (
+              <div
+                key={file.id}
+                className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
+                    </span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground shrink-0">
+                      {TYPE_LABELS[file.type] ?? file.type}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <span className="font-mono">{file.fileName.replace(/\.pdf$/i, '')}</span>
+                    {file.reviewerLabel && <span>Responsável: {file.reviewerLabel}</span>}
+                    <span>{formatBytes(file.sizeBytes)}</span>
+                    <span>Arquivado em {formatArchiveDate(file.createdAt)}</span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="font-mono">{file.fileName.replace(/\.pdf$/i, '')}</span>
-                  {file.reviewerLabel && <span>Responsável: {file.reviewerLabel}</span>}
-                  <span>{formatBytes(file.sizeBytes)}</span>
-                  <span>Arquivado em {formatArchiveDate(file.createdAt)}</span>
-                </div>
-              </div>
 
-              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-primary"
-                  onClick={() => handleOpenPdf(file.id)}
-                  disabled={openingId === file.id}
-                >
-                  {openingId === file.id ? (
-                    <Spinner size="sm" />
-                  ) : (
-                    <ExternalLink size={14} />
-                  )}
-                  Abrir PDF
-                </Button>
-                {isAdmin && (
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="gap-1.5 text-danger"
-                    onClick={() => {
-                      setDeleteError(null)
-                      setFileToDelete(file)
-                    }}
+                    className="gap-1.5 text-primary"
+                    onClick={() => handleOpenPdf(file.id)}
+                    disabled={openingId === file.id}
                   >
-                    <Trash2 size={14} />
-                    Excluir
+                    {openingId === file.id ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <ExternalLink size={14} />
+                    )}
+                    Abrir PDF
                   </Button>
-                )}
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-danger"
+                      onClick={() => {
+                        setDeleteError(null)
+                        setFileToDelete(file)
+                      }}
+                    >
+                      <Trash2 size={14} />
+                      Excluir
+                    </Button>
+                  )}
+                </div>
               </div>
+            ))}
+          </Card>
+
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-w-40"
+                loading={isFetchingMore}
+                onClick={() => fetchMore()}
+              >
+                Carregar mais
+              </Button>
             </div>
-          ))}
-        </Card>
+          )}
+        </>
       )}
 
       {urlError && (
