@@ -1465,7 +1465,7 @@ async function generateAndStoreAdoptionContract(
     size: animalData.size as string | undefined,
     neutered: animalData.neutered as boolean | undefined,
     approvedAt,
-    ongName: "Upeva Adoções",
+    ongName: "Upeva",
   };
 
   const pdfBuffer = await generateAdoptionContractPdfOfficial(pdfData);

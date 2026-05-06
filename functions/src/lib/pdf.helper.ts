@@ -416,13 +416,30 @@ function officialSpeciesLabel(species: string): string {
 }
 
 function formatApprovalDate(date: Date): string {
-  const d = date.toLocaleDateString("pt-BR", {
+  return date.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     timeZone: "America/Sao_Paulo",
   });
-  return d.replace(/\//g, "/");
+}
+
+function formatBrazilianDateString(value: string): string {
+  const trimmed = value.trim();
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+
+  return parsed.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  });
 }
 
 function drawUnderline(page: PDFPage, x: number, y: number, width: number): void {
@@ -432,6 +449,32 @@ function drawUnderline(page: PDFPage, x: number, y: number, width: number): void
     thickness: 0.5,
     color: rgb(0.3, 0.3, 0.3),
   });
+}
+
+function drawInlineText(
+  page: PDFPage,
+  font: PDFFont,
+  text: string,
+  x: number,
+  y: number,
+  size: number
+): number {
+  page.drawText(text, { x, y, size, font, color: rgb(0, 0, 0) });
+  return x + font.widthOfTextAtSize(text, size);
+}
+
+function drawUnderlinedText(
+  page: PDFPage,
+  font: PDFFont,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  size: number
+): number {
+  page.drawText(text, { x, y, size, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, x, y, width);
+  return x + font.widthOfTextAtSize(text, size);
 }
 
 function drawFilledLine(
@@ -524,7 +567,7 @@ export async function generateAdoptionContractPdfOfficial(
   const M = 60; // left/right margin
   const contentW = PAGE_WIDTH - M * 2;
   const bodyFontSize = 10;
-  const lineH = 15;
+  const lineH = 16;
   const smallSize = 9;
 
   let y = PAGE_HEIGHT - M;
@@ -539,122 +582,72 @@ export async function generateAdoptionContractPdfOfficial(
     font: boldFont,
     color: rgb(0, 0, 0),
   });
-  y -= 30;
+  y -= 44;
 
   // ── Bloco do responsável ──────────────────────────────────────────────────
-  // "Foi concedido a(o) Sr.(a) _______, portador(a) do CPF sob nº _______,"
   const dateStr = formatApprovalDate(data.approvedAt);
   const [day, month, year] = dateStr.split("/");
-  const city = data.address.city || "Flores da Cunha";
+  const finalCity = "Flores da Cunha";
+  const birthDate = formatBrazilianDateString(data.birthDate);
 
-  // Line 1: Foi concedido a(o) Sr.(a) [name]
-  const intro1 = "Foi concedido a(o) Sr.(a) ";
-  page.drawText(intro1, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  const intro1W = font.widthOfTextAtSize(intro1, bodyFontSize);
-  page.drawText(data.fullName, {
-    x: M + intro1W,
+  let x = M;
+  x = drawInlineText(page, font, "Foi concedido a(o) Sr.(a) ", x, y, bodyFontSize);
+  const nameWidth = contentW - (x - M) - 8;
+  x = drawUnderlinedText(page, font, data.fullName, x, y, nameWidth, bodyFontSize);
+  drawInlineText(page, font, ",", x, y, bodyFontSize);
+  y -= lineH;
+
+  x = M;
+  x = drawInlineText(page, font, "portador(a) do CPF sob nº ", x, y, bodyFontSize);
+  const cpfWidth = font.widthOfTextAtSize(data.cpf, bodyFontSize) + 8;
+  x = drawUnderlinedText(page, font, data.cpf, x, y, cpfWidth, bodyFontSize);
+  x = drawInlineText(page, font, ", nascido(a) em ", x + 6, y, bodyFontSize);
+  const birthWidth = contentW - (x - M) - 8;
+  x = drawUnderlinedText(page, font, birthDate, x, y, birthWidth, bodyFontSize);
+  drawInlineText(page, font, ",", x, y, bodyFontSize);
+  y -= lineH;
+
+  x = M;
+  x = drawInlineText(page, font, "residente à Rua ", x, y, bodyFontSize);
+  const street = data.address.complement ?
+    `${data.address.street}, ${data.address.complement}` :
+    data.address.street;
+  drawUnderlinedText(page, font, street, x, y, contentW - (x - M), bodyFontSize);
+  y -= lineH;
+
+  x = M;
+  x = drawInlineText(page, font, "nº ", x, y, bodyFontSize);
+  const numberWidth = 70;
+  x = drawUnderlinedText(page, font, data.address.number, x, y, numberWidth, bodyFontSize);
+  x = drawInlineText(page, font, ", bairro ", x + 6, y, bodyFontSize);
+  drawUnderlinedText(page, font, data.address.neighborhood ?? "", x, y, contentW - (x - M), bodyFontSize);
+  y -= lineH;
+
+  x = M;
+  x = drawInlineText(page, font, "cidade de ", x, y, bodyFontSize);
+  const addressCity = data.address.city || finalCity;
+  const cityWidth = 150;
+  x = drawUnderlinedText(page, font, addressCity, x, y, cityWidth, bodyFontSize);
+  x = drawInlineText(page, font, ", estado ", x + 6, y, bodyFontSize);
+  const stateWidth = 42;
+  x = drawUnderlinedText(page, font, data.address.state, x, y, stateWidth, bodyFontSize);
+  x = drawInlineText(page, font, ", telefone ", x + 6, y, bodyFontSize);
+  drawUnderlinedText(page, font, data.phone, x, y, contentW - (x - M), bodyFontSize);
+  y -= lineH;
+
+  page.drawText("a guarda responsável do animal com as seguintes características:", {
+    x: M,
     y,
     size: bodyFontSize,
     font,
     color: rgb(0, 0, 0),
   });
-  const nameW = font.widthOfTextAtSize(data.fullName, bodyFontSize);
-  page.drawText(",", {
-    x: M + intro1W + nameW,
-    y,
-    size: bodyFontSize,
-    font,
-    color: rgb(0, 0, 0),
-  });
-  drawUnderline(page, M + intro1W, y, contentW - intro1W);
-  y -= lineH;
-
-  // Line 2: portador(a) do CPF sob nº [cpf], nascido(a) em [birthDate],
-  const line2a = "portador(a) do CPF sob nº ";
-  const line2b = `${data.cpf}, `;
-  const line2c = "nascido(a) em ";
-  const line2d = `${data.birthDate},`;
-  const line2aW = font.widthOfTextAtSize(line2a, bodyFontSize);
-  const line2bW = font.widthOfTextAtSize(line2b, bodyFontSize);
-  const line2cW = font.widthOfTextAtSize(line2c, bodyFontSize);
-  page.drawText(line2a, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(data.cpf, { x: M + line2aW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(", ", { x: M + line2aW + font.widthOfTextAtSize(data.cpf, bodyFontSize), y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  const afterCpf = M + line2aW + line2bW;
-  page.drawText(line2c, { x: afterCpf, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(line2d, { x: afterCpf + line2cW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  drawUnderline(page, M + line2aW, y, line2bW - 2);
-  drawUnderline(page, afterCpf + line2cW, y, contentW - (afterCpf + line2cW - M));
-  y -= lineH;
-
-  // Line 3: residente à Rua [street], nº [number], bairro [neighborhood]
-  const streetLabel = "residente à Rua ";
-  const streetVal = `${data.address.street}, `;
-  const numberLabel = "nº ";
-  const numberVal = `${data.address.number}, bairro `;
-  const neighVal = `${data.address.neighborhood ?? ""}`;
-  const streetLabelW = font.widthOfTextAtSize(streetLabel, bodyFontSize);
-  const streetValW = font.widthOfTextAtSize(streetVal, bodyFontSize);
-  const numberLabelW = font.widthOfTextAtSize(numberLabel, bodyFontSize);
-  const numberValW = font.widthOfTextAtSize(numberVal, bodyFontSize);
-  page.drawText(streetLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(streetVal, { x: M + streetLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(numberLabel, { x: M + streetLabelW + streetValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(numberVal, { x: M + streetLabelW + streetValW + numberLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(neighVal, {
-    x: M + streetLabelW + streetValW + numberLabelW + numberValW,
-    y,
-    size: bodyFontSize,
-    font,
-    color: rgb(0, 0, 0),
-  });
-  drawUnderline(page, M + streetLabelW, y, streetValW - 2);
-  drawUnderline(page, M + streetLabelW + streetValW + numberLabelW, y, numberValW - 2);
-  drawUnderline(
-    page,
-    M + streetLabelW + streetValW + numberLabelW + numberValW,
-    y,
-    contentW - (streetLabelW + streetValW + numberLabelW + numberValW)
-  );
-  y -= lineH;
-
-  // Line 4 (continuation of address): cidade de [city], estado [state],
-  const cityLabel = "                                , cidade de ";
-  const cityVal = `${city}, `;
-  const stateLabel = "estado ";
-  const stateVal = `${data.address.state},`;
-  const cityLabelW = font.widthOfTextAtSize(cityLabel, bodyFontSize);
-  const cityValW = font.widthOfTextAtSize(cityVal, bodyFontSize);
-  const stateLabelW = font.widthOfTextAtSize(stateLabel, bodyFontSize);
-  page.drawText(cityLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(cityVal, { x: M + cityLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(stateLabel, { x: M + cityLabelW + cityValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(stateVal, { x: M + cityLabelW + cityValW + stateLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  drawUnderline(page, M, y, cityLabelW - 2);
-  drawUnderline(page, M + cityLabelW, y, cityValW - 2);
-  drawUnderline(page, M + cityLabelW + cityValW + stateLabelW, y, contentW - (cityLabelW + cityValW + stateLabelW));
-  y -= lineH;
-
-  // Line 5: telefone [phone] a guarda responsável do animal com as seguintes características:
-  const telLabel = "telefone ";
-  const telVal = `${data.phone} `;
-  const telSuffix = "a guarda responsável do animal com as seguintes";
-  const telLabelW = font.widthOfTextAtSize(telLabel, bodyFontSize);
-  const telValW = font.widthOfTextAtSize(telVal, bodyFontSize);
-  page.drawText(telLabel, { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(telVal, { x: M + telLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  page.drawText(telSuffix, { x: M + telLabelW + telValW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  drawUnderline(page, M + telLabelW, y, telValW - 2);
-  y -= lineH;
-
-  // "características:"
-  page.drawText("características:", { x: M, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  y -= 20;
+  y -= 28;
 
   // ── Tabela de características do animal ───────────────────────────────────
   const col1X = M;
   const col2X = M + contentW / 2;
-  const charLineH = 18;
+  const charLineH = 22;
 
   // Row 1: Nome | Espécie
   drawFilledLine(page, font, boldFont, "Nome: ", data.animalName, col1X, y, contentW / 2 - 10, bodyFontSize);
@@ -714,7 +707,7 @@ export async function generateAdoptionContractPdfOfficial(
   const isNeutered = data.neutered === true;
   const castStr = `${checkbox(isNeutered)} S   ${checkbox(!isNeutered)} N`;
   page.drawText(castStr, { x: col1X + castLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-  y -= 22;
+  y -= 32;
 
   // ── Cláusulas ─────────────────────────────────────────────────────────────
   const paragraphIndent = 18;
@@ -733,7 +726,7 @@ export async function generateAdoptionContractPdfOfficial(
 
   const p4 = "A adoção de um animal é um compromisso para a vida inteira. Porém, por uma combinação de imprevistos, não sendo mais possível permanecer com o animal, a Upeva deve ser contatada para que junto ao atual tutor encontrem um novo lar para ele.";
   y = drawWrappedText(page, font, p4, M, y, contentW, bodyFontSize, lineH, paragraphIndent);
-  y -= 30;
+  y -= 34;
 
   // ── Assinaturas ───────────────────────────────────────────────────────────
   const sigLineW = 120;
@@ -764,10 +757,10 @@ export async function generateAdoptionContractPdfOfficial(
     font,
     color: rgb(0, 0, 0),
   });
-  y -= 40;
+  y -= 42;
 
   // ── Local e data ──────────────────────────────────────────────────────────
-  const localDateStr = `${city}, ${day}/${month}/${year}`;
+  const localDateStr = `${finalCity}, ${day}/${month}/${year}`;
   const localDateW = font.widthOfTextAtSize(localDateStr, bodyFontSize);
   page.drawText(localDateStr, {
     x: PAGE_WIDTH - M - localDateW,
@@ -775,22 +768,6 @@ export async function generateAdoptionContractPdfOfficial(
     size: bodyFontSize,
     font,
     color: rgb(0, 0, 0),
-  });
-
-  // ── Rodapé interno ────────────────────────────────────────────────────────
-  page.drawLine({
-    start: { x: M, y: 35 },
-    end: { x: PAGE_WIDTH - M, y: 35 },
-    thickness: 0.3,
-    color: rgb(0.7, 0.7, 0.7),
-  });
-  const footerText = `Ref. candidatura ${data.applicationId} — documento gerado automaticamente — ${data.ongName}`;
-  page.drawText(footerText, {
-    x: M,
-    y: 22,
-    size: 7,
-    font,
-    color: rgb(0.55, 0.55, 0.55),
   });
 
   const bytes = await doc.save();
