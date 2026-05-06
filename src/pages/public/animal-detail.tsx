@@ -45,7 +45,8 @@ export function AnimalDetailPage() {
     path: id ? `/animais/${id}` : '/animais',
     image: animal?.photos[animal.coverPhotoIndex] ?? animal?.photos[0] ?? '/upeva.jpg',
     imageAlt: animal ? `${animal.name}, animal para adoção pela Upeva` : undefined,
-    noindex: animal === null,
+    noindex: animal === null || (animal ? !isPublicAdoptionAnimal(animal) : false),
+    twitterCard: 'summary_large_image',
   })
 
   if (isLoading) return <DetailSkeleton />
@@ -275,6 +276,10 @@ function buildAnimalDescription(animal: Animal) {
   ].filter(Boolean)
 
   return `Conheça ${animal.name}, ${details.join(', ')}, e veja como iniciar uma adoção responsável pela Upeva.`
+}
+
+function isPublicAdoptionAnimal(animal: Animal) {
+  return animal.status === 'available' || animal.status === 'under_review'
 }
 
 function InfoChip({

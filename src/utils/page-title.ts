@@ -8,6 +8,22 @@ const DEFAULT_DESCRIPTION =
 const DEFAULT_OG_IMAGE = '/upeva.jpg'
 const DEFAULT_OG_IMAGE_ALT = 'Logo da Upeva - União Pela Vida Animal'
 const SITE_NAME = 'Upeva'
+const PUBLIC_SEO_META = [
+  ['name', 'description'],
+  ['property', 'og:site_name'],
+  ['property', 'og:locale'],
+  ['property', 'og:type'],
+  ['property', 'og:title'],
+  ['property', 'og:description'],
+  ['property', 'og:image'],
+  ['property', 'og:image:alt'],
+  ['property', 'og:url'],
+  ['name', 'twitter:card'],
+  ['name', 'twitter:title'],
+  ['name', 'twitter:description'],
+  ['name', 'twitter:image'],
+  ['name', 'twitter:image:alt'],
+] as const
 
 export function buildPublicTitle(section?: string): string {
   return section ? `${PUBLIC_BRAND} - ${section}` : PUBLIC_HOME_TITLE
@@ -23,6 +39,7 @@ export function useDocumentTitle(title: string) {
     if (window.location.pathname.startsWith('/admin')) {
       setMeta('name', 'robots', 'noindex, nofollow')
       removeCanonical()
+      removePublicSeoMeta()
       return
     }
 
@@ -58,6 +75,7 @@ interface PageSeoOptions {
   imageAlt?: string
   type?: 'website' | 'article' | 'profile'
   noindex?: boolean
+  twitterCard?: 'summary' | 'summary_large_image'
 }
 
 export function usePageSeo({
@@ -68,6 +86,7 @@ export function usePageSeo({
   imageAlt = DEFAULT_OG_IMAGE_ALT,
   type = 'website',
   noindex = false,
+  twitterCard = 'summary',
 }: PageSeoOptions) {
   useEffect(() => {
     const canonicalUrl = noindex ? undefined : buildAbsoluteUrl(path ?? window.location.pathname)
@@ -92,12 +111,12 @@ export function usePageSeo({
       removeCanonical()
     }
 
-    setMeta('name', 'twitter:card', 'summary')
+    setMeta('name', 'twitter:card', twitterCard)
     setMeta('name', 'twitter:title', title)
     setMeta('name', 'twitter:description', description)
     setMeta('name', 'twitter:image', imageUrl)
     setMeta('name', 'twitter:image:alt', imageAlt)
-  }, [description, image, imageAlt, noindex, path, title, type])
+  }, [description, image, imageAlt, noindex, path, title, twitterCard, type])
 }
 
 function getConfiguredOrigin(): string | undefined {
@@ -143,6 +162,12 @@ function removeCanonical() {
   document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.remove()
 }
 
+function removePublicSeoMeta() {
+  for (const [attribute, key] of PUBLIC_SEO_META) {
+    removeMeta(attribute, key)
+  }
+}
+
 function setMeta(attribute: 'name' | 'property', key: string, content: string) {
   const selector = `meta[${attribute}="${key}"]`
   let meta = document.querySelector<HTMLMetaElement>(selector)
@@ -152,4 +177,8 @@ function setMeta(attribute: 'name' | 'property', key: string, content: string) {
     document.head.appendChild(meta)
   }
   meta.content = content
+}
+
+function removeMeta(attribute: 'name' | 'property', key: string) {
+  document.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`)?.remove()
 }
