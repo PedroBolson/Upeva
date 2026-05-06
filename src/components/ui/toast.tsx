@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useReducer } from 'react'
+import { createContext, useCallback, useContext, useMemo, useReducer } from 'react'
 
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info'
 
@@ -56,14 +56,17 @@ export function useToast() {
     [dispatch],
   )
 
-  return {
-    toast: {
+  const toast = useMemo(
+    () => ({
       success: (message: string, duration?: number) => add(message, 'success', duration),
       error: (message: string, duration?: number) => add(message, 'error', duration),
       warning: (message: string, duration?: number) => add(message, 'warning', duration),
       info: (message: string, duration?: number) => add(message, 'info', duration),
-    },
-  }
+    }),
+    [add],
+  )
+
+  return { toast }
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

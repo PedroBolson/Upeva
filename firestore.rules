@@ -178,6 +178,14 @@ service cloud.firestore {
       allow read, write: if false; // Cloud Functions only
     }
 
+    // ── Privacy request audits ────────────────────────────────────────────────
+    // Internal server-side audit trail for LGPD actions. It intentionally has
+    // no client access; admin UI actions go through Cloud Functions.
+
+    match /privacyRequestAudits/{auditId} {
+      allow read, write: if false; // Cloud Functions only
+    }
+
     // ── Rejection flags ────────────────────────────────────────────────────────
     // Contém apenas hashes HMAC de CPF/email (nunca PII em texto plano).
     // Leitura: staff pode listar e ler para exibição no painel.

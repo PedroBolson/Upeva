@@ -12,6 +12,7 @@ export interface ConfirmModalProps {
   cancelLabel?: string
   variant?: 'danger' | 'warning'
   loading?: boolean
+  confirmDisabled?: boolean
   children?: React.ReactNode
 }
 
@@ -25,6 +26,7 @@ export function ConfirmModal({
   cancelLabel = 'Cancelar',
   variant = 'danger',
   loading = false,
+  confirmDisabled = false,
   children,
 }: ConfirmModalProps) {
   return (
@@ -43,6 +45,7 @@ export function ConfirmModal({
           <Button
             variant={variant === 'danger' ? 'danger' : 'default'}
             onClick={onConfirm}
+            disabled={confirmDisabled || loading}
             loading={loading}
             className="min-w-24"
           >

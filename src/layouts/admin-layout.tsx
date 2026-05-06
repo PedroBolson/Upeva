@@ -13,6 +13,7 @@ import {
   Users,
   Star,
   Archive,
+  ShieldCheck,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -53,6 +54,7 @@ const navItems = [
   { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/arquivos', label: 'Arquivos', icon: Archive, end: false, role: undefined as UserRole | undefined },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole },
+  { to: '/admin/privacidade', label: 'Privacidade', icon: ShieldCheck, end: false, role: 'admin' as UserRole },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined },
 ]
 
