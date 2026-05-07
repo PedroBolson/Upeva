@@ -26,6 +26,7 @@ import { UsersPage } from '@/pages/admin/users'
 import { FeaturedAnimalsPage } from '@/pages/admin/featured-animals'
 import { RejectionFlagsPage } from '@/pages/admin/rejection-flags'
 import { ArchiveFilesPage } from '@/pages/admin/archive-files'
+import { ArchiveDocumentViewerPage } from '@/pages/admin/archive-document-viewer'
 import { PrivacyRequestsPage } from '@/pages/admin/privacy-requests'
 
 const router = createBrowserRouter([
@@ -78,6 +79,7 @@ const router = createBrowserRouter([
       { path: '/admin/destaques', element: <FeaturedAnimalsPage /> },
       { path: '/admin/alertas', element: <RejectionFlagsPage /> },
       { path: '/admin/arquivos', element: <ArchiveFilesPage /> },
+      { path: '/admin/arquivos/:archiveFileId', element: <ArchiveDocumentViewerPage /> },
       {
         path: '/admin/privacidade',
         element: (

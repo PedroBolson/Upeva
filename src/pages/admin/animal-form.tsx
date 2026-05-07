@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { Controller, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft, ClipboardList, FileText, Loader2, Plus, Star, Trash2, X } from 'lucide-react'
@@ -15,7 +15,6 @@ import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
-import { getArchiveFileUrl } from '@/features/admin/services/archive.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS, STATUS_LABELS } from '@/features/animals/types/animal.types'
@@ -52,6 +51,7 @@ const ADOPTION_REVERSAL_HELPER =
 export function AnimalFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const isEditing = !!id
   const { toast } = useToast()
 
@@ -752,9 +752,9 @@ export function AnimalFormPage() {
                   variant="outline"
                   className="w-full gap-1.5"
                   onClick={() => {
-                    getArchiveFileUrl(animal.adoptionContractArchiveFileId!)
-                      .then((url) => window.open(url, '_blank', 'noopener,noreferrer'))
-                      .catch(() => {/* silently ignore; user can retry */})
+                    navigate(`/admin/arquivos/${animal.adoptionContractArchiveFileId}`, {
+                      state: { backTo: `${location.pathname}${location.search}` },
+                    })
                   }}
                 >
                   <FileText size={14} />

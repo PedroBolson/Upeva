@@ -37,6 +37,7 @@ export interface UpdateApplicationReviewInput {
   adminNotes?: string
   animalId?: string
   animalName?: string
+  speciesChangeConfirmed?: boolean
   rejectionReason?: string
   rejectionDetails?: string
 }

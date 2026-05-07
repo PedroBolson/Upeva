@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import { AlertTriangle, ExternalLink, Trash2 } from 'lucide-react'
@@ -8,7 +9,6 @@ import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Spinner } from '@/components/ui/spinner'
 import { ErrorState } from '@/components/ui/error-state'
 import { useDeleteRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
-import { useGetArchiveFileUrl } from '@/features/admin/hooks/use-archive-files'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 
 type RejectionFlag = {
@@ -37,11 +37,11 @@ function formatFlagDate(value: unknown): string {
 
 export function RejectionFlagsPage() {
   useDocumentTitle(buildAdminTitle('Alertas de Rejeição'))
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [flagToDelete, setFlagToDelete] = useState<RejectionFlag | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [urlError, setUrlError] = useState<string | null>(null)
-  const [openingId, setOpeningId] = useState<string | null>(null)
 
   const { data: flags = [], isLoading, error, refetch } = useQuery({
     queryKey: ['rejection-flags'],
@@ -64,7 +64,6 @@ export function RejectionFlagsPage() {
   })
 
   const { mutate: deleteFlag, isPending: isDeleting } = useDeleteRejectionFlag()
-  const { mutate: fetchUrl } = useGetArchiveFileUrl()
 
   function handleConfirmDelete() {
     if (!flagToDelete) return
@@ -82,17 +81,8 @@ export function RejectionFlagsPage() {
   }
 
   function handleOpenPdf(archiveFileId: string) {
-    setUrlError(null)
-    setOpeningId(archiveFileId)
-    fetchUrl(archiveFileId, {
-      onSuccess: (url) => {
-        setOpeningId(null)
-        window.open(url, '_blank', 'noopener,noreferrer')
-      },
-      onError: () => {
-        setOpeningId(null)
-        setUrlError('Não foi possível gerar o link do PDF. Tente novamente.')
-      },
+    navigate(`/admin/arquivos/${archiveFileId}`, {
+      state: { backTo: `${location.pathname}${location.search}` },
     })
   }
 
@@ -171,14 +161,9 @@ export function RejectionFlagsPage() {
                     size="sm"
                     className="gap-1 text-muted-foreground hover:text-primary"
                     onClick={() => handleOpenPdf(flag.archiveFileId!)}
-                    disabled={openingId === flag.archiveFileId}
                     aria-label="Abrir PDF de rejeição"
                   >
-                    {openingId === flag.archiveFileId ? (
-                      <Spinner size="sm" />
-                    ) : (
-                      <ExternalLink size={14} />
-                    )}
+                    <ExternalLink size={14} />
                     PDF
                   </Button>
                 )}
@@ -203,9 +188,6 @@ export function RejectionFlagsPage() {
 
       {deleteError && (
         <p role="alert" className="text-sm text-danger">{deleteError}</p>
-      )}
-      {urlError && (
-        <p role="alert" className="text-sm text-danger">{urlError}</p>
       )}
     </div>
   )

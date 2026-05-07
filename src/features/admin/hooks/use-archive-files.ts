@@ -59,9 +59,15 @@ export function useArchiveFilterOptions() {
   })
 }
 
-export function useGetArchiveFileUrl() {
-  return useMutation({
-    mutationFn: (archiveFileId: string) => getArchiveFileUrl(archiveFileId),
+export function useArchiveDocumentUrl(archiveFileId: string | undefined) {
+  return useQuery({
+    queryKey: ['archive-files', 'document-url', archiveFileId],
+    queryFn: () => getArchiveFileUrl(archiveFileId!),
+    enabled: Boolean(archiveFileId),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    retry: false,
   })
 }
 

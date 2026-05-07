@@ -79,6 +79,15 @@ export interface AdoptionApplication extends AdoptionFormData {
   reviewedByLabel?: string
   reviewedAt?: Timestamp
   reviewAction?: ApplicationStatus
+  linkedAnimalSnapshot?: Record<string, unknown>
+  linkedBy?: string
+  linkedByLabel?: string
+  linkedAt?: Timestamp
+  initialSpeciesPreference?: Species | null
+  linkedAnimalSpecies?: Species | null
+  speciesChangedFromInitialPreference?: boolean
+  speciesChangeConfirmedBy?: string
+  speciesChangeConfirmedAt?: Timestamp
   pendingExport?: boolean
   contractArchiveFileId?: string
   contractGeneratedAt?: Timestamp

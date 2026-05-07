@@ -1,6 +1,5 @@
 import {
   ACTIVE_APPLICATION_STATUSES,
-  animalMatchesGeneralApplication,
   AnimalRecord,
   ApplicationRecord,
   ApplicationStatus,
@@ -36,6 +35,50 @@ import {
   Timestamp,
   validateApplicationInput,
 } from "../lib/shared.js";
+
+type SpeciesChangeDecision = {
+  speciesChanged: boolean;
+  initialSpeciesPreference: string | null;
+  linkedAnimalSpecies: string | null;
+};
+
+function getSpeciesChangeDecision(
+  application: ApplicationRecord & Record<string, unknown>,
+  animal: AnimalRecord,
+): SpeciesChangeDecision {
+  const initialPreferences = application.initialPreferences as { species?: unknown } | undefined;
+  const initialSpeciesPreference =
+    typeof initialPreferences?.species === "string" ?
+      initialPreferences.species :
+      typeof application.species === "string" ?
+        application.species :
+        null;
+  const linkedAnimalSpecies = typeof animal.species === "string" ? animal.species : null;
+
+  return {
+    speciesChanged: Boolean(
+      initialSpeciesPreference &&
+      linkedAnimalSpecies &&
+      initialSpeciesPreference !== linkedAnimalSpecies
+    ),
+    initialSpeciesPreference,
+    linkedAnimalSpecies,
+  };
+}
+
+function buildAnimalLinkSnapshot(animalId: string, animal: AnimalRecord): Record<string, unknown> {
+  return {
+    id: animalId,
+    name: animal.name ?? null,
+    species: animal.species ?? null,
+    sex: animal.sex ?? null,
+    size: animal.size ?? null,
+    breed: animal.breed ?? null,
+    coatColor: animal.coatColor ?? null,
+    estimatedAge: animal.estimatedAge ?? null,
+    status: animal.status ?? null,
+  };
+}
 
 // ── createApplication: public callable with server-side validation + rate limit ─
 // Rate limit: max 5 submissions per email per 24h.
@@ -248,6 +291,7 @@ export const updateApplicationReview = onCall(
       adminNotes?: string;
       animalId?: string;
       animalName?: string;
+      speciesChangeConfirmed?: boolean;
       rejectionReason?: string;
       rejectionDetails?: string;
     };
@@ -320,6 +364,7 @@ export const updateApplicationReview = onCall(
 
       const requestedAnimalId = typeof request.data.animalId === "string" &&
         request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
+      const speciesChangeConfirmed = request.data.speciesChangeConfirmed === true;
       const adminNotes = typeof request.data.adminNotes === "string" ?
         request.data.adminNotes.trim() : undefined;
       if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
@@ -346,6 +391,8 @@ export const updateApplicationReview = onCall(
         let nextAnimalName = application.animalName;
         let linkedAnimal: AnimalRecord | null = null;
         let linkedAnimalRef: DocumentReference | null = null;
+        let linkSpeciesDecision: SpeciesChangeDecision | null = null;
+        let linkedAnimalSnapshot: Record<string, unknown> | null = null;
 
         if (requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
           throw new HttpsError(
@@ -363,13 +410,6 @@ export const updateApplicationReview = onCall(
           }
 
           const animal = animalSnap.data() as AnimalRecord;
-          if (animal.species !== application.species) {
-            throw new HttpsError(
-              "failed-precondition",
-              "A espécie do animal não corresponde à candidatura."
-            );
-          }
-
           const isSameCurrentAnimal = requestedAnimalId === currentAnimalId;
           if (!isSameCurrentAnimal && animal.status !== "available" && animal.status !== "under_review") {
             throw new HttpsError(
@@ -378,10 +418,11 @@ export const updateApplicationReview = onCall(
             );
           }
 
-          if (!animalMatchesGeneralApplication(application, animal)) {
+          linkSpeciesDecision = getSpeciesChangeDecision(application, animal);
+          if (linkSpeciesDecision.speciesChanged && !speciesChangeConfirmed) {
             throw new HttpsError(
               "failed-precondition",
-              "O animal selecionado não corresponde às preferências desta candidatura."
+              "Confirme que você está ciente da diferença de espécie antes de vincular o animal."
             );
           }
 
@@ -389,6 +430,7 @@ export const updateApplicationReview = onCall(
           nextAnimalName = typeof animal.name === "string" ? animal.name.trim() : undefined;
           linkedAnimal = animal;
           linkedAnimalRef = animalRef;
+          linkedAnimalSnapshot = buildAnimalLinkSnapshot(requestedAnimalId, animal);
         }
 
         const targetIsActive = ACTIVE_APPLICATION_STATUSES.includes(status);
@@ -501,6 +543,39 @@ export const updateApplicationReview = onCall(
         if (isGeneralInterest && nextAnimalId && nextAnimalName) {
           payload.animalId = nextAnimalId;
           payload.animalName = nextAnimalName;
+        }
+
+        if (isGeneralInterest && requestedAnimalId && linkSpeciesDecision && linkedAnimalSnapshot) {
+          const linkedAt = FieldValue.serverTimestamp();
+          payload.linkedAnimalId = requestedAnimalId;
+          payload.linkedAnimalSnapshot = linkedAnimalSnapshot;
+          payload.linkedBy = actorUid;
+          payload.linkedAt = linkedAt;
+          payload.initialSpeciesPreference = linkSpeciesDecision.initialSpeciesPreference;
+          payload.linkedAnimalSpecies = linkSpeciesDecision.linkedAnimalSpecies;
+          payload.speciesChangedFromInitialPreference = linkSpeciesDecision.speciesChanged;
+          if (actorLabel) payload.linkedByLabel = actorLabel;
+          if (linkSpeciesDecision.speciesChanged) {
+            payload.speciesChangeConfirmedBy = actorUid;
+            payload.speciesChangeConfirmedAt = linkedAt;
+          }
+
+          transaction.create(appRef.collection("events").doc(), {
+            type: linkSpeciesDecision.speciesChanged ?
+              "animal_species_change_confirmed" :
+              "animal_linked",
+            actorUid,
+            actorLabel: actorLabel ?? null,
+            createdAt: linkedAt,
+            applicationId: targetId,
+            animalId: requestedAnimalId,
+            animalSnapshot: linkedAnimalSnapshot,
+            ...(linkSpeciesDecision.speciesChanged ? {
+              initialSpeciesPreference: linkSpeciesDecision.initialSpeciesPreference,
+              linkedAnimalSpecies: linkSpeciesDecision.linkedAnimalSpecies,
+              label: "Vínculo confirmado com espécie diferente da preferência inicial.",
+            } : {}),
+          });
         }
 
         if (newQueuePosition !== undefined) {

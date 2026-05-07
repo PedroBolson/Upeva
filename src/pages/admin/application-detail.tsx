@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
+import { ApplicationAnimalSelector } from '@/features/adoption/components/application-animal-selector'
 import { AnimalQuickViewModal } from '@/features/animals/components/animal-quick-view-modal'
 import { cn } from '@/utils/cn'
 import { DetailSection, DetailField } from '@/components/ui/detail-view'
@@ -15,10 +16,11 @@ import { useApplicationPII } from '@/features/adoption/hooks/use-application-pii
 import { useRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
-import { getArchiveFileUrl, generateAdoptionContractNow } from '@/features/admin/services/archive.service'
+import { generateAdoptionContractNow } from '@/features/admin/services/archive.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import { formatDate } from '@/utils/format'
@@ -76,17 +78,6 @@ function isGeneralInterestApplication(app: AdoptionApplication): boolean {
   return app.jointAdoption !== undefined || app.preferredSex !== undefined
 }
 
-function buildLinkableAnimalLabel(animal: Animal): string {
-  const meta = [
-    SEX_LABELS[animal.sex],
-    animal.species === 'dog' && animal.size ? SIZE_LABELS[animal.size] : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
-  return meta ? `${animal.name} · ${meta}` : animal.name
-}
-
 function normalizePhoneToE164(phone: string): string | null {
   const digits = phone.replace(/\D/g, '').replace(/^0+/, '')
 
@@ -122,6 +113,7 @@ function Bool({ value }: { value: boolean | undefined }) {
 export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { data: app, isLoading, error, refetch } = useApplication(id)
   const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
@@ -131,11 +123,18 @@ export function ApplicationDetailPage() {
   useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
 
   const [selectedStatus, setSelectedStatus] = useState<ApplicationStatus | null>(null)
-  const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null)
+  const [selectedAnimal, setSelectedAnimal] = useState<{
+    animal: Animal
+    speciesChangeConfirmed: boolean
+  } | null>(null)
+  const [animalSelectionCleared, setAnimalSelectionCleared] = useState(false)
   const [adminNotesDraft, setAdminNotesDraft] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
+  const [showDifferentSpeciesAnimals, setShowDifferentSpeciesAnimals] = useState(false)
+  const [speciesChangeCandidate, setSpeciesChangeCandidate] = useState<Animal | null>(null)
+  const [confirmSpeciesChangeAndSave, setConfirmSpeciesChangeAndSave] = useState(false)
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
   const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false)
   const [isApprovalRemovalConfirmOpen, setIsApprovalRemovalConfirmOpen] = useState(false)
@@ -159,9 +158,9 @@ export function ApplicationDetailPage() {
 
   function handleOpenContract() {
     if (!app?.contractArchiveFileId) return
-    getArchiveFileUrl(app.contractArchiveFileId)
-      .then((url) => window.open(url, '_blank', 'noopener,noreferrer'))
-      .catch(() => setContractError('Não foi possível abrir o termo. Tente novamente.'))
+    navigate(`/admin/arquivos/${app.contractArchiveFileId}`, {
+      state: { backTo: `${location.pathname}${location.search}` },
+    })
   }
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
@@ -169,19 +168,20 @@ export function ApplicationDetailPage() {
   const formattedUpdatedAt = useMemo(() => tsToDate(app?.updatedAt), [app?.updatedAt])
   const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
   const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
-  const currentAnimalId = selectedAnimalId ?? app?.animalId ?? ''
+  const currentAnimalId = animalSelectionCleared ? '' : selectedAnimal?.animal.id ?? app?.animalId ?? ''
 
   // Campos PII nunca lidos direto do Firestore — sempre via CF getApplicationPII
   const phone = pii?.phone ?? ''
   const whatsAppHref = piiLoading ? null : getWhatsAppHref(phone)
 
   const {
-    data: linkableAnimals = [],
-    isLoading: linkableAnimalsLoading,
+    data: sameSpeciesAnimals = [],
+    isLoading: sameSpeciesAnimalsLoading,
   } = useQuery({
     queryKey: [
       'animals',
       'linkable-application',
+      'same-species',
       app?.id,
       app?.species,
       app?.preferredSex,
@@ -191,41 +191,32 @@ export function ApplicationDetailPage() {
       species: app!.species,
       preferredSex: app!.preferredSex,
       preferredSize: app!.preferredSize,
+      scope: 'same-species',
     }),
     enabled: Boolean(app) && isGeneralInterest,
     staleTime: 1000 * 60 * 5,
   })
 
-  const animalOptions = useMemo(() => {
-    if (!app || !isGeneralInterest) return []
+  const {
+    data: differentSpeciesAnimals = [],
+    isLoading: differentSpeciesAnimalsLoading,
+  } = useQuery({
+    queryKey: [
+      'animals',
+      'linkable-application',
+      'different-species',
+      app?.id,
+      app?.species,
+    ],
+    queryFn: () => getLinkableAnimalsForApplication({
+      species: app!.species,
+      scope: 'different-species',
+    }),
+    enabled: Boolean(app) && isGeneralInterest && showDifferentSpeciesAnimals,
+    staleTime: 1000 * 60 * 5,
+  })
 
-    const options = linkableAnimals.map((animal) => ({
-      value: animal.id,
-      label: buildLinkableAnimalLabel(animal),
-    }))
-
-    if (app.animalId) {
-      options.unshift({
-        value: app.animalId,
-        label: `${app.animalName ?? 'Animal vinculado'} · vínculo atual`,
-      })
-    }
-
-    const seen = new Set<string>()
-    return options.filter((option) => {
-      if (seen.has(option.value)) return false
-      seen.add(option.value)
-      return true
-    })
-  }, [app, isGeneralInterest, linkableAnimals])
-
-  const selectedAnimalName = useMemo(
-    () =>
-      animalOptions.find((option) => option.value === currentAnimalId)?.label
-      ?? app?.animalName
-      ?? 'Animal vinculado',
-    [animalOptions, app?.animalName, currentAnimalId],
-  )
+  const selectedAnimalName = selectedAnimal?.animal.name ?? app?.animalName ?? 'Animal vinculado'
 
   const approvalAnimalId = currentStatus === 'approved' ? (app?.animalId ?? currentAnimalId) : null
 
@@ -244,7 +235,9 @@ export function ApplicationDetailPage() {
     app.status !== 'pending',
   )
 
-  function saveReview() {
+  function saveReview(
+    animalOverride: { animal: Animal; speciesChangeConfirmed: boolean } | null = selectedAnimal,
+  ) {
     if (!id) return
     setSaveError(null)
     updateReview(
@@ -252,20 +245,24 @@ export function ApplicationDetailPage() {
         id,
         status: currentStatus,
         adminNotes,
-        ...(isGeneralInterest && currentAnimalId
+        ...(isGeneralInterest && animalOverride
           ? {
-            animalId: currentAnimalId,
-            animalName: selectedAnimalName,
+            animalId: animalOverride.animal.id,
+            animalName: animalOverride.animal.name,
+            speciesChangeConfirmed: animalOverride.speciesChangeConfirmed,
           }
           : {}),
       },
       {
         onSuccess: () => {
-          setSelectedAnimalId(null)
+          setSelectedAnimal(null)
+          setAnimalSelectionCleared(false)
           setSaved(true)
           setSavedMessage(
             currentStatus === 'approved' && affectedCandidates.length > 0
               ? `Adoção confirmada · ${affectedCandidates.length} candidato${affectedCandidates.length !== 1 ? 's' : ''} convertido${affectedCandidates.length !== 1 ? 's' : ''} para interesse geral`
+              : animalOverride
+                ? 'Animal vinculado com sucesso.'
               : null,
           )
           if (currentStatus !== 'approved' || affectedCandidates.length === 0) {
@@ -273,10 +270,53 @@ export function ApplicationDetailPage() {
           }
         },
         onError: (mutationError) => {
+          if (
+            animalOverride?.animal &&
+            animalOverride.animal.species !== app?.species &&
+            !animalOverride.speciesChangeConfirmed
+          ) {
+            setSpeciesChangeCandidate(animalOverride.animal)
+            setConfirmSpeciesChangeAndSave(true)
+            setSaveError('Confirme que você está ciente da diferença de espécie antes de vincular o animal.')
+            return
+          }
           setSaveError(getReviewErrorMessage(mutationError))
         },
       },
     )
+  }
+
+  function handleSelectAnimal(animal: Animal) {
+    setSaveError(null)
+    setSaved(false)
+    if (currentAnimalId === animal.id) {
+      setSelectedAnimal(null)
+      setAnimalSelectionCleared(true)
+      setSpeciesChangeCandidate(null)
+      setConfirmSpeciesChangeAndSave(false)
+      return
+    }
+    if (app && animal.species !== app.species) {
+      setSpeciesChangeCandidate(animal)
+      setConfirmSpeciesChangeAndSave(false)
+      return
+    }
+    setAnimalSelectionCleared(false)
+    setSelectedAnimal({ animal, speciesChangeConfirmed: false })
+  }
+
+  function confirmSpeciesChange() {
+    if (!speciesChangeCandidate) return
+    const confirmedAnimal = speciesChangeCandidate
+    const nextSelection = { animal: confirmedAnimal, speciesChangeConfirmed: true }
+    setAnimalSelectionCleared(false)
+    setSelectedAnimal(nextSelection)
+    setSpeciesChangeCandidate(null)
+    setSaveError(null)
+    if (confirmSpeciesChangeAndSave) {
+      setConfirmSpeciesChangeAndSave(false)
+      saveReview(nextSelection)
+    }
   }
 
   function handleSave() {
@@ -337,6 +377,23 @@ export function ApplicationDetailPage() {
     )
   }
 
+  const headerActions = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="shrink-0 gap-1.5"
+        onClick={() => navigate('/admin/candidaturas')}
+      >
+        <ArrowLeft size={14} />
+        Candidaturas
+      </Button>
+    ),
+    [navigate],
+  )
+
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
+
   if (isLoading) return <PageSpinner />
   if (error || !app) {
     return (
@@ -359,8 +416,6 @@ export function ApplicationDetailPage() {
         app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
         app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
       ].filter(Boolean).join(' · ') || '—'
-  const hasLinkableOptions = animalOptions.length > 0
-
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <AnimalQuickViewModal
@@ -431,6 +486,29 @@ export function ApplicationDetailPage() {
         loading={isPending}
       />
 
+      <ConfirmModal
+        open={speciesChangeCandidate !== null}
+        onClose={() => {
+          setSpeciesChangeCandidate(null)
+          setConfirmSpeciesChangeAndSave(false)
+        }}
+        onConfirm={confirmSpeciesChange}
+        title="Confirmar vínculo com espécie diferente?"
+        description={
+          app && speciesChangeCandidate
+            ? `Esta candidatura foi criada com preferência inicial por ${SPECIES_LABELS[app.species]}, mas o animal selecionado é ${SPECIES_LABELS[speciesChangeCandidate.species]}.`
+            : undefined
+        }
+        confirmLabel="Confirmar vínculo"
+        cancelLabel="Cancelar"
+        variant="warning"
+        loading={isPending}
+      >
+        <p className="text-sm text-muted-foreground">
+          Essa mudança pode ser válida após a entrevista. Confirme apenas se a equipe está ciente de que a espécie escolhida é diferente da informada inicialmente.
+        </p>
+      </ConfirmModal>
+
       <RejectionModal
         open={isRejectionModalOpen}
         onClose={() => setIsRejectionModalOpen(false)}
@@ -440,15 +518,7 @@ export function ApplicationDetailPage() {
       />
 
       <Card className="border-border/80 p-6">
-        <Link
-          to="/admin/candidaturas"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft size={14} />
-          Voltar para Candidaturas
-        </Link>
-
-        <div className="mt-4">
+        <div>
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-foreground">{app.fullName}</h1>
             <div className="flex justify-end shrink-0">
@@ -715,22 +785,19 @@ export function ApplicationDetailPage() {
                   </div>
 
                   {isGeneralInterest && (
-                    <Select
-                      label="Vincular animal"
-                      options={animalOptions}
-                      value={currentAnimalId || undefined}
-                      onChange={(value) => setSelectedAnimalId(value)}
-                      placeholder={
-                        linkableAnimalsLoading
-                          ? 'Carregando animais compatíveis…'
-                          : 'Selecione um animal compatível'
-                      }
-                      hint={
-                        hasLinkableOptions
-                          ? 'Só aparecem animais disponíveis que combinam com as preferências desta candidatura.'
-                          : 'Nenhum animal disponível corresponde a esta candidatura no momento.'
-                      }
-                      disabled={linkableAnimalsLoading || (!hasLinkableOptions && !currentAnimalId)}
+                    <ApplicationAnimalSelector
+                      species={app.species}
+                      preferredSex={app.preferredSex}
+                      preferredSize={app.preferredSize}
+                      sameSpeciesAnimals={sameSpeciesAnimals}
+                      differentSpeciesAnimals={differentSpeciesAnimals}
+                      selectedAnimalId={currentAnimalId || undefined}
+                      currentAnimalName={currentAnimalId ? selectedAnimalName : undefined}
+                      loadingSameSpecies={sameSpeciesAnimalsLoading}
+                      loadingDifferentSpecies={differentSpeciesAnimalsLoading}
+                      differentSpeciesVisible={showDifferentSpeciesAnimals}
+                      onShowDifferentSpecies={() => setShowDifferentSpeciesAnimals(true)}
+                      onSelectAnimal={handleSelectAnimal}
                     />
                   )}
 

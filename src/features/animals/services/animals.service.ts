@@ -31,6 +31,7 @@ export interface AnimalPage {
 const PUBLIC_PAGE_SIZE = 12
 const ADMIN_PAGE_SIZE = 25
 const LINKABLE_ANIMALS_LIMIT = 25
+const LINKABLE_ANIMALS_SCOPE_LIMIT = 25
 const SIMILAR_ANIMAL_STATUSES = new Set<AnimalStatus>(['available'])
 
 function docToAnimal(id: string, data: Record<string, unknown>): Animal {
@@ -207,29 +208,73 @@ export interface LinkableAnimalFilters {
   species: Species
   preferredSex?: Sex | 'any'
   preferredSize?: Size | 'any'
+  scope?: 'same-species' | 'different-species'
+}
+
+async function queryLinkableAnimals(
+  filters: Pick<AnimalFilters, 'species' | 'sex' | 'size'>,
+  count: number,
+): Promise<Animal[]> {
+  const constraints: QueryConstraint[] = [
+    where('status', 'in', ['available', 'under_review']),
+  ]
+
+  if (filters.species) constraints.push(where('species', '==', filters.species))
+  if (filters.sex) constraints.push(where('sex', '==', filters.sex))
+  if (filters.size) constraints.push(where('size', '==', filters.size))
+
+  constraints.push(orderBy('createdAt', 'desc'))
+  constraints.push(limit(count))
+
+  const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
+  return snap.docs.map((d) => docToAnimal(d.id, d.data()))
+}
+
+function getOtherSpecies(species: Species): Species {
+  return species === 'cat' ? 'dog' : 'cat'
 }
 
 export async function getLinkableAnimalsForApplication(
   filters: LinkableAnimalFilters,
 ): Promise<Animal[]> {
-  const constraints: QueryConstraint[] = [
-    where('status', 'in', ['available', 'under_review']),
-    where('species', '==', filters.species),
-  ]
-
-  if (filters.preferredSex && filters.preferredSex !== 'any') {
-    constraints.push(where('sex', '==', filters.preferredSex))
+  if (filters.scope === 'different-species') {
+    return queryLinkableAnimals(
+      { species: getOtherSpecies(filters.species) },
+      LINKABLE_ANIMALS_SCOPE_LIMIT,
+    )
   }
 
-  if (filters.species === 'dog' && filters.preferredSize && filters.preferredSize !== 'any') {
-    constraints.push(where('size', '==', filters.preferredSize))
+  const queryPlans: Array<Pick<AnimalFilters, 'species' | 'sex' | 'size'>> = []
+  const preferredSex = filters.preferredSex && filters.preferredSex !== 'any'
+    ? filters.preferredSex
+    : undefined
+  const preferredSize = filters.species === 'dog' &&
+    filters.preferredSize &&
+    filters.preferredSize !== 'any'
+    ? filters.preferredSize
+    : undefined
+
+  if (preferredSex || preferredSize) {
+    queryPlans.push({
+      species: filters.species,
+      sex: preferredSex,
+      size: preferredSize,
+    })
+  }
+  queryPlans.push({ species: filters.species })
+
+  const animals: Animal[] = []
+  const seen = new Set<string>()
+  for (const queryFilters of queryPlans) {
+    const result = await queryLinkableAnimals(queryFilters, LINKABLE_ANIMALS_LIMIT)
+    for (const animal of result) {
+      if (seen.has(animal.id)) continue
+      seen.add(animal.id)
+      animals.push(animal)
+    }
   }
 
-  constraints.push(orderBy('createdAt', 'desc'))
-  constraints.push(limit(LINKABLE_ANIMALS_LIMIT))
-
-  const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
-  return snap.docs.map((d) => docToAnimal(d.id, d.data()))
+  return animals.slice(0, LINKABLE_ANIMALS_LIMIT * queryPlans.length)
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────

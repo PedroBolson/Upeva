@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Archive, ExternalLink, Trash2 } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, useToast } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
@@ -11,7 +12,6 @@ import {
   useDeleteArchiveFile,
   useArchiveFilterOptions,
   useArchiveFiles,
-  useGetArchiveFileUrl,
 } from '@/features/admin/hooks/use-archive-files'
 import { useAuthContext } from '@/features/auth/contexts/auth.context'
 import type { ArchiveFile, ArchiveFileType } from '@/features/admin/services/archive.service'
@@ -46,18 +46,17 @@ export function ArchiveFilesPage() {
   useDocumentTitle(buildAdminTitle('Arquivos'))
   const { userProfile } = useAuthContext()
   const { toast } = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
 
   const [typeFilter, setTypeFilter] = useState<ArchiveFileType | ''>('')
   const [yearFilter, setYearFilter] = useState<number | ''>('')
-  const [urlError, setUrlError] = useState<string | null>(null)
-  const [openingId, setOpeningId] = useState<string | null>(null)
   const [fileToDelete, setFileToDelete] = useState<ArchiveFile | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const { data: filterOptions } = useArchiveFilterOptions()
 
-  const { mutate: fetchUrl } = useGetArchiveFileUrl()
   const { mutate: deleteArchive, isPending: isDeletingArchive } = useDeleteArchiveFile()
   const isAdmin = userProfile?.role === 'admin'
   const metadataYears = typeFilter ? filterOptions?.yearsByType[typeFilter] : filterOptions?.years
@@ -192,17 +191,8 @@ export function ArchiveFilesPage() {
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
 
   function handleOpenPdf(archiveFileId: string) {
-    setUrlError(null)
-    setOpeningId(archiveFileId)
-    fetchUrl(archiveFileId, {
-      onSuccess: (url) => {
-        setOpeningId(null)
-        window.open(url, '_blank', 'noopener,noreferrer')
-      },
-      onError: () => {
-        setOpeningId(null)
-        setUrlError('Não foi possível gerar o link do PDF. Tente novamente.')
-      },
+    navigate(`/admin/arquivos/${archiveFileId}`, {
+      state: { backTo: `${location.pathname}${location.search}` },
     })
   }
 
@@ -295,13 +285,8 @@ export function ArchiveFilesPage() {
                     size="sm"
                     className="gap-1.5 text-primary"
                     onClick={() => handleOpenPdf(file.id)}
-                    disabled={openingId === file.id}
                   >
-                    {openingId === file.id ? (
-                      <Spinner size="sm" />
-                    ) : (
-                      <ExternalLink size={14} />
-                    )}
+                    <ExternalLink size={14} />
                     Abrir PDF
                   </Button>
                   {isAdmin && (
@@ -339,9 +324,6 @@ export function ArchiveFilesPage() {
         </>
       )}
 
-      {urlError && (
-        <p role="alert" className="text-sm text-danger">{urlError}</p>
-      )}
       {deleteError && (
         <p role="alert" className="text-sm text-danger">{deleteError}</p>
       )}
