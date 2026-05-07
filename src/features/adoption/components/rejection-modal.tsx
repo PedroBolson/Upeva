@@ -6,16 +6,8 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/utils/cn'
+import { REJECTION_REASON_OPTIONS } from '@/features/adoption/config/rejection-reason-labels'
 import type { RejectionReason } from '@/types/common'
-
-const REJECTION_REASON_OPTIONS: Array<{ value: RejectionReason; label: string }> = [
-  { value: 'inadequate_housing', label: 'Moradia inadequada' },
-  { value: 'no_landlord_permission', label: 'Sem autorização do proprietário' },
-  { value: 'financial_instability', label: 'Instabilidade financeira' },
-  { value: 'previous_animal_negligence', label: 'Histórico de negligência com animais' },
-  { value: 'incompatible_lifestyle', label: 'Estilo de vida incompatível' },
-  { value: 'other', label: 'Outro' },
-]
 
 const MIN_DETAILS_LENGTH = 100
 

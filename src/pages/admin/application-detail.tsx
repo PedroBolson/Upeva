@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
 import { ApplicationAnimalSelector } from '@/features/adoption/components/application-animal-selector'
@@ -18,6 +18,7 @@ import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-applic
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
+import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { generateAdoptionContractNow } from '@/features/admin/services/archive.service'
@@ -27,15 +28,6 @@ import { formatDate } from '@/utils/format'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { ApplicationStatus, RejectionReason, Timestamp } from '@/types/common'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
-
-const REJECTION_REASON_LABELS: Record<string, string> = {
-  inadequate_housing: 'Moradia inadequada',
-  no_landlord_permission: 'Sem autorização do proprietário',
-  financial_instability: 'Instabilidade financeira',
-  previous_animal_negligence: 'Histórico de negligência com animais',
-  incompatible_lifestyle: 'Estilo de vida incompatível',
-  other: 'Outro',
-}
 
 const HOUSING_LABELS: Record<string, string> = {
   house_open_yard: 'Casa com quintal aberto',
@@ -159,6 +151,13 @@ export function ApplicationDetailPage() {
   function handleOpenContract() {
     if (!app?.contractArchiveFileId) return
     navigate(`/admin/arquivos/${app.contractArchiveFileId}`, {
+      state: { backTo: `${location.pathname}${location.search}` },
+    })
+  }
+
+  function handleOpenFlagArchive() {
+    if (!flagResult?.flagged || !flagResult.archiveFileId) return
+    navigate(`/admin/arquivos/${flagResult.archiveFileId}`, {
       state: { backTo: `${location.pathname}${location.search}` },
     })
   }
@@ -716,17 +715,36 @@ export function ApplicationDetailPage() {
 
         <div className="flex flex-col gap-6 xl:sticky xl:top-24 xl:self-start">
           {flagResult?.flagged && (
-            <div className="rounded-lg border border-warning/30 bg-warning/8 p-4 flex flex-col gap-1.5">
-              <p className="text-sm font-semibold text-warning">
-                Alerta: solicitante com histórico de rejeição
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {flagResult.rejectionCount > 1
-                  ? `Este CPF possui ${flagResult.rejectionCount} rejeições definitivas registradas.`
-                  : 'Este CPF possui 1 rejeição definitiva registrada.'}
-                {flagResult.reason ? ` Último motivo: ${flagResult.reason}.` : ''}
-                {' '}Decida com contexto — o bloqueio automático não é aplicado.
-              </p>
+            <div className="rounded-lg border border-warning/30 bg-warning/8 p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-warning">
+                    Alerta: solicitante com histórico de rejeição
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {flagResult.rejectionCount > 1
+                      ? `Este CPF possui ${flagResult.rejectionCount} rejeições definitivas registradas.`
+                      : 'Este CPF possui 1 rejeição definitiva registrada.'}
+                    {flagResult.reason
+                      ? ` Último motivo: ${getRejectionReasonLabel(flagResult.reason)}.`
+                      : ''}
+                    {' '}Decida com contexto; o bloqueio automático não é aplicado.
+                  </p>
+                </div>
+              </div>
+              {flagResult.archiveFileId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full gap-1.5"
+                  onClick={handleOpenFlagArchive}
+                >
+                  <FileText size={14} />
+                  Abrir PDF da rejeição
+                </Button>
+              )}
             </div>
           )}
 
@@ -741,7 +759,7 @@ export function ApplicationDetailPage() {
                 <div className="rounded-lg border border-danger/20 bg-danger/5 p-4 flex flex-col gap-2">
                   <p className="text-xs font-medium text-danger uppercase tracking-wide">
                     {app.rejectionReason
-                      ? REJECTION_REASON_LABELS[app.rejectionReason]
+                      ? getRejectionReasonLabel(app.rejectionReason)
                       : 'Rejeição definitiva'}
                   </p>
                   {app.rejectionDetails && (

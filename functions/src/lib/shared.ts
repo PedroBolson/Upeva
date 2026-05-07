@@ -18,6 +18,10 @@ import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./crypt
 import { assertAdminRateLimit } from "./rate-limit.util.js";
 import { generatePdf, generateAdoptionContractPdfOfficial, type AddressData, type OfficialContractPdfData } from "./pdf.helper.js";
 import { uploadArchivePdf, getArchiveSignedUrl } from "./storage-archive.helper.js";
+import {
+  VALID_REJECTION_REASONS,
+  type RejectionReason,
+} from "./rejection-reasons.js";
 
 export {
   FieldValue,
@@ -56,23 +60,6 @@ export type ApplicationStatus =
   | "rejected"
   | "withdrawn"
   | "declined";
-
-type RejectionReason =
-  | "inadequate_housing"
-  | "no_landlord_permission"
-  | "financial_instability"
-  | "previous_animal_negligence"
-  | "incompatible_lifestyle"
-  | "other";
-
-const VALID_REJECTION_REASONS = new Set<RejectionReason>([
-  "inadequate_housing",
-  "no_landlord_permission",
-  "financial_instability",
-  "previous_animal_negligence",
-  "incompatible_lifestyle",
-  "other",
-]);
 
 export const REJECTION_DETAILS_MIN_LENGTH = 100;
 export type AnimalStatus = "available" | "under_review" | "adopted" | "archived";

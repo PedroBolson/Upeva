@@ -949,6 +949,9 @@ export const checkRejectionFlag = onCall(
         reason: flag.reason ?? null,
         rejectionCount: flag.rejectionCount ?? 1,
         rejectedAt: flag.rejectedAt ?? null,
+        archiveFileId: typeof flag.archiveFileId === "string" && flag.archiveFileId.trim() ?
+          flag.archiveFileId.trim() :
+          null,
       };
     } catch (err) {
       logOperationError(err, {

@@ -1,4 +1,5 @@
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "pdf-lib";
+import { getRejectionReasonLabel } from "./rejection-reasons.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ export async function generateRejectionPdf(data: RejectionPdfData): Promise<Buff
 
   ctx.y -= SECTION_GAP;
   drawSection(ctx, "Motivo da Rejeição");
-  drawField(ctx, "Motivo principal", data.rejectionReason);
+  drawField(ctx, "Motivo principal", getRejectionReasonLabel(data.rejectionReason));
   drawField(ctx, "Detalhes", data.rejectionDetails);
 
   ctx.y -= SECTION_GAP;

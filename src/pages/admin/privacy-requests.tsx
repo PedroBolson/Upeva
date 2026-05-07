@@ -15,6 +15,7 @@ import {
 import { AdminHeaderOverflow } from '@/features/admin/components/admin-header-overflow'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
+import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
 import {
   useDeletePrivacyApplicationData,
   useDeletePrivacyArchiveFile,
@@ -46,15 +47,6 @@ const ARCHIVE_TYPE_LABELS: Record<string, string> = {
   contract: 'Contrato de adoção',
   rejection: 'Rejeição definitiva',
   archivedAnimal: 'Animal arquivado',
-}
-
-const REJECTION_REASON_LABELS: Record<string, string> = {
-  inadequate_housing: 'Moradia inadequada',
-  no_landlord_permission: 'Sem autorização do proprietário',
-  financial_instability: 'Instabilidade financeira',
-  previous_animal_negligence: 'Histórico de negligência com animais',
-  incompatible_lifestyle: 'Estilo de vida incompatível',
-  other: 'Outro',
 }
 
 function formatDate(value: unknown): string {
@@ -110,7 +102,7 @@ function TargetSummary({ target }: { target: DeleteTarget }) {
       <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
         <p className="font-medium text-foreground">Flag de rejeição</p>
         <p className="text-muted-foreground">
-          {target.item.reason ? REJECTION_REASON_LABELS[target.item.reason] ?? target.item.reason : 'Sem motivo registrado'}
+          {target.item.reason ? getRejectionReasonLabel(target.item.reason) : 'Sem motivo registrado'}
         </p>
       </div>
     )
@@ -615,7 +607,7 @@ export function PrivacyRequestsPage() {
                         {flag.rejectionCount > 1 && <Badge variant="warning">{flag.rejectionCount} rejeições</Badge>}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>{flag.reason ? REJECTION_REASON_LABELS[flag.reason] ?? flag.reason : 'Sem motivo'}</span>
+                        <span>{flag.reason ? getRejectionReasonLabel(flag.reason) : 'Sem motivo'}</span>
                         <span>Registrada em {formatDate(flag.rejectedAt)}</span>
                         {flag.archiveFileId && <span>PDF vinculado</span>}
                       </div>

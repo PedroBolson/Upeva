@@ -166,7 +166,14 @@ export async function getApplicationPII(id: string): Promise<ApplicationPII> {
 
 export type RejectionFlagResult =
   | { flagged: false }
-  | { flagged: true; flagId: string; reason: string | null; rejectionCount: number; rejectedAt: unknown }
+  | {
+      flagged: true
+      flagId: string
+      reason: string | null
+      rejectionCount: number
+      rejectedAt: unknown
+      archiveFileId: string | null
+    }
 
 export async function checkRejectionFlag(applicationId: string): Promise<RejectionFlagResult> {
   const fn = httpsCallable<{ applicationId: string }, RejectionFlagResult>(
@@ -175,14 +182,6 @@ export async function checkRejectionFlag(applicationId: string): Promise<Rejecti
   )
   const result = await fn({ applicationId })
   return result.data
-}
-
-export async function deleteRejectionFlag(flagId: string): Promise<void> {
-  const fn = httpsCallable<{ flagId: string }, { success: true }>(
-    functions,
-    'deleteRejectionFlag',
-  )
-  await fn({ flagId })
 }
 
 export const APPLICATION_ADMIN_PAGE_SIZE = ADMIN_PAGE_SIZE
