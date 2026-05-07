@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
@@ -45,6 +45,11 @@ const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   rejected: 'Rejeitada',
   withdrawn: 'Retirada',
   declined: 'Declinada',
+}
+
+type ApplicationDetailLocationState = {
+  from?: 'animal-detail'
+  animalId?: string
 }
 
 function tsToDate(ts: Timestamp | undefined): string {
@@ -111,6 +116,7 @@ export function ApplicationDetailPage() {
   const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
   const { data: flagResult } = useRejectionFlag(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
+  const locationState = location.state as ApplicationDetailLocationState | null
 
   useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
 
@@ -134,6 +140,9 @@ export function ApplicationDetailPage() {
   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false)
   const [isStatusInfoOpen, setIsStatusInfoOpen] = useState(false)
   const [contractError, setContractError] = useState<string | null>(null)
+  const backLabel = locationState?.from === 'animal-detail' && locationState.animalId
+    ? 'Animal'
+    : 'Candidaturas'
 
   const { mutate: generateContract, isPending: isGeneratingContract } = useMutation({
     mutationFn: () => generateAdoptionContractNow(id!),
@@ -161,6 +170,15 @@ export function ApplicationDetailPage() {
       state: { backTo: `${location.pathname}${location.search}` },
     })
   }
+
+  const handleBack = useCallback(() => {
+    if (locationState?.from === 'animal-detail' && locationState.animalId) {
+      navigate(`/admin/animais/${locationState.animalId}/editar`)
+      return
+    }
+
+    navigate('/admin/candidaturas')
+  }, [locationState, navigate])
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -382,13 +400,13 @@ export function ApplicationDetailPage() {
         variant="ghost"
         size="sm"
         className="shrink-0 gap-1.5"
-        onClick={() => navigate('/admin/candidaturas')}
+        onClick={handleBack}
       >
         <ArrowLeft size={14} />
-        Candidaturas
+        {backLabel}
       </Button>
     ),
-    [navigate],
+    [backLabel, handleBack],
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))

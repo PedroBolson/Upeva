@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { Controller, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,6 +13,7 @@ import { useAnimal } from '@/features/animals/hooks/use-animal'
 import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal, useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
 import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
+import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
@@ -272,6 +273,24 @@ export function AnimalFormPage() {
     )
   }
 
+  const headerActions = useMemo(
+    () => (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="shrink-0 gap-1.5"
+        onClick={() => navigate('/admin/animais')}
+      >
+        <ArrowLeft size={14} />
+        Animais
+      </Button>
+    ),
+    [navigate],
+  )
+
+  useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
+
   if (isEditing && isLoading) return <PageSpinner />
   if (isEditing && (error || !animal)) {
     return (
@@ -374,50 +393,26 @@ export function AnimalFormPage() {
       </ConfirmModal>
 
       {isEditing ? (
-        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center">
-          <div className="flex items-center justify-between gap-3 lg:hidden">
-            <Link
-              to="/admin/animais"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft size={14} />
-              Voltar para Animais
-            </Link>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3 sm:hidden">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Editar {animal?.name}
+            </h1>
             <AnimalStatusBadge status={statusValue} />
           </div>
 
-          <div className="hidden lg:flex">
-            <Link
-              to="/admin/animais"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft size={14} />
-              Voltar para Animais
-            </Link>
-          </div>
-
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground lg:hidden">
+          <h1 className="hidden text-2xl font-semibold tracking-tight text-foreground sm:block">
             Editar {animal?.name}
           </h1>
 
-          <h1 className="hidden text-center text-2xl font-semibold tracking-tight text-foreground lg:block">
-            Editar {animal?.name}
-          </h1>
-
-          <div className="hidden justify-self-end lg:block">
+          <div className="hidden sm:block">
             <AnimalStatusBadge status={statusValue} />
           </div>
         </div>
       ) : (
-        <div>
-          <Link
-            to="/admin/animais"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft size={14} />
-            Voltar para Animais
-          </Link>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Novo animal
+        </h1>
       )}
 
       <form
@@ -738,6 +733,25 @@ export function AnimalFormPage() {
                 { label: 'Detalhes do arquivamento', value: animal.archiveDetails },
               ]}
             />
+          )}
+
+          {isEditing && animal?.status === 'adopted' && animal.adoptedApplicationId && (
+            <Card className="border-border/80 p-5">
+              <div className="flex items-center gap-2">
+                <ClipboardList size={16} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Adoção aprovada</h2>
+              </div>
+              <div className="mt-4">
+                <Link
+                  to={`/admin/candidaturas/${animal.adoptedApplicationId}`}
+                  state={{ from: 'animal-detail', animalId: animal.id }}
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-all duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <ClipboardList size={14} />
+                  Ver candidatura aprovada
+                </Link>
+              </div>
+            </Card>
           )}
 
           {isEditing && animal && animal.adoptionContractArchiveFileId && (
