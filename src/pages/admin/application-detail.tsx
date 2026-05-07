@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
@@ -17,11 +17,12 @@ import { useRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
-import { generateAdoptionContractNow } from '@/features/admin/services/archive.service'
+import { generateAdoptionContractNow, type ArchiveFile, type ArchiveFileType } from '@/features/admin/services/archive.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
 import { APPLICATION_STATUS_OPTIONS } from '@/features/adoption/config/application-status-options'
 import { formatDate } from '@/utils/format'
@@ -47,9 +48,27 @@ const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   declined: 'Declinada',
 }
 
+const ARCHIVE_FILE_LINK_LABELS: Record<ArchiveFileType, string> = {
+  contract: 'Ver termo de adoção',
+  rejection: 'Ver PDF de rejeição',
+  archivedAnimal: 'Ver documento de arquivamento',
+}
+
 type ApplicationDetailLocationState = {
   from?: 'animal-detail'
   animalId?: string
+}
+
+type ArchiveLinkItem = {
+  id: string
+  label: string
+}
+
+function toArchiveLinkItem(file: ArchiveFile): ArchiveLinkItem {
+  return {
+    id: file.id,
+    label: ARCHIVE_FILE_LINK_LABELS[file.type] ?? 'Ver arquivo relacionado',
+  }
 }
 
 function tsToDate(ts: Timestamp | undefined): string {
@@ -116,6 +135,7 @@ export function ApplicationDetailPage() {
   const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
   const { data: flagResult } = useRejectionFlag(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
+  const { data: relatedArchiveFiles = [] } = useRelatedArchiveFiles({ applicationId: app?.id })
   const locationState = location.state as ApplicationDetailLocationState | null
 
   useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
@@ -179,6 +199,21 @@ export function ApplicationDetailPage() {
 
     navigate('/admin/candidaturas')
   }, [locationState, navigate])
+
+  const relatedArchiveLinkItems = useMemo(() => {
+    const primaryArchiveIds = new Set<string>()
+    if (app?.contractArchiveFileId) primaryArchiveIds.add(app.contractArchiveFileId)
+    if (flagResult?.flagged && flagResult.archiveFileId) primaryArchiveIds.add(flagResult.archiveFileId)
+
+    const items = new Map<string, ArchiveLinkItem>()
+    for (const file of relatedArchiveFiles) {
+      if (!primaryArchiveIds.has(file.id)) {
+        items.set(file.id, toArchiveLinkItem(file))
+      }
+    }
+
+    return Array.from(items.values())
+  }, [app?.contractArchiveFileId, flagResult, relatedArchiveFiles])
 
   const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
@@ -913,7 +948,7 @@ export function ApplicationDetailPage() {
             </div>
           </Card>
 
-          {app.status === 'approved' && (
+          {(app.status === 'approved' || app.contractArchiveFileId) && (
             <Card className="border-border/80 p-5">
               <div className="flex items-center gap-2">
                 <FileText size={16} className="text-primary" />
@@ -962,6 +997,28 @@ export function ApplicationDetailPage() {
                     Se o termo foi removido manualmente, é possível gerar um novo termo enquanto a candidatura permanecer aprovada.
                   </p>
                 )}
+              </div>
+            </Card>
+          )}
+
+          {relatedArchiveLinkItems.length > 0 && (
+            <Card className="border-border/80 p-5">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Documentos relacionados</h2>
+              </div>
+              <div className="mt-4 flex flex-col gap-3">
+                {relatedArchiveLinkItems.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/admin/arquivos/${item.id}`}
+                    state={{ backTo: `${location.pathname}${location.search}` }}
+                    className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-all duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <FileText size={14} />
+                    {item.label}
+                  </Link>
+                ))}
               </div>
             </Card>
           )}

@@ -58,7 +58,7 @@ export function ArchiveFilesPage() {
   const { data: filterOptions } = useArchiveFilterOptions()
 
   const { mutate: deleteArchive, isPending: isDeletingArchive } = useDeleteArchiveFile()
-  const isAdmin = userProfile?.role === 'admin'
+  const canDeleteArchiveFiles = userProfile?.role === 'admin'
   const metadataYears = typeFilter ? filterOptions?.yearsByType[typeFilter] : filterOptions?.years
   const hasMetadataYears = Boolean(metadataYears?.length)
   const selectedYearHasData =
@@ -198,6 +198,12 @@ export function ArchiveFilesPage() {
 
   function handleDeleteArchiveFile() {
     if (!fileToDelete) return
+    if (!canDeleteArchiveFiles) {
+      setDeleteError('Você não tem permissão para excluir arquivos arquivados.')
+      setFileToDelete(null)
+      return
+    }
+
     setDeleteError(null)
     deleteArchive(fileToDelete.id, {
       onSuccess: () => {
@@ -289,7 +295,7 @@ export function ArchiveFilesPage() {
                     <ExternalLink size={14} />
                     Abrir PDF
                   </Button>
-                  {isAdmin && (
+                  {canDeleteArchiveFiles && (
                     <Button
                       variant="ghost"
                       size="sm"

@@ -4,12 +4,14 @@ import type { InfiniteData } from '@tanstack/react-query'
 import { queryClient } from '@/lib/query-client'
 import {
   listArchiveFilesPage,
+  listRelatedArchiveFiles,
   getArchiveFilterOptions,
   recalibrateArchiveFilterOptions,
   getArchiveFileUrl,
   deleteArchiveFile,
   type ArchiveFilesFilter,
   type ArchiveFilesPageResult,
+  type RelatedArchiveFilesFilter,
 } from '../services/archive.service'
 import type { DocumentSnapshot } from 'firebase/firestore'
 
@@ -56,6 +58,18 @@ export function useArchiveFilterOptions() {
       return options ?? recalibrateArchiveFilterOptions()
     },
     staleTime: 1000 * 60 * 10,
+  })
+}
+
+export function useRelatedArchiveFiles(filter: RelatedArchiveFilesFilter = {}) {
+  const applicationId = filter.applicationId?.trim() || null
+  const animalId = filter.animalId?.trim() || null
+
+  return useQuery({
+    queryKey: ['archive-files', 'related', applicationId, animalId],
+    queryFn: () => listRelatedArchiveFiles({ applicationId, animalId }),
+    enabled: Boolean(applicationId || animalId),
+    staleTime: 1000 * 60 * 2,
   })
 }
 

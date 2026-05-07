@@ -14,6 +14,7 @@ import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal, us
 import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
+import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
@@ -22,6 +23,7 @@ import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS, STATUS_LABELS } from '@/featur
 import type { ArchiveReason } from '@/types/common'
 import { cn } from '@/utils/cn'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
+import type { ArchiveFile, ArchiveFileType } from '@/features/admin/services/archive.service'
 
 const SPECIES_OPTIONS = [
   { value: 'dog', label: 'Cachorro' },
@@ -49,6 +51,24 @@ const ARCHIVE_REASON_LABELS: Record<ArchiveReason, string> = {
 const ADOPTION_REVERSAL_HELPER =
   'Para reverter uma adoção, altere o status da candidatura aprovada vinculada.'
 
+const ARCHIVE_FILE_LINK_LABELS: Record<ArchiveFileType, string> = {
+  contract: 'Ver termo de adoção',
+  rejection: 'Ver PDF de rejeição',
+  archivedAnimal: 'Ver documento de arquivamento',
+}
+
+type ArchiveLinkItem = {
+  id: string
+  label: string
+}
+
+function toArchiveLinkItem(file: ArchiveFile): ArchiveLinkItem {
+  return {
+    id: file.id,
+    label: ARCHIVE_FILE_LINK_LABELS[file.type] ?? 'Ver arquivo relacionado',
+  }
+}
+
 export function AnimalFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -62,6 +82,7 @@ export function AnimalFormPage() {
   const { mutateAsync: updateAnimalStatus } = useUpdateAnimalStatus()
   const { mutateAsync: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
   const { mutate: archiveAnimal, isPending: isArchiving } = useArchiveAnimal()
+  const { data: relatedArchiveFiles = [] } = useRelatedArchiveFiles({ animalId: animal?.id })
 
   useDocumentTitle(
     buildAdminTitle(
@@ -290,6 +311,23 @@ export function AnimalFormPage() {
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
+
+  const archiveLinkItems = useMemo(() => {
+    const items = new Map<string, ArchiveLinkItem>()
+
+    for (const file of relatedArchiveFiles) {
+      items.set(file.id, toArchiveLinkItem(file))
+    }
+
+    if (animal?.adoptionContractArchiveFileId && !items.has(animal.adoptionContractArchiveFileId)) {
+      items.set(animal.adoptionContractArchiveFileId, {
+        id: animal.adoptionContractArchiveFileId,
+        label: 'Ver termo de adoção',
+      })
+    }
+
+    return Array.from(items.values())
+  }, [animal?.adoptionContractArchiveFileId, relatedArchiveFiles])
 
   if (isEditing && isLoading) return <PageSpinner />
   if (isEditing && (error || !animal)) {
@@ -754,28 +792,26 @@ export function AnimalFormPage() {
             </Card>
           )}
 
-          {isEditing && animal && animal.adoptionContractArchiveFileId && (
+          {isEditing && animal && archiveLinkItems.length > 0 && (
             <Card className="border-border/80 p-5">
               <div className="flex items-center gap-2">
                 <FileText size={16} className="text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">Termo de adoção</h2>
+                <h2 className="text-sm font-semibold text-foreground">Documentos relacionados</h2>
               </div>
               <div className="mt-4 flex flex-col gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full gap-1.5"
-                  onClick={() => {
-                    navigate(`/admin/arquivos/${animal.adoptionContractArchiveFileId}`, {
-                      state: { backTo: `${location.pathname}${location.search}` },
-                    })
-                  }}
-                >
-                  <FileText size={14} />
-                  Abrir termo
-                </Button>
+                {archiveLinkItems.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/admin/arquivos/${item.id}`}
+                    state={{ backTo: `${location.pathname}${location.search}` }}
+                    className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-all duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <FileText size={14} />
+                    {item.label}
+                  </Link>
+                ))}
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  O registro operacional poderá ser removido após o prazo de retenção. O termo permanecerá arquivado com acesso restrito.
+                  Os arquivos usam a rota interna de arquivos e são exibidos com acesso temporário.
                 </p>
               </div>
             </Card>

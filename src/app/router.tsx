@@ -76,8 +76,22 @@ const router = createBrowserRouter([
         ),
       },
       { path: '/admin/destaques', element: <FeaturedAnimalsPage /> },
-      { path: '/admin/arquivos', element: <ArchiveFilesPage /> },
-      { path: '/admin/arquivos/:archiveFileId', element: <ArchiveDocumentViewerPage /> },
+      {
+        path: '/admin/arquivos',
+        element: (
+          <ProtectedRoute allowedRoles={STAFF_ROLES}>
+            <ArchiveFilesPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/arquivos/:archiveFileId',
+        element: (
+          <ProtectedRoute allowedRoles={STAFF_ROLES}>
+            <ArchiveDocumentViewerPage />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: '/admin/privacidade',
         element: (

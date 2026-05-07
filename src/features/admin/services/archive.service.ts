@@ -40,6 +40,11 @@ export interface ArchiveFilesFilter {
   year?: number | null
 }
 
+export interface RelatedArchiveFilesFilter {
+  applicationId?: string | null
+  animalId?: string | null
+}
+
 export interface ArchiveFilterOptions {
   years: number[]
   yearsByType: Record<ArchiveFileType, number[]>
@@ -77,6 +82,11 @@ function docToArchiveFile(id: string, data: Record<string, unknown>): ArchiveFil
   }
 }
 
+function archiveCreatedAtMillis(file: ArchiveFile): number {
+  const ts = file.createdAt as { seconds?: number } | null
+  return ts?.seconds ? ts.seconds * 1000 : 0
+}
+
 export async function listArchiveFilesPage(
   filter: ArchiveFilesFilter = {},
   cursor: DocumentSnapshot | null = null,
@@ -99,6 +109,39 @@ export async function listArchiveFilesPage(
     lastDoc: docs[docs.length - 1] ?? null,
     hasMore: docs.length === pageSize,
   }
+}
+
+async function listArchiveFilesByField(
+  field: 'applicationId' | 'animalId',
+  value: string,
+): Promise<ArchiveFile[]> {
+  const snap = await getDocs(query(
+    collection(db, 'archiveFiles'),
+    where(field, '==', value),
+    limit(25),
+  ))
+  return snap.docs.map((d) => docToArchiveFile(d.id, d.data()))
+}
+
+export async function listRelatedArchiveFiles(
+  filter: RelatedArchiveFilesFilter,
+): Promise<ArchiveFile[]> {
+  const queries: Array<Promise<ArchiveFile[]>> = []
+  const applicationId = filter.applicationId?.trim()
+  const animalId = filter.animalId?.trim()
+
+  if (applicationId) queries.push(listArchiveFilesByField('applicationId', applicationId))
+  if (animalId) queries.push(listArchiveFilesByField('animalId', animalId))
+  if (queries.length === 0) return []
+
+  const files = (await Promise.all(queries)).flat()
+  const deduped = new Map<string, ArchiveFile>()
+  for (const file of files) {
+    deduped.set(file.id, file)
+  }
+
+  return Array.from(deduped.values())
+    .sort((a, b) => archiveCreatedAtMillis(b) - archiveCreatedAtMillis(a))
 }
 
 export async function getArchiveFilterOptions(): Promise<ArchiveFilterOptions | null> {
