@@ -280,18 +280,41 @@ export function HeroVideo() {
         className="relative z-10 mx-auto max-w-6xl w-full px-4 sm:px-6 lg:px-8
                    pt-20 sm:pt-[10vh] md:pt-[11vh] lg:pt-[12vh] pb-16"
       >
-        <div className="max-w-130">
+        <div className="max-w-[760px]">
 
           <h1
             className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight hero-animate-h1"
             style={{ color: '#1c1410' }}
           >
-            <span className="lg:whitespace-nowrap">
-              Todo animal merece{' '}
-              <span className="text-primary">um lar</span>
+            <span className="block sm:whitespace-nowrap">Todo animal merece</span>
+            <span className="block sm:whitespace-nowrap">
+              <span className="text-[#f59e0b]">
+                UM{' '}
+                <span className="inline-flex items-baseline whitespace-nowrap align-baseline tracking-tight">
+                  <span className="leading-none">L</span>
+                  <span
+                    className="relative mx-[0.02em] inline-block h-[0.76em] w-[0.72em] translate-y-[0.055em] overflow-hidden align-baseline"
+                  >
+                    <img
+                      src="/hero/paw.png"
+                      alt="A"
+                      width="1536"
+                      height="1024"
+                      loading="eager"
+                      decoding="async"
+                      className="block max-w-none select-none"
+                      style={{
+                        height: '1.13em',
+                        width: 'auto',
+                        transform: 'translate(-0.50em, -0.16em)',
+                      }}
+                    />
+                  </span>
+                  <span className="leading-none">R</span>
+                </span>
+              </span>
+              {' '}com amor
             </span>
-            <br className="hidden lg:block" />
-            {' '}com amor
           </h1>
 
           <p
@@ -314,12 +337,7 @@ export function HeroVideo() {
               <Button
                 variant="outline"
                 size="lg"
-                style={{
-                  borderColor: '#c9a882',
-                  color: '#5c3d1e',
-                  backgroundColor: 'transparent',
-                }}
-                className="hover:opacity-80 transition-opacity"
+                className="border border-primary/35 bg-white/80 text-foreground shadow-sm backdrop-blur-sm hover:!border-primary/35 hover:!bg-white/80 hover:!text-foreground hover:opacity-90 active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-primary/45 dark:bg-card/80 dark:text-foreground dark:hover:!border-primary/45 dark:hover:!bg-card/80 dark:hover:!text-foreground"
               >
                 Conheça a Upeva
               </Button>

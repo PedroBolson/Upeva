@@ -52,27 +52,27 @@ body {
 
 /* ─── Dark mode ──────────────────────────────────────────── */
 .dark {
-  --background:           oklch(0.14 0.01 50);
-  --foreground:           oklch(0.93 0.01 75);
+  --background:           oklch(0.18 0.018 55);
+  --foreground:           oklch(0.94 0.012 75);
 
-  --card:                 oklch(0.18 0.01 50);
-  --card-foreground:      oklch(0.93 0.01 75);
+  --card:                 oklch(0.22 0.018 55);
+  --card-foreground:      oklch(0.94 0.012 75);
 
-  --primary:              oklch(0.68 0.18 55);
-  --primary-foreground:   oklch(1 0 0);
+  --primary:              oklch(0.72 0.18 55);
+  --primary-foreground:   oklch(0.14 0.015 55);
 
-  --secondary:            oklch(0.55 0.05 230);
+  --secondary:            oklch(0.58 0.05 230);
   --secondary-foreground: oklch(1 0 0);
 
-  --muted:                oklch(0.22 0.01 50);
-  --muted-foreground:     oklch(0.65 0.01 60);
+  --muted:                oklch(0.27 0.018 55);
+  --muted-foreground:     oklch(0.72 0.015 70);
 
-  --accent:               oklch(0.24 0.05 55);
-  --accent-foreground:    oklch(0.82 0.10 55);
+  --accent:               oklch(0.30 0.055 55);
+  --accent-foreground:    oklch(0.86 0.11 55);
 
-  --border:               oklch(0.26 0.01 50);
-  --input:                oklch(0.26 0.01 50);
-  --ring:                 oklch(0.68 0.18 55);
+  --border:               oklch(0.33 0.018 55);
+  --input:                oklch(0.33 0.018 55);
+  --ring:                 oklch(0.72 0.18 55);
 
   --success:              oklch(0.65 0.15 145);
   --success-foreground:   oklch(1 0 0);
@@ -85,8 +85,8 @@ body {
 
   --system-bar-background: var(--background);
   --system-bar-surface:    var(--card);
-  --system-bar-public-hero:#352b22;
-  --system-bar-launch:    #352b22;
+  --system-bar-public-hero:oklch(0.24 0.035 55);
+  --system-bar-launch:    oklch(0.24 0.035 55);
 }
 
 /* ─── Token map → Tailwind utilities ─────────────────────── */
