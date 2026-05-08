@@ -5,7 +5,7 @@ import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 import { APPROVED_RETENTION_DAYS, ARCHIVED_ANIMAL_RETENTION_DAYS } from '@/types/common'
 
-const DPO_EMAIL = 'upeva.adocoes@gmail.com'
+const DPO_EMAIL = 'cachorros.upeva@gmail.com'
 const DPO_RESPONSE_DAYS = 15
 
 function Section({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {

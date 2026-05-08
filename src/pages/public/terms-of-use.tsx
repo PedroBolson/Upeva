@@ -4,7 +4,7 @@ import { FileText, AlertCircle, ShieldCheck, Scale, Mail, type LucideIcon } from
 import { fadeUp, stagger } from '@/utils/animations'
 import { buildPublicTitle, usePageSeo } from '@/utils/page-title'
 
-const DPO_EMAIL = 'upeva.adocoes@gmail.com'
+const DPO_EMAIL = 'cachorros.upeva@gmail.com'
 
 function Section({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
