@@ -11,6 +11,7 @@ import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compactio
 import { useCounts } from '@/features/admin/hooks/use-counts'
 import { useApplications } from '@/features/adoption/hooks/use-applications'
 import { APPLICATION_STATUS_TABS } from '@/features/adoption/config/application-status-options'
+import { getApplicationAnimalLabel, hasApplicationAnimals } from '@/features/adoption/utils/application-animals'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
@@ -19,11 +20,11 @@ import type { ApplicationStatus, Timestamp } from '@/types/common'
 import { cn } from '@/utils/cn'
 
 function getApplicationSubject(application: AdoptionApplication) {
-  return application.animalId ? application.animalName ?? 'Animal vinculado' : 'Interesse geral'
+  return hasApplicationAnimals(application) ? getApplicationAnimalLabel(application) : 'Interesse geral'
 }
 
 function getApplicationSubjectMeta(application: AdoptionApplication) {
-  return application.animalId
+  return hasApplicationAnimals(application)
     ? SPECIES_LABELS[application.species]
     : `Adoção geral · ${SPECIES_LABELS[application.species]}`
 }
@@ -59,7 +60,7 @@ export function ApplicationsPage() {
     const seen = new Set<string>()
     const options: { value: string; label: string }[] = []
     for (const a of applications) {
-      const name = a.animalName
+      const name = getApplicationSubject(a)
       if (name && !seen.has(name)) {
         seen.add(name)
         options.push({ value: name, label: name })
@@ -70,13 +71,13 @@ export function ApplicationsPage() {
 
   const filteredApplications = useMemo(() => {
     if (!animalFilter) return applications
-    return applications.filter((a) => a.animalName === animalFilter)
+    return applications.filter((a) => getApplicationSubject(a) === animalFilter)
   }, [applications, animalFilter])
 
   const sortKeys: Record<string, (a: AdoptionApplication) => string | number> = {
     applicant: (a) => a.fullName.toLowerCase(),
     contact: (a) => a.email.toLowerCase(),
-    animal: (a) => (a.animalName ?? '').toLowerCase(),
+    animal: (a) => getApplicationSubject(a).toLowerCase(),
     queue: (a) => {
       const active = a.status === 'pending' || a.status === 'in_review'
       return active ? (a.queuePosition ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER

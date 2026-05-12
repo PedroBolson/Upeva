@@ -15,6 +15,7 @@ import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useHeaderCompaction } from '@/features/admin/hooks/use-header-compaction'
 import { useAdminAnimals } from '@/features/animals/hooks/use-admin-animals'
 import { useDeleteAnimal, useUpdateAnimalStatus, useArchiveAnimal } from '@/features/animals/hooks/use-animal-mutations'
+import { useAuthContext } from '@/features/auth/contexts/auth.context'
 import { SPECIES_LABELS, SEX_LABELS, SIZE_LABELS, STATUS_LABELS } from '@/features/animals/types/animal.types'
 import { ANIMAL_STATUS_OPTIONS } from '@/features/animals/config/animal-status-options'
 import type { Animal } from '@/features/animals/types/animal.types'
@@ -55,6 +56,8 @@ export function AdminAnimalsPage() {
   const [archiveError, setArchiveError] = useState<string | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
+  const { userProfile } = useAuthContext()
+  const canDeleteAnimals = userProfile?.role === 'admin'
 
   const { animals: allAnimals, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
     useAdminAnimals(statusFilter || null)
@@ -319,20 +322,22 @@ export function AdminAnimalsPage() {
               </p>
             )}
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 text-muted-foreground hover:text-danger"
-            aria-label={`Excluir ${a.name}`}
-            onClick={() => {
-              setDeleteError(null)
-              setDeleteReason('')
-              setAnimalToDelete(a)
-            }}
-          >
-            <Trash2 size={16} />
-          </Button>
+          {canDeleteAnimals && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-danger"
+              aria-label={`Excluir ${a.name}`}
+              onClick={() => {
+                setDeleteError(null)
+                setDeleteReason('')
+                setAnimalToDelete(a)
+              }}
+            >
+              <Trash2 size={16} />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -426,10 +431,12 @@ export function AdminAnimalsPage() {
                 animal={animal}
                 onEdit={() => navigate(`/admin/animais/${animal.id}/editar`)}
 	                onStatusChange={(status) => handleStatusChange(animal, status)}
-                onDelete={() => {
-                  setDeleteError(null)
-                  setAnimalToDelete(animal)
-                }}
+                onDelete={canDeleteAnimals
+                  ? () => {
+                    setDeleteError(null)
+                    setAnimalToDelete(animal)
+                  }
+                  : undefined}
               />
             )}
             emptyMessage="Nenhum animal encontrado com esses filtros."
@@ -473,7 +480,7 @@ function AnimalMobileCard({
   animal: Animal
   onEdit: () => void
   onStatusChange: (status: AnimalStatus) => void
-  onDelete: () => void
+  onDelete?: () => void
 }) {
   return (
     <div
@@ -547,18 +554,20 @@ function AnimalMobileCard({
             Editar animal
           </Button>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-danger hover:bg-danger/10 hover:text-danger"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-          >
-            <Trash2 size={14} />
-            Excluir animal
-          </Button>
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-danger hover:bg-danger/10 hover:text-danger"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete()
+              }}
+            >
+              <Trash2 size={14} />
+              Excluir animal
+            </Button>
+          )}
         </div>
       </Card>
     </div>

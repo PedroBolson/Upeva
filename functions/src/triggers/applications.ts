@@ -6,6 +6,7 @@ import {
   FieldValue,
   INACTIVE_APPLICATION_STATUSES,
   markEventProcessed,
+  normalizeApplicationAnimalIds,
   onDocumentWritten,
   recalibrateAnimalQueue,
   recomputeAnimalState,
@@ -21,10 +22,10 @@ export const onApplicationStatusChanged = onDocumentWritten(
     if (!processed) return;
 
     const before = event.data?.before.data() as
-      | { status: ApplicationStatus; animalId?: string }
+      | { status: ApplicationStatus; animalId?: string; animalIds?: string[] }
       | undefined;
     const after = event.data?.after.data() as
-      | { status: ApplicationStatus; animalId?: string }
+      | { status: ApplicationStatus; animalId?: string; animalIds?: string[] }
       | undefined;
 
     const countsRef = db.collection("metadata").doc("counts");
@@ -58,17 +59,20 @@ export const onApplicationStatusChanged = onDocumentWritten(
     // ── Sync animal status and adoption linkage ──────────────────────────────
     const affectedAnimalIds = new Set<string>();
 
-    if (before?.animalId) affectedAnimalIds.add(before.animalId);
-    if (after?.animalId) affectedAnimalIds.add(after.animalId);
+    for (const animalId of normalizeApplicationAnimalIds(before ?? {})) affectedAnimalIds.add(animalId);
+    for (const animalId of normalizeApplicationAnimalIds(after ?? {})) affectedAnimalIds.add(animalId);
 
     // createApplication assigns queuePosition and activeApplicationCount in the
     // same transaction as the application create. Recomputing here can race with
     // another create trigger and write an older count after a newer transaction.
-    if (!before && after?.animalId && ACTIVE_APPLICATION_STATUSES.includes(after.status)) {
+    const afterAnimalIds = normalizeApplicationAnimalIds(after ?? {});
+    const beforeAnimalIds = normalizeApplicationAnimalIds(before ?? {});
+
+    if (!before && after && afterAnimalIds.length > 0 && ACTIVE_APPLICATION_STATUSES.includes(after.status)) {
       return;
     }
 
-    const animalLinkChanged = before?.animalId !== after?.animalId;
+    const animalLinkChanged = beforeAnimalIds.join("\u0000") !== afterAnimalIds.join("\u0000");
     const statusChanged = before?.status !== after?.status;
     const isLeaving =
       before?.status !== undefined &&
@@ -81,11 +85,11 @@ export const onApplicationStatusChanged = onDocumentWritten(
       INACTIVE_APPLICATION_STATUSES.includes(before.status) &&
       ACTIVE_APPLICATION_STATUSES.includes(after.status);
 
-    if (!after && before?.animalId) {
-      await recomputeAnimalState(before.animalId);
+    if (!after && before && beforeAnimalIds.length > 0) {
+      for (const animalId of beforeAnimalIds) await recomputeAnimalState(animalId);
       // Recalibrate queue when an active application is deleted (e.g. declined)
       if (ACTIVE_APPLICATION_STATUSES.includes(before.status)) {
-        await recalibrateAnimalQueue(before.animalId);
+        for (const animalId of beforeAnimalIds) await recalibrateAnimalQueue(animalId);
       }
       return;
     }
@@ -93,9 +97,9 @@ export const onApplicationStatusChanged = onDocumentWritten(
     if (!after) return;
     if (!animalLinkChanged && !statusChanged) return;
 
-    if (isReentering && after.animalId) {
+    if (isReentering && afterAnimalIds.length > 0) {
       if (animalLinkChanged) return;
-      await appendToAnimalQueue(after.animalId, event.params.appId);
+      for (const animalId of afterAnimalIds) await appendToAnimalQueue(animalId, event.params.appId);
       return;
     }
 
@@ -105,8 +109,8 @@ export const onApplicationStatusChanged = onDocumentWritten(
 
     // ── Recalibrate queue positions when a candidate leaves the active pool ──
     // Re-entry is handled above by appendToAnimalQueue's animal transaction.
-    if (isLeaving && after.animalId) {
-      await recalibrateAnimalQueue(after.animalId);
+    if (isLeaving && afterAnimalIds.length > 0) {
+      for (const animalId of afterAnimalIds) await recalibrateAnimalQueue(animalId);
     }
   }
 );

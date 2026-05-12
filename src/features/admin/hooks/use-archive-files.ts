@@ -64,11 +64,12 @@ export function useArchiveFilterOptions() {
 export function useRelatedArchiveFiles(filter: RelatedArchiveFilesFilter = {}) {
   const applicationId = filter.applicationId?.trim() || null
   const animalId = filter.animalId?.trim() || null
+  const animalIds = filter.animalIds?.map((id) => id.trim()).filter(Boolean) ?? []
 
   return useQuery({
-    queryKey: ['archive-files', 'related', applicationId, animalId],
-    queryFn: () => listRelatedArchiveFiles({ applicationId, animalId }),
-    enabled: Boolean(applicationId || animalId),
+    queryKey: ['archive-files', 'related', applicationId, animalId, animalIds.join('|')],
+    queryFn: () => listRelatedArchiveFiles({ applicationId, animalId, animalIds }),
+    enabled: Boolean(applicationId || animalId || animalIds.length > 0),
     staleTime: 1000 * 60 * 2,
   })
 }

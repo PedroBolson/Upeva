@@ -10,6 +10,7 @@ import {
   logOperationError,
   logOperationStart,
   logOperationSuccess,
+  normalizeApplicationAnimalIds,
   normalizeCpfForPrivacy,
   onSchedule,
   piiEncryptionKey,
@@ -47,7 +48,7 @@ export async function runArchiveAndCleanup(): Promise<void> {
 
     for (const docSnap of approvedSnap.docs) {
       const data = docSnap.data() as Record<string, unknown>;
-      const animalId = data.animalId as string | undefined;
+      const animalIds = normalizeApplicationAnimalIds(data);
 
       let contractArchiveFileId = data.contractArchiveFileId as string | undefined;
 
@@ -68,10 +69,12 @@ export async function runArchiveAndCleanup(): Promise<void> {
       // Gerar contrato se ainda não existir (fallback)
       if (!contractArchiveFileId) {
         try {
-          const animalSnap = animalId ?
-            await db.collection("animals").doc(animalId).get() :
-            null;
-          const animalData = (animalSnap?.exists ? animalSnap.data() : {}) as AnimalRecord;
+          const animalSnaps = animalIds.length > 0 ?
+            await db.getAll(...animalIds.map((id) => db.collection("animals").doc(id))) :
+            [];
+          const animalData = animalSnaps
+            .filter((snap) => snap.exists)
+            .map((snap) => ({ id: snap.id, data: snap.data() as AnimalRecord }));
           const { archiveFileId } = await generateAndStoreAdoptionContract(
             docSnap.id,
             data,
@@ -84,10 +87,14 @@ export async function runArchiveAndCleanup(): Promise<void> {
             contractGeneratedAt: FieldValue.serverTimestamp(),
             contractGenerationStatus: "stored",
           });
-          if (animalId && animalSnap?.exists) {
-            await db.collection("animals").doc(animalId).update({
-              adoptionContractArchiveFileId: archiveFileId,
-            });
+          if (animalIds.length > 0) {
+            const batch = db.batch();
+            for (const id of animalIds) {
+              batch.update(db.collection("animals").doc(id), {
+                adoptionContractArchiveFileId: archiveFileId,
+              });
+            }
+            await batch.commit();
           }
         } catch (err) {
           logOperationError(err, {
@@ -101,12 +108,14 @@ export async function runArchiveAndCleanup(): Promise<void> {
       }
 
       // Contrato existe — pode deletar a candidatura e o animal
-      if (animalId) {
-        const animalSnap = await db.collection("animals").doc(animalId).get();
-        if (animalSnap.exists) {
-          const animalData = animalSnap.data() as Record<string, unknown>;
-          await deleteStorageFilesFromUrls(animalData.photos);
-          await animalSnap.ref.delete();
+      if (animalIds.length > 0) {
+        const animalSnaps = await db.getAll(...animalIds.map((id) => db.collection("animals").doc(id)));
+        for (const animalSnap of animalSnaps) {
+          if (animalSnap.exists) {
+            const animalData = animalSnap.data() as Record<string, unknown>;
+            await deleteStorageFilesFromUrls(animalData.photos);
+            await animalSnap.ref.delete();
+          }
         }
       }
       await docSnap.ref.delete();
@@ -135,13 +144,21 @@ export async function runArchiveAndCleanup(): Promise<void> {
       const rejectedAt = data.reviewedAt instanceof Timestamp ?
         data.reviewedAt.toDate() :
         (data.updatedAt as Timestamp).toDate();
-      const fileName = `rejeicao_definitiva_${slugify((data.animalName as string) || "candidatura")}_${rejectedAt.toISOString().split("T")[0]}_${docSnap.id.slice(0, 6)}.pdf`;
+      const rejectedAnimalNames = Array.isArray(data.animalNames) ?
+        data.animalNames.filter((name): name is string =>
+          typeof name === "string" && name.trim().length > 0
+        ) :
+        [];
+      const rejectedAnimalName = rejectedAnimalNames.length > 0 ?
+        rejectedAnimalNames.join(" + ") :
+        (data.animalName as string | undefined);
+      const fileName = `rejeicao_definitiva_${slugify(rejectedAnimalName || "candidatura")}_${rejectedAt.toISOString().split("T")[0]}_${docSnap.id.slice(0, 6)}.pdf`;
       const pdfBuffer = await generatePdf("rejection", {
         applicationId: docSnap.id,
         fullName: data.fullName as string,
         email: data.email as string,
         cpf: pii.cpf,
-        animalName: data.animalName as string | undefined,
+        animalName: rejectedAnimalName,
         species: (data.species as string) ?? "dog",
         rejectionReason: data.rejectionReason as string,
         rejectionDetails: data.rejectionDetails as string,
@@ -165,8 +182,10 @@ export async function runArchiveAndCleanup(): Promise<void> {
           sizeBytes,
           year,
           applicationId: docSnap.id,
-          animalId: (data.animalId as string | undefined) ?? null,
+          animalId: normalizeApplicationAnimalIds(data)[0] ?? null,
+          animalIds: normalizeApplicationAnimalIds(data),
           animalName: (data.animalName as string | undefined) ?? null,
+          animalNames: Array.isArray(data.animalNames) ? data.animalNames : [],
           species: (data.species as string | undefined) ?? null,
           reviewerLabel: (data.reviewedByLabel as string | undefined) ?? null,
           createdAt: FieldValue.serverTimestamp(),

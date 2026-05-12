@@ -13,6 +13,7 @@ import {
   logOperationStart,
   logOperationSuccess,
   logPermissionDenied,
+  normalizeApplicationAnimalIds,
   onCall,
   piiEncryptionKey,
   rebuildArchiveFilterMetadata,
@@ -220,21 +221,23 @@ export const generateAdoptionContractNow = onCall(
         }
       }
 
-      const animalId = appData.animalId as string | undefined;
-      if (!animalId) {
+      const animalIds = normalizeApplicationAnimalIds(appData);
+      if (animalIds.length === 0) {
         throw new HttpsError("failed-precondition", "Candidatura aprovada sem animal vinculado.");
       }
 
-      const animalSnap = await db.collection("animals").doc(animalId).get();
-      if (!animalSnap.exists) {
+      const animalSnaps = await db.getAll(...animalIds.map((animalId) => db.collection("animals").doc(animalId)));
+      const animalSnapshots = animalSnaps
+        .filter((snap) => snap.exists)
+        .map((snap) => ({ id: snap.id, data: snap.data() as AnimalRecord }));
+      if (animalSnapshots.length === 0) {
         throw new HttpsError("not-found", "Animal vinculado não encontrado.");
       }
-      const animalData = animalSnap.data() as AnimalRecord;
 
       const { archiveFileId } = await generateAndStoreAdoptionContract(
         targetId,
         appData,
-        animalData,
+        animalSnapshots,
         actorLabel
       );
 
@@ -244,9 +247,11 @@ export const generateAdoptionContractNow = onCall(
         contractGeneratedAt: FieldValue.serverTimestamp(),
         contractGenerationStatus: "stored",
       });
-      contractBatch.update(db.collection("animals").doc(animalId), {
-        adoptionContractArchiveFileId: archiveFileId,
-      });
+      for (const animalId of animalIds) {
+        contractBatch.update(db.collection("animals").doc(animalId), {
+          adoptionContractArchiveFileId: archiveFileId,
+        });
+      }
       await contractBatch.commit();
 
       logOperationSuccess({

@@ -271,7 +271,7 @@ export function ArchiveFilesPage() {
                 <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-foreground truncate">
-                      {file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
+                      {file.animalNames?.length ? file.animalNames.join(' + ') : file.animalName ?? TYPE_LABELS[file.type] ?? file.type}
                     </span>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground shrink-0">
                       {TYPE_LABELS[file.type] ?? file.type}

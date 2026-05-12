@@ -15,6 +15,7 @@ import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
+import { useAuthContext } from '@/features/auth/contexts/auth.context'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { uploadAnimalPhoto, deleteAnimalPhoto } from '@/features/animals/services/animal-storage.service'
 import { animalSchema, type AnimalFormData } from '@/features/animals/schemas/animal.schema'
@@ -75,6 +76,8 @@ export function AnimalFormPage() {
   const location = useLocation()
   const isEditing = !!id
   const { toast } = useToast()
+  const { userProfile } = useAuthContext()
+  const canDeleteAnimals = userProfile?.role === 'admin'
 
   const { data: animal, isLoading, error, refetch: refetchAnimal } = useAnimal(id)
   const { mutateAsync: createAnimal } = useCreateAnimal()
@@ -838,7 +841,7 @@ export function AnimalFormPage() {
                 </Button>
               </Link>
 
-              {isEditing && animal && (
+              {isEditing && animal && canDeleteAnimals && (
                 <Button
                   type="button"
                   variant="danger"

@@ -28,7 +28,9 @@ export interface ArchiveFile {
   year: number
   applicationId?: string | null
   animalId?: string | null
+  animalIds?: string[]
   animalName?: string | null
+  animalNames?: string[]
   species?: string | null
   reviewerLabel?: string | null
   createdAt: unknown
@@ -43,6 +45,7 @@ export interface ArchiveFilesFilter {
 export interface RelatedArchiveFilesFilter {
   applicationId?: string | null
   animalId?: string | null
+  animalIds?: string[]
 }
 
 export interface ArchiveFilterOptions {
@@ -74,7 +77,13 @@ function docToArchiveFile(id: string, data: Record<string, unknown>): ArchiveFil
     year: (data.year as number) ?? 0,
     applicationId: (data.applicationId as string | null) ?? null,
     animalId: (data.animalId as string | null) ?? null,
+    animalIds: Array.isArray(data.animalIds)
+      ? data.animalIds.filter((id): id is string => typeof id === 'string')
+      : [],
     animalName: (data.animalName as string | null) ?? null,
+    animalNames: Array.isArray(data.animalNames)
+      ? data.animalNames.filter((name): name is string => typeof name === 'string')
+      : [],
     species: (data.species as string | null) ?? null,
     reviewerLabel: (data.reviewerLabel as string | null) ?? null,
     createdAt: data.createdAt ?? null,
@@ -112,12 +121,12 @@ export async function listArchiveFilesPage(
 }
 
 async function listArchiveFilesByField(
-  field: 'applicationId' | 'animalId',
+  field: 'applicationId' | 'animalId' | 'animalIds',
   value: string,
 ): Promise<ArchiveFile[]> {
   const snap = await getDocs(query(
     collection(db, 'archiveFiles'),
-    where(field, '==', value),
+    field === 'animalIds' ? where(field, 'array-contains', value) : where(field, '==', value),
     limit(25),
   ))
   return snap.docs.map((d) => docToArchiveFile(d.id, d.data()))
@@ -132,6 +141,11 @@ export async function listRelatedArchiveFiles(
 
   if (applicationId) queries.push(listArchiveFilesByField('applicationId', applicationId))
   if (animalId) queries.push(listArchiveFilesByField('animalId', animalId))
+  if (animalId) queries.push(listArchiveFilesByField('animalIds', animalId))
+  for (const id of filter.animalIds ?? []) {
+    const cleanId = id.trim()
+    if (cleanId && cleanId !== animalId) queries.push(listArchiveFilesByField('animalIds', cleanId))
+  }
   if (queries.length === 0) return []
 
   const files = (await Promise.all(queries)).flat()

@@ -16,6 +16,7 @@ import {
   logOperationStart,
   logOperationSuccess,
   logPermissionDenied,
+  normalizeApplicationAnimalIds,
   normalizeCpfForPrivacy,
   normalizeEmailForPrivacy,
   onCall,
@@ -38,7 +39,9 @@ function sanitizePrivacyApplication(
     status: data.status ?? null,
     species: data.species ?? null,
     animalId: data.animalId ?? null,
+    animalIds: Array.isArray(data.animalIds) ? data.animalIds : null,
     animalName: data.animalName ?? null,
+    animalNames: Array.isArray(data.animalNames) ? data.animalNames : null,
     createdAt: data.createdAt ?? null,
     updatedAt: data.updatedAt ?? null,
     reviewedAt: data.reviewedAt ?? null,
@@ -446,14 +449,13 @@ export const deletePrivacyApplicationData = onCall(
 
       const application = snap.data() as {
         animalId?: unknown;
+        animalIds?: unknown;
         status?: unknown;
         queuePosition?: unknown;
         waitlistEntry?: unknown;
         contractArchiveFileId?: unknown;
       };
-      const animalId = typeof application.animalId === "string" && application.animalId.trim() ?
-        application.animalId.trim() :
-        undefined;
+      const animalIds = normalizeApplicationAnimalIds(application);
       const status = typeof application.status === "string" ? application.status : undefined;
       const hadQueueState =
         typeof application.queuePosition === "number" ||
@@ -470,7 +472,7 @@ export const deletePrivacyApplicationData = onCall(
       }
 
       await ref.delete();
-      if (animalId) {
+      for (const animalId of animalIds) {
         await recomputeAnimalState(animalId);
         await recalibrateAnimalQueue(animalId);
       }
@@ -490,14 +492,14 @@ export const deletePrivacyApplicationData = onCall(
         actorRole: safeRole(callerRole),
         targetId,
         result: "deleted",
-        animalRecomputed: Boolean(animalId),
+        animalRecomputed: animalIds.length > 0,
         hadQueueState,
         hadContractArchive,
       });
       return {
         success: true,
         result: "deleted",
-        animalRecomputed: Boolean(animalId),
+        animalRecomputed: animalIds.length > 0,
       };
     } catch (err) {
       await writePrivacyAudit({

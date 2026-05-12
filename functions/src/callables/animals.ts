@@ -378,9 +378,9 @@ export const deleteAnimal = onCall(
     }
 
     const callerRole = request.auth.token?.role;
-    if (callerRole !== "admin" && callerRole !== "reviewer") {
+    if (callerRole !== "admin") {
       logPermissionDenied("animal.delete", request.auth.uid, callerRole);
-      throw new HttpsError("permission-denied", "Only staff can delete animals.");
+      throw new HttpsError("permission-denied", "Only admins can delete animals.");
     }
 
     await assertAdminRateLimit(request.auth.uid, "animal.delete", 20);
@@ -421,11 +421,17 @@ export const deleteAnimal = onCall(
         return { success: true, result: "already_missing" };
       }
 
-      const linkedApplicationsSnap = await db.collection("applications")
-        .where("animalId", "==", targetId)
-        .limit(1)
-        .get();
-      if (!linkedApplicationsSnap.empty) {
+      const [legacyLinkedSnap, arrayLinkedSnap] = await Promise.all([
+        db.collection("applications")
+          .where("animalId", "==", targetId)
+          .limit(1)
+          .get(),
+        db.collection("applications")
+          .where("animalIds", "array-contains", targetId)
+          .limit(1)
+          .get(),
+      ]);
+      if (!legacyLinkedSnap.empty || !arrayLinkedSnap.empty) {
         throw new HttpsError(
           "failed-precondition",
           "Este animal possui candidaturas vinculadas e não pode ser excluído."

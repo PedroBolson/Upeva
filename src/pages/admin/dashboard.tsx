@@ -37,6 +37,7 @@ import { useCounts } from '@/features/admin/hooks/use-counts'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { db } from '@/lib/firebase'
 import { SPECIES_LABELS } from '@/features/animals/types/animal.types'
+import { getApplicationAnimalLabel, hasApplicationAnimals } from '@/features/adoption/utils/application-animals'
 import { formatRelativeDate, tsToDate } from '@/utils/format'
 import { buildAdminTitle, useDocumentTitle } from '@/utils/page-title'
 import type { AdoptionApplication } from '@/features/adoption/types/adoption.types'
@@ -109,7 +110,7 @@ function useRecentAnimals() {
 }
 
 function getApplicationContext(app: AdoptionApplication) {
-  const subject = app.animalId ? app.animalName ?? 'Animal vinculado' : 'Interesse geral'
+  const subject = hasApplicationAnimals(app) ? getApplicationAnimalLabel(app) : 'Interesse geral'
   return `${subject} · ${formatRelativeDate(tsToDate(app.createdAt))}`
 }
 
