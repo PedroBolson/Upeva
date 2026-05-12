@@ -528,8 +528,8 @@ export function ApplicationDetailPage() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <AnimalQuickViewModal
-        animalId={appAnimalIds[0]}
-        animalName={appAnimalNames[0]}
+        animalIds={appAnimalIds}
+        animalNames={appAnimalNames}
         open={isAnimalModalOpen}
         onClose={() => setIsAnimalModalOpen(false)}
       />
