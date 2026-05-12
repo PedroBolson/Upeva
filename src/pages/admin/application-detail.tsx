@@ -20,6 +20,12 @@ import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
+import {
+  getApplicationAnimalLabel,
+  hasApplicationAnimals,
+  normalizeApplicationAnimalIds,
+  normalizeApplicationAnimalNames,
+} from '@/features/adoption/utils/application-animals'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { generateAdoptionContractNow, type ArchiveFile, type ArchiveFileType } from '@/features/admin/services/archive.service'
@@ -87,7 +93,7 @@ function formatPreferenceLabel(
 }
 
 function isGeneralInterestApplication(app: AdoptionApplication): boolean {
-  if (!app.animalId) return true
+  if (!hasApplicationAnimals(app)) return true
   if (app.species === 'dog') {
     return app.preferredSex !== undefined || app.preferredSize !== undefined
   }
@@ -160,6 +166,11 @@ export function ApplicationDetailPage() {
   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false)
   const [isStatusInfoOpen, setIsStatusInfoOpen] = useState(false)
   const [contractError, setContractError] = useState<string | null>(null)
+  // Cat animal assignment drafts — null means "not changed from app's current value"
+  const [catSlot1Draft, setCatSlot1Draft] = useState<string | null>(null)
+  const [catSlot2Draft, setCatSlot2Draft] = useState<string | null>(null)
+  const [catAssignmentError, setCatAssignmentError] = useState<string | null>(null)
+  const [catAssignmentSaved, setCatAssignmentSaved] = useState(false)
   const backLabel = locationState?.from === 'animal-detail' && locationState.animalId
     ? 'Animal'
     : 'Candidaturas'
@@ -220,7 +231,9 @@ export function ApplicationDetailPage() {
   const formattedUpdatedAt = useMemo(() => tsToDate(app?.updatedAt), [app?.updatedAt])
   const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
   const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
-  const currentAnimalId = animalSelectionCleared ? '' : selectedAnimal?.animal.id ?? app?.animalId ?? ''
+  const appAnimalIds = app ? normalizeApplicationAnimalIds(app) : []
+  const appAnimalNames = app ? normalizeApplicationAnimalNames(app) : []
+  const currentAnimalId = animalSelectionCleared ? '' : selectedAnimal?.animal.id ?? appAnimalIds[0] ?? ''
 
   // Campos PII nunca lidos direto do Firestore — sempre via CF getApplicationPII
   const phone = pii?.phone ?? ''
@@ -268,9 +281,27 @@ export function ApplicationDetailPage() {
     staleTime: 1000 * 60 * 5,
   })
 
-  const selectedAnimalName = selectedAnimal?.animal.name ?? app?.animalName ?? 'Animal vinculado'
+  const selectedAnimalName = selectedAnimal?.animal.name ?? appAnimalNames[0] ?? 'Animal vinculado'
 
-  const approvalAnimalId = currentStatus === 'approved' ? (app?.animalId ?? currentAnimalId) : null
+  // Available cats for the staff animal assignment dropdowns.
+  // Loaded for all cat applications (general and specific alike).
+  const { data: availableCats = [], isLoading: availableCatsLoading } = useQuery({
+    queryKey: ['animals', 'linkable-cats', app?.id],
+    queryFn: () => getLinkableAnimalsForApplication({ species: 'cat', scope: 'same-species' }),
+    enabled: Boolean(app) && app?.species === 'cat',
+    staleTime: 1000 * 60 * 5,
+  })
+
+  // Resolved current selections: draft if changed, otherwise app's current value
+  const catSlot1 = catSlot1Draft ?? appAnimalIds[0] ?? ''
+  const catSlot2 = catSlot2Draft ?? appAnimalIds[1] ?? ''
+  const catAssignmentChanged = catSlot1Draft !== null || catSlot2Draft !== null
+  const catAssignmentEditable =
+    app?.species === 'cat' &&
+    app?.status !== 'approved' &&
+    app?.status !== 'rejected'
+
+  const approvalAnimalId = currentStatus === 'approved' ? (appAnimalIds[0] ?? currentAnimalId) : null
 
   const { data: affectedCandidates = [] } = useQuery({
     queryKey: ['applications', 'active-for-animal', approvalAnimalId, id],
@@ -281,11 +312,33 @@ export function ApplicationDetailPage() {
 
   const needsRelinkConfirmation = Boolean(
     isGeneralInterest &&
-    app?.animalId &&
+    appAnimalIds[0] &&
     currentAnimalId &&
-    currentAnimalId !== app.animalId &&
-    app.status !== 'pending',
+    currentAnimalId !== appAnimalIds[0] &&
+    app?.status !== 'pending',
   )
+
+  function handleSaveCatAssignment() {
+    if (!id || !app) return
+    const ids = [catSlot1, catSlot2].filter(Boolean)
+    if (ids.length === 0) {
+      setCatAssignmentError('Selecione pelo menos um gato.')
+      return
+    }
+    setCatAssignmentError(null)
+    updateReview(
+      { id, status: app.status, animalIds: ids },
+      {
+        onSuccess: () => {
+          setCatSlot1Draft(null)
+          setCatSlot2Draft(null)
+          setCatAssignmentSaved(true)
+          setTimeout(() => setCatAssignmentSaved(false), 3000)
+        },
+        onError: (e) => setCatAssignmentError(getReviewErrorMessage(e)),
+      },
+    )
+  }
 
   function saveReview(
     animalOverride: { animal: Animal; speciesChangeConfirmed: boolean } | null = selectedAnimal,
@@ -458,8 +511,8 @@ export function ApplicationDetailPage() {
   const canBeRejected = app.status === 'pending' || app.status === 'in_review'
   const isTerminalStatus = app.status === 'rejected'
 
-  const hasSpecificAnimal = Boolean(app.animalId)
-  const animalLabel = hasSpecificAnimal ? app.animalName ?? 'Animal vinculado' : 'Interesse geral'
+  const hasSpecificAnimal = appAnimalIds.length > 0
+  const animalLabel = hasSpecificAnimal ? getApplicationAnimalLabel(app) : 'Interesse geral'
   const animalHelper = !isGeneralInterest
     ? SPECIES_LABELS[app.species]
     : app.species === 'dog'
@@ -471,8 +524,8 @@ export function ApplicationDetailPage() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <AnimalQuickViewModal
-        animalId={app.animalId}
-        animalName={app.animalName}
+        animalId={appAnimalIds[0]}
+        animalName={appAnimalNames[0]}
         open={isAnimalModalOpen}
         onClose={() => setIsAnimalModalOpen(false)}
       />
@@ -494,7 +547,7 @@ export function ApplicationDetailPage() {
         {affectedCandidates.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">
-              {affectedCandidates.length} candidato{affectedCandidates.length !== 1 ? 's' : ''} aguardando {app.animalName ?? 'este animal'} {affectedCandidates.length !== 1 ? 'serão convertidos' : 'será convertido'} para interesse geral:
+              {affectedCandidates.length} candidato{affectedCandidates.length !== 1 ? 's' : ''} aguardando {animalLabel} {affectedCandidates.length !== 1 ? 'serão convertidos' : 'será convertido'} para interesse geral:
             </p>
             <ul className="flex flex-col gap-1.5">
               {affectedCandidates.map((c) => (
@@ -855,7 +908,7 @@ export function ApplicationDetailPage() {
                     />
                   </div>
 
-                  {isGeneralInterest && (
+                  {isGeneralInterest && app.species === 'dog' && (
                     <ApplicationAnimalSelector
                       species={app.species}
                       preferredSex={app.preferredSex}
@@ -908,6 +961,91 @@ export function ApplicationDetailPage() {
               </>
             )}
           </Card>
+
+          {app.species === 'cat' && (
+            <Card className="border-border/80 p-5">
+              <div className="flex items-center gap-2">
+                <PawPrint size={16} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Animais vinculados</h2>
+              </div>
+
+              {app.jointAdoption && (
+                <p className="mt-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  O candidato marcou interesse em <strong>adoção conjunta</strong>.
+                </p>
+              )}
+
+              {catAssignmentEditable ? (
+                <div className="mt-4 flex flex-col gap-3">
+                  <Select
+                    label="Gato 1 (principal)"
+                    options={[
+                      { value: '', label: 'Selecionar gato…' },
+                      ...availableCats.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                    value={catSlot1}
+                    onChange={(v) => {
+                      setCatSlot1Draft(v || null)
+                      if (v && v === (catSlot2Draft ?? appAnimalIds[1] ?? '')) {
+                        setCatSlot2Draft('')
+                      }
+                    }}
+                    disabled={availableCatsLoading || isPending}
+                  />
+                  <Select
+                    label="Gato 2 (opcional)"
+                    options={[
+                      { value: '', label: 'Nenhum' },
+                      ...availableCats
+                        .filter((c) => c.id !== catSlot1)
+                        .map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                    value={catSlot2}
+                    onChange={(v) => setCatSlot2Draft(v || '')}
+                    disabled={availableCatsLoading || isPending}
+                  />
+                  {catSlot2 && !app.jointAdoption && (
+                    <p className="text-xs text-warning">
+                      Dois gatos selecionados, mas o candidato não marcou preferência por adoção conjunta.
+                    </p>
+                  )}
+                  <Button
+                    onClick={handleSaveCatAssignment}
+                    disabled={isPending || !catAssignmentChanged || !catSlot1}
+                    variant="outline"
+                    className="w-full gap-1.5"
+                  >
+                    {isPending && <Loader2 size={14} className="animate-spin" />}
+                    {isPending ? 'Salvando…' : 'Salvar animais'}
+                  </Button>
+                  {catAssignmentError && (
+                    <span className="text-sm text-danger">{catAssignmentError}</span>
+                  )}
+                  {catAssignmentSaved && (
+                    <span className="text-sm text-success">Animais salvos com sucesso.</span>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-col gap-2">
+                  {appAnimalIds.length > 0 ? (
+                    appAnimalNames.map((name, i) => (
+                      <p key={appAnimalIds[i]} className="text-sm text-foreground">
+                        {i === 0 ? 'Principal:' : 'Segundo:'}{' '}
+                        <span className="font-medium">{name}</span>
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum animal atribuído.</p>
+                  )}
+                  {(app.status === 'approved' || app.status === 'rejected') && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Animais bloqueados após decisão final.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
 
           <Card className="border-border/80 p-5">
             <h2 className="text-sm font-semibold text-foreground">Resumo rápido</h2>

@@ -65,11 +65,14 @@ export interface AdoptionFormData {
 export interface AdoptionApplication extends AdoptionFormData {
   id: string
   animalId?: string
+  animalIds?: string[]
   animalName?: string
+  animalNames?: string[]
   previousAnimalId?: string
   previousAnimalName?: string
   waitlistEntry?: boolean
   queuePosition?: number
+  queuePositions?: Record<string, number>
   species: Species
   status: ApplicationStatus
   adminNotes?: string

@@ -355,6 +355,54 @@ describe('createApplication', () => {
     expect(appDoc.data()?.status).toBe('pending')
   })
 
+  it('public cat application with jointAdoption preference and single animalId does not link a second animal', async () => {
+    // jointAdoption is a preference/consent only — the public form never selects a second cat.
+    // The Upeva team assigns any second cat later during the admin review flow.
+    await adminDb.collection('animals').doc('cat-joint-pref').set(availableAnimalDoc({ name: 'Solo Cat' }))
+
+    const result = await callable('createApplication')({
+      ...specificAnimalApplication('cat-joint-pref'),
+      jointAdoption: true,
+    })
+    const data = result.data as { id: string; queuePosition: number; waitlistEntry: boolean }
+    expect(data.queuePosition).toBe(1)
+    expect(data.waitlistEntry).toBe(false)
+
+    const [appDoc, animalDoc] = await Promise.all([
+      adminDb.collection('applications').doc(data.id).get(),
+      adminDb.collection('animals').doc('cat-joint-pref').get(),
+    ])
+    expect(appDoc.data()?.jointAdoption).toBe(true)             // preference stored
+    expect(appDoc.data()?.animalId).toBe('cat-joint-pref')      // primary animal linked
+    expect(appDoc.data()?.animalIds).toEqual(['cat-joint-pref']) // only one animal, never two
+    expect(animalDoc.data()?.activeApplicationCount).toBe(1)    // only one animal queued
+  })
+
+  it('rejects joint adoption with dogs', async () => {
+    await adminDb.collection('animals').doc('dog-joint-a').set(
+      availableAnimalDoc({ name: 'Dog A', species: 'dog', size: 'medium' }),
+    )
+    await adminDb.collection('animals').doc('dog-joint-b').set(
+      availableAnimalDoc({ name: 'Dog B', species: 'dog', size: 'medium' }),
+    )
+
+    await expect(
+      callable('createApplication')({
+        ...specificAnimalApplication('dog-joint-a', { species: 'dog', animalName: 'Dog A' }),
+        animalIds: ['dog-joint-a', 'dog-joint-b'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('rejects applications with more than two animals', async () => {
+    await expect(
+      callable('createApplication')({
+        ...specificAnimalApplication('cat-one'),
+        animalIds: ['cat-one', 'cat-two', 'cat-three'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' })
+  })
+
   it('specific-animal application against adopted animal is rejected', async () => {
     await adminDb.collection('animals').doc('cat-adopted').set(availableAnimalDoc({ status: 'adopted' }))
 
@@ -485,6 +533,39 @@ describe('updateApplicationReview', () => {
     expect(appDoc.data()?.status).toBe('approved')
     expect(animalDoc.data()?.status).toBe('adopted')
     expect(animalDoc.data()?.adoptedApplicationId).toBe('app-for-approval')
+  })
+
+  it('admin approval of a joint cat application marks both cats adopted', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-approval-a').set(availableAnimalDoc({ name: 'Approval A' }))
+    await adminDb.collection('animals').doc('cat-approval-b').set(availableAnimalDoc({ name: 'Approval B' }))
+    await adminDb.collection('applications').doc('app-joint-approval').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-approval-a',
+        animalIds: ['cat-approval-a', 'cat-approval-b'],
+        animalName: 'Approval A',
+        animalNames: ['Approval A', 'Approval B'],
+        status: 'in_review',
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-joint-approval',
+      status: 'approved',
+    })
+
+    const [appDoc, firstAnimalDoc, secondAnimalDoc] = await Promise.all([
+      adminDb.collection('applications').doc('app-joint-approval').get(),
+      adminDb.collection('animals').doc('cat-approval-a').get(),
+      adminDb.collection('animals').doc('cat-approval-b').get(),
+    ])
+
+    expect(appDoc.data()?.status).toBe('approved')
+    expect(firstAnimalDoc.data()?.status).toBe('adopted')
+    expect(secondAnimalDoc.data()?.status).toBe('adopted')
+    expect(firstAnimalDoc.data()?.adoptedApplicationId).toBe('app-joint-approval')
+    expect(secondAnimalDoc.data()?.adoptedApplicationId).toBe('app-joint-approval')
   })
 
   it('approval generates contractArchiveFileId and contractGenerationStatus=stored', async () => {
@@ -619,7 +700,7 @@ describe('updateApplicationReview', () => {
   })
 
   it('deleteAnimal blocks animals with linked applications', async () => {
-    await signInAsReviewer()
+    await signInAsAdmin()
 
     await adminDb.collection('animals').doc('cat-delete-blocked').set(availableAnimalDoc())
     await adminDb.collection('applications').doc('app-delete-blocker').set(
@@ -639,6 +720,18 @@ describe('updateApplicationReview', () => {
 
     const animalDoc = await adminDb.collection('animals').doc('cat-delete-blocked').get()
     expect(animalDoc.exists).toBe(true)
+  })
+
+  it('deleteAnimal is restricted to admins', async () => {
+    await signInAsReviewer()
+    await adminDb.collection('animals').doc('cat-delete-reviewer').set(availableAnimalDoc())
+
+    await expect(
+      callable('deleteAnimal')({
+        animalId: 'cat-delete-reviewer',
+        reason: 'Cadastro duplicado criado em teste interno',
+      }),
+    ).rejects.toMatchObject({ code: 'functions/permission-denied' })
   })
 
   it('removes adopted animals from similarity caches and deletes their own cache doc', async () => {
@@ -992,5 +1085,321 @@ describe('Privacy/LGPD callables', () => {
     expect(typeof audit.actorUid).toBe('string')
     expect(audit.result).toBeDefined()
     expect(typeof audit.createdAt).toBe('object') // Firestore Timestamp
+  })
+})
+
+// ── Suite 4: Staff final animal assignment ────────────────────────────────────
+
+describe('staff final animal assignment via updateApplicationReview', () => {
+  beforeEach(async () => {
+    await clearFirestoreEmulator()
+    await clearStorageEmulator()
+    await signOutClient()
+  })
+
+  it('staff assigns second cat to a specific-animal application', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-assign-a').set(
+      availableAnimalDoc({ name: 'Assign A', activeApplicationCount: 1 }),
+    )
+    await adminDb.collection('animals').doc('cat-assign-b').set(
+      availableAnimalDoc({ name: 'Assign B', activeApplicationCount: 0 }),
+    )
+    await adminDb.collection('applications').doc('app-assign').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-assign-a',
+        animalIds: ['cat-assign-a'],
+        animalName: 'Assign A',
+        animalNames: ['Assign A'],
+        queuePosition: 1,
+        status: 'in_review',
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-assign',
+      status: 'in_review',
+      animalIds: ['cat-assign-a', 'cat-assign-b'],
+    })
+
+    const [appDoc, catA, catB] = await Promise.all([
+      adminDb.collection('applications').doc('app-assign').get(),
+      adminDb.collection('animals').doc('cat-assign-a').get(),
+      adminDb.collection('animals').doc('cat-assign-b').get(),
+    ])
+
+    expect(appDoc.data()?.animalId).toBe('cat-assign-a')
+    expect(appDoc.data()?.animalIds).toEqual(['cat-assign-a', 'cat-assign-b'])
+    expect(appDoc.data()?.animalNames).toEqual(['Assign A', 'Assign B'])
+    // cat-assign-a was already linked — count unchanged
+    expect(catA.data()?.activeApplicationCount).toBe(1)
+    // cat-assign-b was newly added — count incremented
+    expect(catB.data()?.activeApplicationCount).toBe(1)
+  })
+
+  it('old linked animal has its activeApplicationCount decremented when replaced', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-old').set(
+      availableAnimalDoc({ name: 'Old Cat', activeApplicationCount: 2 }),
+    )
+    await adminDb.collection('animals').doc('cat-new').set(
+      availableAnimalDoc({ name: 'New Cat', activeApplicationCount: 0 }),
+    )
+    await adminDb.collection('applications').doc('app-replace').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-old',
+        animalIds: ['cat-old'],
+        animalName: 'Old Cat',
+        animalNames: ['Old Cat'],
+        queuePosition: 1,
+        status: 'in_review',
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-replace',
+      status: 'in_review',
+      animalIds: ['cat-new'],
+    })
+
+    const [catOld, catNew] = await Promise.all([
+      adminDb.collection('animals').doc('cat-old').get(),
+      adminDb.collection('animals').doc('cat-new').get(),
+    ])
+
+    // old animal decremented (was 2, should be 1)
+    expect(catOld.data()?.activeApplicationCount).toBe(1)
+    // new animal incremented (was 0, should be 1)
+    expect(catNew.data()?.activeApplicationCount).toBe(1)
+  })
+
+  it('duplicate animalIds are rejected', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('applications').doc('app-dup').set(encryptedApplicationDoc({ status: 'pending' }))
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-dup',
+        status: 'pending',
+        animalIds: ['cat-x', 'cat-x'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' })
+  })
+
+  it('more than 2 animals are rejected', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('applications').doc('app-too-many').set(encryptedApplicationDoc({ status: 'pending' }))
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-too-many',
+        status: 'pending',
+        animalIds: ['cat-1', 'cat-2', 'cat-3'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' })
+  })
+
+  it('empty animalIds array is rejected', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('applications').doc('app-empty').set(encryptedApplicationDoc({ status: 'pending' }))
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-empty',
+        status: 'pending',
+        animalIds: [],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' })
+  })
+
+  it('cat + dog joint assignment is rejected', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-joint').set(availableAnimalDoc({ name: 'Cat' }))
+    await adminDb.collection('animals').doc('dog-joint').set(
+      availableAnimalDoc({ name: 'Dog', species: 'dog', size: 'medium' }),
+    )
+    await adminDb.collection('applications').doc('app-cat-dog').set(
+      encryptedApplicationDoc({ status: 'in_review' }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-cat-dog',
+        status: 'in_review',
+        animalIds: ['cat-joint', 'dog-joint'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('non-existent animal in animalIds is rejected', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('applications').doc('app-ghost').set(encryptedApplicationDoc({ status: 'pending' }))
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-ghost',
+        status: 'pending',
+        animalIds: ['ghost-animal-id-does-not-exist'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/not-found' })
+  })
+
+  it('animal editing is blocked for approved applications', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-approved-lock').set(
+      availableAnimalDoc({ status: 'adopted', adoptedApplicationId: 'app-approved-lock' }),
+    )
+    await adminDb.collection('animals').doc('cat-new-attempt').set(availableAnimalDoc({ name: 'New Cat' }))
+    await adminDb.collection('applications').doc('app-approved-lock').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-approved-lock',
+        animalIds: ['cat-approved-lock'],
+        status: 'approved',
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-approved-lock',
+        status: 'approved',
+        animalIds: ['cat-new-attempt'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('animal editing is blocked for rejected applications', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-rejected-lock').set(availableAnimalDoc())
+    await adminDb.collection('animals').doc('cat-new-attempt-2').set(availableAnimalDoc({ name: 'New Cat' }))
+    await adminDb.collection('applications').doc('app-rejected-lock').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-rejected-lock',
+        animalIds: ['cat-rejected-lock'],
+        status: 'rejected',
+        rejectionReason: 'inadequate_housing',
+        rejectionDetails: 'Moradia inadequada para gatos conforme visita realizada pela equipe de voluntários durante a visita domiciliar obrigatória.',
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-rejected-lock',
+        status: 'rejected',
+        animalIds: ['cat-new-attempt-2'],
+        rejectionReason: 'inadequate_housing',
+        rejectionDetails: 'Moradia inadequada para gatos conforme visita realizada pela equipe de voluntários durante a visita domiciliar obrigatória.',
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('legacy application with only animalId (no animalIds field) accepts staff animalIds assignment', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-legacy').set(
+      availableAnimalDoc({ name: 'Legacy Cat', activeApplicationCount: 1 }),
+    )
+    await adminDb.collection('animals').doc('cat-legacy-2').set(
+      availableAnimalDoc({ name: 'Legacy Cat 2', activeApplicationCount: 0 }),
+    )
+    // Legacy doc: has animalId but no animalIds
+    await adminDb.collection('applications').doc('app-legacy').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-legacy',
+        animalName: 'Legacy Cat',
+        queuePosition: 1,
+        status: 'in_review',
+        // no animalIds field
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-legacy',
+      status: 'in_review',
+      animalIds: ['cat-legacy', 'cat-legacy-2'],
+    })
+
+    const appDoc = await adminDb.collection('applications').doc('app-legacy').get()
+    expect(appDoc.data()?.animalId).toBe('cat-legacy')
+    expect(appDoc.data()?.animalIds).toEqual(['cat-legacy', 'cat-legacy-2'])
+    expect(appDoc.data()?.animalNames).toContain('Legacy Cat')
+    expect(appDoc.data()?.animalNames).toContain('Legacy Cat 2')
+  })
+
+  it('approval of application with two staff-assigned cats marks both as adopted', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-dual-a').set(availableAnimalDoc({ name: 'Dual A' }))
+    await adminDb.collection('animals').doc('cat-dual-b').set(availableAnimalDoc({ name: 'Dual B' }))
+    // Seed the application already with both cats (as if staff already assigned them)
+    await adminDb.collection('applications').doc('app-dual-approval').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-dual-a',
+        animalIds: ['cat-dual-a', 'cat-dual-b'],
+        animalName: 'Dual A',
+        animalNames: ['Dual A', 'Dual B'],
+        status: 'in_review',
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-dual-approval',
+      status: 'approved',
+    })
+
+    const [appDoc, catA, catB] = await Promise.all([
+      adminDb.collection('applications').doc('app-dual-approval').get(),
+      adminDb.collection('animals').doc('cat-dual-a').get(),
+      adminDb.collection('animals').doc('cat-dual-b').get(),
+    ])
+
+    expect(appDoc.data()?.status).toBe('approved')
+    expect(catA.data()?.status).toBe('adopted')
+    expect(catB.data()?.status).toBe('adopted')
+    expect(catA.data()?.adoptedApplicationId).toBe('app-dual-approval')
+    expect(catB.data()?.adoptedApplicationId).toBe('app-dual-approval')
+  })
+
+  it('cat adoption contract does not contain "Porte:" label', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-porte-check').set(
+      availableAnimalDoc({ name: 'Porte Check Cat', size: 'small' }),
+    )
+    await adminDb.collection('applications').doc('app-porte-check').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-porte-check',
+        animalIds: ['cat-porte-check'],
+        animalName: 'Porte Check Cat',
+        animalNames: ['Porte Check Cat'],
+        status: 'in_review',
+      }),
+    )
+
+    await callable('updateApplicationReview')({
+      id: 'app-porte-check',
+      status: 'approved',
+    })
+
+    const appDoc = await adminDb.collection('applications').doc('app-porte-check').get()
+    const archiveFileId = appDoc.data()?.contractArchiveFileId as string
+    expect(typeof archiveFileId).toBe('string')
+
+    const archiveDoc = await adminDb.collection('archiveFiles').doc(archiveFileId).get()
+    const storagePath = archiveDoc.data()?.storagePath as string
+
+    const [pdfBuffer] = await adminStorage.bucket(STORAGE_BUCKET).file(storagePath).download()
+    // pdf-lib stores uncompressed text streams; PDF text operators use parentheses: (Porte: )
+    const pdfContent = pdfBuffer.toString('latin1')
+    expect(pdfContent).not.toContain('Porte:')
+    expect(pdfContent).not.toContain('Porte ')
   })
 })

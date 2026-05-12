@@ -37,6 +37,7 @@ export interface UpdateApplicationReviewInput {
   adminNotes?: string
   animalId?: string
   animalName?: string
+  animalIds?: string[]
   speciesChangeConfirmed?: boolean
   rejectionReason?: string
   rejectionDetails?: string
@@ -113,14 +114,24 @@ export async function getActiveApplicationsForAnimal(
   animalId: string,
   excludeId: string,
 ): Promise<Pick<AdoptionApplication, 'id' | 'fullName' | 'status' | 'queuePosition'>[]> {
-  const snap = await getDocs(
-    query(
-      collection(db, 'applications'),
-      where('animalId', '==', animalId),
-      where('status', 'in', ['pending', 'in_review']),
+  const [legacySnap, arraySnap] = await Promise.all([
+    getDocs(
+      query(
+        collection(db, 'applications'),
+        where('animalId', '==', animalId),
+        where('status', 'in', ['pending', 'in_review']),
+      ),
     ),
-  )
-  return snap.docs
+    getDocs(
+      query(
+        collection(db, 'applications'),
+        where('animalIds', 'array-contains', animalId),
+        where('status', 'in', ['pending', 'in_review']),
+      ),
+    ),
+  ])
+  const docs = new Map([...legacySnap.docs, ...arraySnap.docs].map((d) => [d.id, d]))
+  return Array.from(docs.values())
     .filter((d) => d.id !== excludeId)
     .map((d) => {
       const data = d.data()

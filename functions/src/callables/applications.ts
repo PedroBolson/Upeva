@@ -26,6 +26,7 @@ import {
   logOperationStart,
   logOperationSuccess,
   logPermissionDenied,
+  normalizeApplicationAnimalIds,
   normalizeCpfForPrivacy,
   onCall,
   piiEncryptionKey,
@@ -200,51 +201,88 @@ export const createApplication = onCall(
 
     const ref = db.collection("applications").doc();
 
-    if (animalId) {
-      const animalRef = db.collection("animals").doc(animalId);
+    const requestedAnimalIds = normalizeApplicationAnimalIds({
+      animalIds: data.animalIds,
+      animalId,
+    });
+
+    if (requestedAnimalIds.length > 0) {
+      if (requestedAnimalIds.length > 2) {
+        throw new HttpsError("invalid-argument", "Uma candidatura pode ter no máximo 2 animais.");
+      }
+      if (requestedAnimalIds.length > 1 && species !== "cat") {
+        throw new HttpsError("failed-precondition", "Adoção conjunta só está disponível para gatos.");
+      }
+
+      const animalRefs = requestedAnimalIds.map((id) => db.collection("animals").doc(id));
       const assignment = await runTransactionWithRetry(async (tx) => {
-        const animalSnap = await tx.get(animalRef);
-        if (!animalSnap.exists) {
-          throw new HttpsError("not-found", "Animal não encontrado.");
+        const animalSnaps = await Promise.all(animalRefs.map((ref) => tx.get(ref)));
+        const animals = animalSnaps.map((snap, index) => {
+          if (!snap.exists) {
+            throw new HttpsError("not-found", "Animal não encontrado.");
+          }
+          return {
+            id: requestedAnimalIds[index],
+            ref: animalRefs[index],
+            data: snap.data() as AnimalRecord,
+          };
+        });
+
+        for (const { data: animal } of animals) {
+          if (animal.species !== species) {
+            throw new HttpsError(
+              "failed-precondition",
+              "A espécie do animal não corresponde à candidatura."
+            );
+          }
+
+          if (animal.status !== "available" && animal.status !== "under_review") {
+            throw new HttpsError(
+              "failed-precondition",
+              "Este animal não está disponível para novas candidaturas."
+            );
+          }
         }
 
-        const animal = animalSnap.data() as AnimalRecord;
-        if (animal.species !== species) {
-          throw new HttpsError(
-            "failed-precondition",
-            "A espécie do animal não corresponde à candidatura."
-          );
+        if (animals.length > 1 && animals.some(({ data: animal }) => animal.species !== "cat")) {
+          throw new HttpsError("failed-precondition", "Adoção conjunta só está disponível para gatos.");
         }
 
-        if (animal.status !== "available" && animal.status !== "under_review") {
-          throw new HttpsError(
-            "failed-precondition",
-            "Este animal não está disponível para novas candidaturas."
-          );
-        }
-
-        const resolvedAnimalName = typeof animal.name === "string" ? animal.name.trim() : animalName;
-        if (!resolvedAnimalName) {
+        const resolvedAnimalNames = animals.map(({ data: animal }, index) => {
+          const resolvedName = typeof animal.name === "string" ? animal.name.trim() : undefined;
+          if (resolvedName) return resolvedName;
+          if (index === 0 && animalName) return animalName;
           throw new HttpsError("failed-precondition", "Não foi possível identificar o animal.");
-        }
+        });
 
-        const activeApplicationCount =
-          typeof animal.activeApplicationCount === "number" && animal.activeApplicationCount >= 0 ?
-            animal.activeApplicationCount :
-            0;
-        const nextQueuePosition = activeApplicationCount + 1;
+        const nextQueuePositions = animals.map(({ data: animal }) => {
+          const activeApplicationCount =
+            typeof animal.activeApplicationCount === "number" && animal.activeApplicationCount >= 0 ?
+              animal.activeApplicationCount :
+              0;
+          return activeApplicationCount + 1;
+        });
+        const nextQueuePosition = nextQueuePositions[0];
         const nextWaitlistEntry = nextQueuePosition > 1;
 
         tx.set(ref, {
           ...applicationPayload,
-          animalId,
-          animalName: resolvedAnimalName,
+          animalId: requestedAnimalIds[0],
+          animalIds: requestedAnimalIds,
+          animalName: resolvedAnimalNames[0],
+          animalNames: resolvedAnimalNames,
           queuePosition: nextQueuePosition,
+          queuePositions: Object.fromEntries(
+            requestedAnimalIds.map((id, index) => [id, nextQueuePositions[index]])
+          ),
           waitlistEntry: nextWaitlistEntry,
         });
-        tx.update(animalRef, {
-          activeApplicationCount: nextQueuePosition,
-          updatedAt: FieldValue.serverTimestamp(),
+
+        animals.forEach(({ ref: animalRef }, index) => {
+          tx.update(animalRef, {
+            activeApplicationCount: nextQueuePositions[index],
+            updatedAt: FieldValue.serverTimestamp(),
+          });
         });
 
         return {
@@ -364,12 +402,16 @@ export const updateApplicationReview = onCall(
 
       const requestedAnimalId = typeof request.data.animalId === "string" &&
         request.data.animalId.trim() ? request.data.animalId.trim() : undefined;
+      // Array of IDs sent by staff to assign final linked animals (1 or 2 cats).
+      const requestedAnimalIdsRaw = Array.isArray(request.data.animalIds) ?
+        (request.data.animalIds as unknown[]) : undefined;
       const speciesChangeConfirmed = request.data.speciesChangeConfirmed === true;
       const adminNotes = typeof request.data.adminNotes === "string" ?
         request.data.adminNotes.trim() : undefined;
       if (adminNotes !== undefined) assertMaxLength(adminNotes, 2000, "adminNotes");
 
       let resolvedAnimalId: string | undefined;
+      let resolvedAnimalIds: string[] = [];
       let resolvedAnimalName: string | undefined;
       let previousStatus: ApplicationStatus | undefined;
       let previousContractArchiveFileId: string | undefined;
@@ -386,22 +428,147 @@ export const updateApplicationReview = onCall(
           (application as Record<string, unknown>).contractArchiveFileId as string :
           undefined;
         const isGeneralInterest = isGeneralInterestApplication(application);
-        const currentAnimalId = application.animalId;
+        const currentAnimalIds = normalizeApplicationAnimalIds(application);
+        const currentAnimalId = currentAnimalIds[0];
         let nextAnimalId = currentAnimalId;
+        let nextAnimalIds = [...currentAnimalIds];
         let nextAnimalName = application.animalName;
         let linkedAnimal: AnimalRecord | null = null;
         let linkedAnimalRef: DocumentReference | null = null;
         let linkSpeciesDecision: SpeciesChangeDecision | null = null;
         let linkedAnimalSnapshot: Record<string, unknown> | null = null;
 
-        if (requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
+        // ── Staff final animal assignment (animalIds path) ───────────────────────
+        // When staff explicitly sends animalIds, this path takes priority over
+        // the single-animal general-interest linking below.
+        let staffAnimalNames: string[] | undefined;
+        let staffQueuePositionsMap: Record<string, number> | undefined;
+        let staffNewQueuePosition: number | undefined;
+        let handledByAnimalIds = false;
+
+        if (requestedAnimalIdsRaw !== undefined) {
+          if (application.status === "approved" || application.status === "rejected") {
+            throw new HttpsError(
+              "failed-precondition",
+              "Não é possível alterar os animais de uma candidatura já finalizada."
+            );
+          }
+
+          const staffAnimalIds = requestedAnimalIdsRaw
+            .filter((id): id is string => typeof id === "string" && !!id.trim())
+            .map((id) => id.trim());
+
+          if (staffAnimalIds.length === 0) {
+            throw new HttpsError("invalid-argument", "Pelo menos 1 animal deve ser selecionado.");
+          }
+          if (staffAnimalIds.length > 2) {
+            throw new HttpsError("invalid-argument", "Uma candidatura pode ter no máximo 2 animais.");
+          }
+          const uniqueStaffIds = [...new Set(staffAnimalIds)];
+          if (uniqueStaffIds.length !== staffAnimalIds.length) {
+            throw new HttpsError("invalid-argument", "Foram informados animais duplicados.");
+          }
+
+          const staffAnimalSnaps = await Promise.all(
+            uniqueStaffIds.map((id) => transaction.get(db.collection("animals").doc(id)))
+          );
+
+          const staffAnimals: Array<{ id: string; data: AnimalRecord }> = [];
+          for (let i = 0; i < uniqueStaffIds.length; i++) {
+            const snap = staffAnimalSnaps[i];
+            if (!snap.exists) {
+              throw new HttpsError("not-found", "Animal não encontrado.");
+            }
+            const animalData = snap.data() as AnimalRecord;
+            const alreadyLinked = currentAnimalIds.includes(uniqueStaffIds[i]);
+            if (!alreadyLinked && animalData.status !== "available" && animalData.status !== "under_review") {
+              throw new HttpsError(
+                "failed-precondition",
+                "Só é possível vincular animais disponíveis ou em análise."
+              );
+            }
+            staffAnimals.push({ id: uniqueStaffIds[i], data: animalData });
+          }
+
+          if (staffAnimals.length === 2 && staffAnimals.some(({ data }) => data.species !== "cat")) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Adoção conjunta só está disponível para gatos. Não é permitido vincular cão junto com outro animal."
+            );
+          }
+
+          const addedIds = uniqueStaffIds.filter((id) => !currentAnimalIds.includes(id));
+          const removedIds = currentAnimalIds.filter((id) => !uniqueStaffIds.includes(id));
+
+          if (removedIds.length > 0) {
+            const removedSnaps = await Promise.all(
+              removedIds.map((id) => transaction.get(db.collection("animals").doc(id)))
+            );
+            for (const snap of removedSnaps) {
+              if (!snap.exists) continue;
+              const removedData = snap.data() as AnimalRecord;
+              const currentCount =
+                typeof removedData.activeApplicationCount === "number" &&
+                  removedData.activeApplicationCount > 0 ?
+                  removedData.activeApplicationCount :
+                  0;
+              transaction.update(snap.ref, {
+                activeApplicationCount: Math.max(0, currentCount - 1),
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+
+          const queuePosMap: Record<string, number> = {};
+          const appData = application as Record<string, unknown>;
+          for (const id of currentAnimalIds) {
+            if (uniqueStaffIds.includes(id)) {
+              const existingPos =
+                (appData.queuePositions as Record<string, number> | undefined)?.[id] ??
+                (id === currentAnimalId ? application.queuePosition : undefined);
+              if (typeof existingPos === "number") queuePosMap[id] = existingPos;
+            }
+          }
+
+          for (const { id, data } of staffAnimals) {
+            if (addedIds.includes(id)) {
+              const currentCount =
+                typeof data.activeApplicationCount === "number" && data.activeApplicationCount >= 0 ?
+                  data.activeApplicationCount :
+                  0;
+              const newCount = currentCount + 1;
+              transaction.update(db.collection("animals").doc(id), {
+                activeApplicationCount: newCount,
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+              queuePosMap[id] = newCount;
+            }
+          }
+
+          const primaryId = uniqueStaffIds[0];
+          const primaryChanged = primaryId !== currentAnimalId;
+          staffAnimalNames = staffAnimals.map(({ data }) =>
+            typeof data.name === "string" ? data.name.trim() : ""
+          );
+          staffQueuePositionsMap = Object.keys(queuePosMap).length > 0 ? queuePosMap : undefined;
+          if (primaryChanged && queuePosMap[primaryId] !== undefined) {
+            staffNewQueuePosition = queuePosMap[primaryId];
+          }
+
+          nextAnimalId = primaryId;
+          nextAnimalIds = uniqueStaffIds;
+          nextAnimalName = staffAnimalNames[0] ?? undefined;
+          handledByAnimalIds = true;
+        }
+
+        if (!handledByAnimalIds && requestedAnimalId && !isGeneralInterest && requestedAnimalId !== currentAnimalId) {
           throw new HttpsError(
             "failed-precondition",
             "Apenas candidaturas gerais podem trocar de animal."
           );
         }
 
-        if (isGeneralInterest && requestedAnimalId) {
+        if (!handledByAnimalIds && isGeneralInterest && requestedAnimalId) {
           const animalRef = db.collection("animals").doc(requestedAnimalId);
           const animalSnap = await transaction.get(animalRef);
 
@@ -427,6 +594,7 @@ export const updateApplicationReview = onCall(
           }
 
           nextAnimalId = requestedAnimalId;
+          nextAnimalIds = [requestedAnimalId];
           nextAnimalName = typeof animal.name === "string" ? animal.name.trim() : undefined;
           linkedAnimal = animal;
           linkedAnimalRef = animalRef;
@@ -457,52 +625,68 @@ export const updateApplicationReview = onCall(
         }
 
         if (status === "approved") {
-          if (!nextAnimalId) {
+          if (nextAnimalIds.length === 0) {
             throw new HttpsError(
               "failed-precondition",
               "Aprovações exigem um animal vinculado."
             );
           }
 
-          const animalRef = db.collection("animals").doc(nextAnimalId);
-          const animalSnap = linkedAnimal ? null : await transaction.get(animalRef);
-          const animal = linkedAnimal ?? (animalSnap?.data() as AnimalRecord | undefined);
+          for (const candidateAnimalId of nextAnimalIds) {
+            const animalRef = db.collection("animals").doc(candidateAnimalId);
+            const animalSnap = linkedAnimal && candidateAnimalId === nextAnimalId ?
+              null :
+              await transaction.get(animalRef);
+            const animal = candidateAnimalId === nextAnimalId && linkedAnimal ?
+              linkedAnimal :
+              (animalSnap?.data() as AnimalRecord | undefined);
 
-          if (!animal) {
-            throw new HttpsError("not-found", "Animal não encontrado.");
-          }
-          linkedAnimal = animal;
-          linkedAnimalRef = animalRef;
+            if (!animal) {
+              throw new HttpsError("not-found", "Animal não encontrado.");
+            }
+            if (candidateAnimalId === nextAnimalId) {
+              linkedAnimal = animal;
+              linkedAnimalRef = animalRef;
+            }
 
-          if (
-            typeof animal.adoptedApplicationId === "string" &&
-            animal.adoptedApplicationId !== targetId
-          ) {
-            throw new HttpsError(
-              "failed-precondition",
-              "Este animal já está vinculado a outra adoção concluída."
-            );
-          }
+            if (
+              typeof animal.adoptedApplicationId === "string" &&
+              animal.adoptedApplicationId !== targetId
+            ) {
+              throw new HttpsError(
+                "failed-precondition",
+                "Este animal já está vinculado a outra adoção concluída."
+              );
+            }
 
-          const approvedSnap = await transaction.get(
-            db.collection("applications")
-              .where("animalId", "==", nextAnimalId)
-              .where("status", "==", "approved")
-          );
+            const [approvedByPrimarySnap, approvedByArraySnap] = await Promise.all([
+              transaction.get(
+                db.collection("applications")
+                  .where("animalId", "==", candidateAnimalId)
+                  .where("status", "==", "approved")
+              ),
+              transaction.get(
+                db.collection("applications")
+                  .where("animalIds", "array-contains", candidateAnimalId)
+                  .where("status", "==", "approved")
+              ),
+            ]);
 
-          const conflictingApproved = approvedSnap.docs.find((doc) => doc.id !== targetId);
-          if (conflictingApproved) {
-            throw new HttpsError(
-              "failed-precondition",
-              "Já existe outra candidatura aprovada para este animal."
-            );
+            const conflictingApproved = [...approvedByPrimarySnap.docs, ...approvedByArraySnap.docs]
+              .find((doc) => doc.id !== targetId);
+            if (conflictingApproved) {
+              throw new HttpsError(
+                "failed-precondition",
+                "Já existe outra candidatura aprovada para este animal."
+              );
+            }
           }
         }
 
         // Assign queue position atomically when a general-interest application
         // enters an animal's active queue.
         let newQueuePosition: number | undefined;
-        const animalLinkChanged = isGeneralInterest && nextAnimalId && nextAnimalId !== currentAnimalId;
+        const animalLinkChanged = !handledByAnimalIds && isGeneralInterest && nextAnimalId && nextAnimalId !== currentAnimalId;
         if (animalLinkChanged && targetIsActive && linkedAnimal && linkedAnimalRef) {
           const activeApplicationCount =
             typeof linkedAnimal.activeApplicationCount === "number" &&
@@ -540,12 +724,26 @@ export const updateApplicationReview = onCall(
           payload.adminNotes = adminNotes;
         }
 
-        if (isGeneralInterest && nextAnimalId && nextAnimalName) {
+        if (handledByAnimalIds && nextAnimalId) {
           payload.animalId = nextAnimalId;
+          payload.animalIds = nextAnimalIds;
           payload.animalName = nextAnimalName;
+          payload.animalNames = staffAnimalNames ?? (nextAnimalName ? [nextAnimalName] : []);
+          if (staffQueuePositionsMap !== undefined) {
+            payload.queuePositions = staffQueuePositionsMap;
+          }
+          if (staffNewQueuePosition !== undefined) {
+            payload.queuePosition = staffNewQueuePosition;
+            payload.waitlistEntry = staffNewQueuePosition > 1;
+          }
+        } else if (isGeneralInterest && nextAnimalId && nextAnimalName) {
+          payload.animalId = nextAnimalId;
+          payload.animalIds = [nextAnimalId];
+          payload.animalName = nextAnimalName;
+          payload.animalNames = [nextAnimalName];
         }
 
-        if (isGeneralInterest && requestedAnimalId && linkSpeciesDecision && linkedAnimalSnapshot) {
+        if (!handledByAnimalIds && isGeneralInterest && requestedAnimalId && linkSpeciesDecision && linkedAnimalSnapshot) {
           const linkedAt = FieldValue.serverTimestamp();
           payload.linkedAnimalId = requestedAnimalId;
           payload.linkedAnimalSnapshot = linkedAnimalSnapshot;
@@ -583,20 +781,26 @@ export const updateApplicationReview = onCall(
           payload.waitlistEntry = newQueuePosition > 1;
         }
 
-        if (status === "approved" && nextAnimalId && linkedAnimalRef) {
-          const animalUpdate: Record<string, unknown> = {
-            status: "adopted",
-            adoptedApplicationId: targetId,
-            adoptedAt: FieldValue.serverTimestamp(),
-            activeApplicationCount: 0,
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedBy: actorUid,
-          };
-          if (actorLabel) animalUpdate.updatedByLabel = actorLabel;
-          transaction.update(linkedAnimalRef, animalUpdate);
+        if (status === "approved" && nextAnimalIds.length > 0) {
+          for (const candidateAnimalId of nextAnimalIds) {
+            const animalRef = candidateAnimalId === nextAnimalId && linkedAnimalRef ?
+              linkedAnimalRef :
+              db.collection("animals").doc(candidateAnimalId);
+            const animalUpdate: Record<string, unknown> = {
+              status: "adopted",
+              adoptedApplicationId: targetId,
+              adoptedAt: FieldValue.serverTimestamp(),
+              activeApplicationCount: 0,
+              updatedAt: FieldValue.serverTimestamp(),
+              updatedBy: actorUid,
+            };
+            if (actorLabel) animalUpdate.updatedByLabel = actorLabel;
+            transaction.update(animalRef, animalUpdate);
+          }
         }
 
         resolvedAnimalId = nextAnimalId;
+        resolvedAnimalIds = nextAnimalIds;
         resolvedAnimalName = nextAnimalName;
         transaction.update(appRef, payload);
       });
@@ -617,16 +821,32 @@ export const updateApplicationReview = onCall(
       }
 
       // When approved, convert other active candidates for the same animal to general interest
-      if (status === "approved" && resolvedAnimalId) {
-        const [activeSnap, animalSnap] = await Promise.all([
-          db.collection("applications")
-            .where("animalId", "==", resolvedAnimalId)
-            .where("status", "in", ["pending", "in_review"])
-            .get(),
-          db.collection("animals").doc(resolvedAnimalId).get(),
-        ]);
-        const animal = animalSnap.data() as AnimalRecord | undefined;
-        const others = activeSnap.docs.filter((d) => d.id !== targetId);
+      if (status === "approved" && resolvedAnimalIds.length > 0) {
+        const activeDocsById = new Map<string, {
+          id: string;
+          data: () => Record<string, unknown>;
+          ref: DocumentReference;
+        }>();
+        for (const animalIdToClose of resolvedAnimalIds) {
+          const [byPrimarySnap, byArraySnap] = await Promise.all([
+            db.collection("applications")
+              .where("animalId", "==", animalIdToClose)
+              .where("status", "in", ["pending", "in_review"])
+              .get(),
+            db.collection("applications")
+              .where("animalIds", "array-contains", animalIdToClose)
+              .where("status", "in", ["pending", "in_review"])
+              .get(),
+          ]);
+          for (const docSnap of [...byPrimarySnap.docs, ...byArraySnap.docs]) {
+            activeDocsById.set(docSnap.id, docSnap);
+          }
+        }
+        const animalSnap = resolvedAnimalId ?
+          await db.collection("animals").doc(resolvedAnimalId).get() :
+          null;
+        const animal = animalSnap?.data() as AnimalRecord | undefined;
+        const others = [...activeDocsById.values()].filter((d) => d.id !== targetId);
         if (others.length > 0) {
           const batch = db.batch();
           for (const docSnap of others) {
@@ -635,8 +855,11 @@ export const updateApplicationReview = onCall(
               previousAnimalId: resolvedAnimalId,
               previousAnimalName: resolvedAnimalName ?? null,
               animalId: FieldValue.delete(),
+              animalIds: FieldValue.delete(),
               animalName: FieldValue.delete(),
+              animalNames: FieldValue.delete(),
               queuePosition: FieldValue.delete(),
+              queuePositions: FieldValue.delete(),
               waitlistEntry: FieldValue.delete(),
               updatedAt: FieldValue.serverTimestamp(),
               updatedBy: actorUid,
@@ -656,19 +879,23 @@ export const updateApplicationReview = onCall(
 
       // Gerar o Termo de Adoção imediatamente após a aprovação.
       // Se falhar, não reverte a aprovação — marca contractGenerationStatus: "failed".
-      if (status === "approved" && resolvedAnimalId) {
+      if (status === "approved" && resolvedAnimalIds.length > 0) {
         try {
-          const [appSnap, animalSnap] = await Promise.all([
+          const [appSnap, ...animalSnaps] = await Promise.all([
             db.collection("applications").doc(targetId).get(),
-            db.collection("animals").doc(resolvedAnimalId).get(),
+            ...resolvedAnimalIds.map((animalIdToFetch) =>
+              db.collection("animals").doc(animalIdToFetch).get()
+            ),
           ]);
           const appData = appSnap.data() as Record<string, unknown> | undefined;
-          const animalSnapData = animalSnap.data() as AnimalRecord | undefined;
-          if (appData && animalSnapData) {
+          const animalSnapshots = animalSnaps
+            .filter((snap) => snap.exists)
+            .map((snap) => ({ id: snap.id, data: snap.data() as AnimalRecord }));
+          if (appData && animalSnapshots.length > 0) {
             const { archiveFileId } = await generateAndStoreAdoptionContract(
               targetId,
               appData,
-              animalSnapData,
+              animalSnapshots,
               actorLabel
             );
             const contractBatch = db.batch();
@@ -677,9 +904,11 @@ export const updateApplicationReview = onCall(
               contractGeneratedAt: FieldValue.serverTimestamp(),
               contractGenerationStatus: "stored",
             });
-            contractBatch.update(db.collection("animals").doc(resolvedAnimalId), {
-              adoptionContractArchiveFileId: archiveFileId,
-            });
+            for (const animalIdToUpdate of resolvedAnimalIds) {
+              contractBatch.update(db.collection("animals").doc(animalIdToUpdate), {
+                adoptionContractArchiveFileId: archiveFileId,
+              });
+            }
             await contractBatch.commit();
             logOperationSuccess({
               operation: "contract.generate",
