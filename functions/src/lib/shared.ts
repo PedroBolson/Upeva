@@ -1204,7 +1204,7 @@ export async function recomputeAnimalState(animalId: string): Promise<void> {
       ),
     ]);
 
-    const relevantDocs = new Map<string, { id: string; data: () => Record<string, unknown> }>();
+    const relevantDocs = new Map<string, { id: string; data(): Record<string, unknown> }>();
     for (const doc of [...legacyAppsSnap.docs, ...arrayAppsSnap.docs]) {
       relevantDocs.set(doc.id, doc);
     }

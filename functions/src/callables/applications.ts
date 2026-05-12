@@ -824,7 +824,7 @@ export const updateApplicationReview = onCall(
       if (status === "approved" && resolvedAnimalIds.length > 0) {
         const activeDocsById = new Map<string, {
           id: string;
-          data: () => Record<string, unknown>;
+          data(): Record<string, unknown>;
           ref: DocumentReference;
         }>();
         for (const animalIdToClose of resolvedAnimalIds) {
