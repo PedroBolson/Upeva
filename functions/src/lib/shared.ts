@@ -16,7 +16,13 @@ import { logger } from "firebase-functions/v2";
 import * as functionsV1 from "firebase-functions/v1";
 import { encrypt, decrypt, hmac, piiEncryptionKey, hmacSecretKey } from "./crypto.util.js";
 import { assertAdminRateLimit } from "./rate-limit.util.js";
-import { generatePdf, generateAdoptionContractPdfOfficial, type AddressData, type OfficialContractPdfData } from "./pdf.helper.js";
+import {
+  generatePdf,
+  generateAdoptionContractPdfOfficial,
+  type AddressData,
+  type OfficialContractAnimalData,
+  type OfficialContractPdfData,
+} from "./pdf.helper.js";
 import { uploadArchivePdf, getArchiveSignedUrl } from "./storage-archive.helper.js";
 import {
   VALID_REJECTION_REASONS,
@@ -96,6 +102,7 @@ type ApplicationAddressInput = {
 
 type ValidatedApplicationInput = {
   animalId?: string;
+  animalIds?: string[];
   animalName?: string;
   species: Species;
   fullName: string;
@@ -140,7 +147,11 @@ type ValidatedApplicationInput = {
 export type ApplicationRecord = {
   status: ApplicationStatus;
   animalId?: string;
+  animalIds?: string[];
   animalName?: string;
+  animalNames?: string[];
+  queuePosition?: number;
+  queuePositions?: Record<string, number>;
   species: Species;
   preferredSex?: Sex | "any";
   preferredSize?: Size | "any";
@@ -164,6 +175,11 @@ export type AnimalRecord = {
   adoptedAt?: unknown;
   adoptionContractArchiveFileId?: string;
   activeApplicationCount?: number;
+};
+
+export type ApplicationAnimalSnapshot = {
+  id: string;
+  data: AnimalRecord;
 };
 
 export const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] = ["pending", "in_review"];
@@ -592,12 +608,36 @@ export function validateApplicationInput(rawData: unknown): ValidatedApplication
     throw new HttpsError("invalid-argument", "Espécie inválida.");
   }
 
+  const rawAnimalIdsValue = data.animalIds;
+  const rawAnimalIds = Array.isArray(rawAnimalIdsValue) ?
+    rawAnimalIdsValue.map((value) => {
+      if (typeof value !== "string" || !value.trim()) {
+        throw new HttpsError("invalid-argument", "animalIds deve conter apenas IDs válidos.");
+      }
+      const trimmed = value.trim();
+      assertMaxLength(trimmed, 160, "animalIds");
+      return trimmed;
+    }) :
+    [];
+  const animalIds = [...new Set(rawAnimalIds)];
+  if (animalIds.length > 2) {
+    throw new HttpsError("invalid-argument", "Uma candidatura pode ter no máximo 2 animais.");
+  }
+
   const rawAnimalId = optionalString(data, "animalId", { max: 160 });
+  if (rawAnimalId && animalIds.length > 0 && animalIds[0] !== rawAnimalId) {
+    throw new HttpsError("invalid-argument", "animalId deve corresponder ao primeiro item de animalIds.");
+  }
+  if (!rawAnimalId && animalIds.length === 1) {
+    // animalId stays as the compatibility field for new single-animal submissions.
+    data.animalId = animalIds[0];
+  }
   const rawAnimalName = optionalString(data, "animalName", { max: 100 });
-  if (Boolean(rawAnimalId) !== Boolean(rawAnimalName)) {
+  const effectiveAnimalId = rawAnimalId ?? animalIds[0];
+  if (Boolean(effectiveAnimalId) !== Boolean(rawAnimalName) && animalIds.length === 0) {
     throw new HttpsError("invalid-argument", "animalId e animalName devem ser enviados juntos.");
   }
-  const hasSpecificAnimal = Boolean(rawAnimalId);
+  const hasSpecificAnimal = Boolean(effectiveAnimalId);
 
   const fullName = requiredString(data, "fullName", { min: 3, max: 100 });
   const email = requiredString(data, "email", { max: 254 }).toLowerCase();
@@ -747,7 +787,8 @@ export function validateApplicationInput(rawData: unknown): ValidatedApplication
   assertTrue(acceptsResponsibility, "acceptsResponsibility", "Confirme sua responsabilidade.");
 
   return {
-    animalId: rawAnimalId,
+    animalId: effectiveAnimalId,
+    animalIds: animalIds.length > 0 ? animalIds : effectiveAnimalId ? [effectiveAnimalId] : undefined,
     animalName: rawAnimalName,
     species: species as Species,
     fullName,
@@ -1094,11 +1135,26 @@ export async function removeFromFeaturedAnimalsCache(animalId: string): Promise<
 }
 
 export function isGeneralInterestApplication(application: ApplicationRecord): boolean {
-  if (!application.animalId) return true;
+  if (normalizeApplicationAnimalIds(application).length === 0) return true;
   if (application.species === "dog") {
     return application.preferredSex !== undefined || application.preferredSize !== undefined;
   }
   return application.jointAdoption !== undefined || application.preferredSex !== undefined;
+}
+
+export function normalizeApplicationAnimalIds(
+  application: { animalIds?: unknown; animalId?: unknown },
+): string[] {
+  const ids = Array.isArray(application.animalIds) ?
+    application.animalIds.filter((id): id is string => typeof id === "string" && !!id.trim())
+      .map((id) => id.trim()) :
+    [];
+
+  if (ids.length > 0) return [...new Set(ids)];
+
+  return typeof application.animalId === "string" && application.animalId.trim() ?
+    [application.animalId.trim()] :
+    [];
 }
 
 export function animalMatchesGeneralApplication(application: ApplicationRecord, animal: AnimalRecord): boolean {
@@ -1133,15 +1189,26 @@ export async function recomputeAnimalState(animalId: string): Promise<void> {
     if (!animalSnap.exists) return;
 
     const animal = animalSnap.data() as AnimalRecord;
-    // Single query covers all relevant statuses — no extra read needed
-    const relevantAppsSnap = await tx.get(
-      db
-        .collection("applications")
-        .where("animalId", "==", animalId)
-        .where("status", "in", ["pending", "approved", "in_review", "withdrawn"])
-    );
+    const [legacyAppsSnap, arrayAppsSnap] = await Promise.all([
+      tx.get(
+        db
+          .collection("applications")
+          .where("animalId", "==", animalId)
+          .where("status", "in", ["pending", "approved", "in_review", "withdrawn"])
+      ),
+      tx.get(
+        db
+          .collection("applications")
+          .where("animalIds", "array-contains", animalId)
+          .where("status", "in", ["pending", "approved", "in_review", "withdrawn"])
+      ),
+    ]);
 
-    const relevantApps = relevantAppsSnap.docs.map((doc) => ({
+    const relevantDocs = new Map<string, { id: string; data: () => Record<string, unknown> }>();
+    for (const doc of [...legacyAppsSnap.docs, ...arrayAppsSnap.docs]) {
+      relevantDocs.set(doc.id, doc);
+    }
+    const relevantApps = [...relevantDocs.values()].map((doc) => ({
       id: doc.id,
       ...(doc.data() as ApplicationRecord),
     }));
@@ -1214,14 +1281,25 @@ export async function recalibrateAnimalQueue(animalId: string): Promise<void> {
     const animalSnap = await tx.get(animalRef);
     if (!animalSnap.exists) return;
 
-    const snap = await tx.get(
-      db
-        .collection("applications")
-        .where("animalId", "==", animalId)
-        .where("status", "in", ["pending", "in_review"])
-    );
+    const [legacySnap, arraySnap] = await Promise.all([
+      tx.get(
+        db
+          .collection("applications")
+          .where("animalId", "==", animalId)
+          .where("status", "in", ["pending", "in_review"])
+      ),
+      tx.get(
+        db
+          .collection("applications")
+          .where("animalIds", "array-contains", animalId)
+          .where("status", "in", ["pending", "in_review"])
+      ),
+    ]);
 
-    const sorted = snap.docs.slice().sort((a, b) => {
+    const docsById = new Map<string, typeof legacySnap.docs[number]>();
+    for (const doc of [...legacySnap.docs, ...arraySnap.docs]) docsById.set(doc.id, doc);
+
+    const sorted = [...docsById.values()].sort((a, b) => {
       const ap = (a.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
       const bp = (b.data().queuePosition as number | undefined) ?? Number.MAX_SAFE_INTEGER;
       return ap - bp;
@@ -1229,7 +1307,19 @@ export async function recalibrateAnimalQueue(animalId: string): Promise<void> {
 
     sorted.forEach((doc, i) => {
       const queuePosition = i + 1;
-      tx.update(doc.ref, { queuePosition, waitlistEntry: queuePosition > 1 });
+      const appData = doc.data() as ApplicationRecord & { queuePositions?: Record<string, number> };
+      const appAnimalIds = normalizeApplicationAnimalIds(appData);
+      const queuePositions = {
+        ...(appData.queuePositions ?? {}),
+        [animalId]: queuePosition,
+      };
+      tx.update(doc.ref, {
+        queuePositions,
+        ...(appAnimalIds[0] === animalId ? {
+          queuePosition,
+          waitlistEntry: queuePosition > 1,
+        } : {}),
+      });
     });
     tx.update(animalRef, { activeApplicationCount: sorted.length });
   });
@@ -1247,7 +1337,7 @@ export async function appendToAnimalQueue(animalId: string, appId: string): Prom
     const animal = animalSnap.data() as AnimalRecord;
     const application = appSnap.data() as ApplicationRecord;
     if (
-      application.animalId !== animalId ||
+      !normalizeApplicationAnimalIds(application).includes(animalId) ||
       !ACTIVE_APPLICATION_STATUSES.includes(application.status)
     ) {
       return;
@@ -1273,7 +1363,15 @@ export async function appendToAnimalQueue(animalId: string, appId: string): Prom
       });
     }
 
-    tx.update(appRef, { queuePosition, waitlistEntry });
+    const appAnimalIds = normalizeApplicationAnimalIds(application);
+    const queuePositions = {
+      ...((application as ApplicationRecord & { queuePositions?: Record<string, number> }).queuePositions ?? {}),
+      [animalId]: queuePosition,
+    };
+    tx.update(appRef, {
+      queuePositions,
+      ...(appAnimalIds[0] === animalId ? { queuePosition, waitlistEntry } : {}),
+    });
     tx.update(animalRef, animalUpdate);
   });
 }
@@ -1638,7 +1736,7 @@ export function slugify(text: string, maxLen = 40): string {
 export async function generateAndStoreAdoptionContract(
   applicationId: string,
   applicationData: Record<string, unknown>,
-  animalData: AnimalRecord,
+  animalInput: AnimalRecord | ApplicationAnimalSnapshot[],
   reviewerLabel?: string
 ): Promise<{ archiveFileId: string }> {
   const pii = readApplicationPIIForArchive(applicationData);
@@ -1648,7 +1746,22 @@ export async function generateAndStoreAdoptionContract(
       (applicationData.updatedAt as Timestamp).toDate() :
       new Date();
 
-  const animalSlug = slugify((animalData.name ?? "animal") as string);
+  const animalSnapshots = Array.isArray(animalInput) ?
+    animalInput :
+    [{ id: (applicationData.animalId as string | undefined) ?? "animal", data: animalInput }];
+  const primaryAnimal = animalSnapshots[0]?.data ?? {};
+  const animals: OfficialContractAnimalData[] = animalSnapshots.slice(0, 2).map(({ data }) => ({
+    animalName: (data.name ?? "Animal") as string,
+    species: (data.species ?? "dog") as string,
+    breed: (data.breed ?? "Sem raça definida") as string,
+    sex: data.sex as string | undefined,
+    estimatedAge: data.estimatedAge as string | undefined,
+    coatColor: (data.coatColor ?? "") as string,
+    size: data.size as string | undefined,
+    neutered: data.neutered as boolean | undefined,
+  }));
+
+  const animalSlug = slugify(animals.map((animal) => animal.animalName).join("-") || "animal");
   const dateStr = approvedAt.toISOString().split("T")[0];
   const shortId = applicationId.slice(0, 6);
   const fileName = `contrato_adocao_${animalSlug}_${dateStr}_${shortId}.pdf`;
@@ -1661,14 +1774,15 @@ export async function generateAndStoreAdoptionContract(
     birthDate: pii.birthDate,
     phone: pii.phone,
     address: pii.address as AddressData,
-    animalName: (animalData.name ?? "Animal") as string,
-    species: (animalData.species ?? "dog") as string,
-    breed: (animalData.breed ?? "Sem raça definida") as string,
-    sex: animalData.sex as string | undefined,
-    estimatedAge: animalData.estimatedAge as string | undefined,
-    coatColor: (animalData.coatColor ?? "") as string,
-    size: animalData.size as string | undefined,
-    neutered: animalData.neutered as boolean | undefined,
+    animals,
+    animalName: animals[0]?.animalName ?? "Animal",
+    species: animals[0]?.species ?? "dog",
+    breed: animals[0]?.breed ?? "Sem raça definida",
+    sex: animals[0]?.sex,
+    estimatedAge: animals[0]?.estimatedAge,
+    coatColor: animals[0]?.coatColor ?? "",
+    size: animals[0]?.size,
+    neutered: animals[0]?.neutered,
     approvedAt,
     ongName: "Upeva",
   };
@@ -1689,9 +1803,11 @@ export async function generateAndStoreAdoptionContract(
     sizeBytes,
     year,
     applicationId,
-    animalId: (applicationData.animalId as string | undefined) ?? null,
-    animalName: (animalData.name as string | undefined) ?? null,
-    species: (animalData.species as string | undefined) ?? null,
+    animalId: animalSnapshots[0]?.id ?? (applicationData.animalId as string | undefined) ?? null,
+    animalIds: animalSnapshots.map((animal) => animal.id).filter(Boolean),
+    animalName: (primaryAnimal.name as string | undefined) ?? null,
+    animalNames: animals.map((animal) => animal.animalName),
+    species: (primaryAnimal.species as string | undefined) ?? null,
     reviewerLabel: reviewerLabel ?? null,
     createdAt: FieldValue.serverTimestamp(),
     status: "stored",

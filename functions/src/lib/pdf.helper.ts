@@ -316,6 +316,17 @@ export async function generateArchivedAnimalPdf(data: ArchivedAnimalPdfData): Pr
 
 // ── Official adoption contract (Termo de Adoção Responsável) ─────────────────
 
+export type OfficialContractAnimalData = {
+  animalName: string;
+  species: string;
+  breed: string;
+  sex?: string;
+  estimatedAge?: string;
+  coatColor: string;
+  size?: string;
+  neutered?: boolean;
+};
+
 export type OfficialContractPdfData = {
   applicationId: string;
   fullName: string;
@@ -323,6 +334,7 @@ export type OfficialContractPdfData = {
   birthDate: string;
   phone: string;
   address: AddressData;
+  animals?: OfficialContractAnimalData[];
   animalName: string;
   species: string;
   breed: string;
@@ -480,6 +492,96 @@ function checkbox(checked: boolean): string {
   return checked ? "(X)" : "( )";
 }
 
+function drawOfficialAnimalSection(
+  page: PDFPage,
+  font: PDFFont,
+  boldFont: PDFFont,
+  animal: OfficialContractAnimalData,
+  index: number,
+  total: number,
+  x: number,
+  y: number,
+  contentW: number,
+  bodyFontSize: number,
+  smallSize: number
+): number {
+  const col1X = x;
+  const col2X = x + contentW / 2;
+  const charLineH = 22;
+
+  if (total > 1) {
+    const label = `Animal ${index + 1}`;
+    page.drawText(label, {
+      x,
+      y,
+      size: 9,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
+    y -= 16;
+  }
+
+  drawFilledLine(page, font, boldFont, "Nome: ", animal.animalName, col1X, y, contentW / 2 - 10, bodyFontSize);
+  drawFilledLine(page, font, boldFont, "Espécie: ", officialSpeciesLabel(animal.species), col2X, y, contentW / 2, bodyFontSize);
+  y -= charLineH;
+
+  const isSrd = animal.breed === "Sem raça definida";
+  const racaLabel = "Raça: ";
+  const racaLabelW = boldFont.widthOfTextAtSize(racaLabel, bodyFontSize);
+  page.drawText(racaLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const srdBox = `${checkbox(isSrd)} Sem raça definida   ${checkbox(!isSrd)} Outra: `;
+  page.drawText(srdBox, { x: col1X + racaLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  if (!isSrd) {
+    const srdBoxW = font.widthOfTextAtSize(srdBox, smallSize);
+    page.drawText(animal.breed, { x: col1X + racaLabelW + srdBoxW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+    drawUnderline(page, col1X + racaLabelW + srdBoxW, y, contentW - racaLabelW - srdBoxW);
+  }
+  y -= charLineH;
+
+  const sexLabel = "Sexo: ";
+  const sexLabelW = boldFont.widthOfTextAtSize(sexLabel, bodyFontSize);
+  page.drawText(sexLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const sexF = animal.sex === "female";
+  const sexM = animal.sex === "male";
+  const sexStr = `${checkbox(sexF)} F   ${checkbox(sexM)} M`;
+  page.drawText(sexStr, { x: col1X + sexLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+
+  const idadeLabel = "Idade: ";
+  const idadeLabelW = boldFont.widthOfTextAtSize(idadeLabel, bodyFontSize);
+  page.drawText(idadeLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const idadeVal = animal.estimatedAge ?? "";
+  page.drawText(idadeVal, { x: col2X + idadeLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, col2X + idadeLabelW, y, contentW / 2 - idadeLabelW);
+  y -= charLineH;
+
+  const pelagemLabel = "Pelagem e cor: ";
+  const pelagemLabelW = boldFont.widthOfTextAtSize(pelagemLabel, bodyFontSize);
+  page.drawText(pelagemLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  page.drawText(animal.coatColor, { x: col1X + pelagemLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
+  drawUnderline(page, col1X + pelagemLabelW, y, contentW / 2 - 10 - pelagemLabelW);
+
+  // Porte is not applicable for cats — omit the field entirely for feline contracts.
+  if (animal.species !== "cat") {
+    const porteLabel = "Porte: ";
+    const porteLabelW = boldFont.widthOfTextAtSize(porteLabel, bodyFontSize);
+    page.drawText(porteLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+    const sizeCode = officialSizeLabel(animal.size);
+    const porteStr = `${checkbox(sizeCode === "P")} P   ${checkbox(sizeCode === "M")} M   ${checkbox(sizeCode === "G")} G`;
+    page.drawText(porteStr, { x: col2X + porteLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  }
+  y -= charLineH;
+
+  const castLabel = "Castrado(a): ";
+  const castLabelW = boldFont.widthOfTextAtSize(castLabel, bodyFontSize);
+  page.drawText(castLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
+  const isNeutered = animal.neutered === true;
+  const castStr = `${checkbox(isNeutered)} S   ${checkbox(!isNeutered)} N`;
+  page.drawText(castStr, { x: col1X + castLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
+  y -= total > 1 ? 24 : 32;
+
+  return y;
+}
+
 /**
  * Gera o Termo de Adoção Responsável oficial, seguindo o modelo físico da Upeva.
  * Reproduz título, bloco de dados do responsável, tabela de características do
@@ -577,70 +679,32 @@ export async function generateAdoptionContractPdfOfficial(
   });
   y -= 28;
 
-  // ── Tabela de características do animal ───────────────────────────────────
-  const col1X = M;
-  const col2X = M + contentW / 2;
-  const charLineH = 22;
+  const animals = data.animals?.length ? data.animals.slice(0, 2) : [{
+    animalName: data.animalName,
+    species: data.species,
+    breed: data.breed,
+    sex: data.sex,
+    estimatedAge: data.estimatedAge,
+    coatColor: data.coatColor,
+    size: data.size,
+    neutered: data.neutered,
+  }];
 
-  // Row 1: Nome | Espécie
-  drawFilledLine(page, font, boldFont, "Nome: ", data.animalName, col1X, y, contentW / 2 - 10, bodyFontSize);
-  drawFilledLine(page, font, boldFont, "Espécie: ", officialSpeciesLabel(data.species), col2X, y, contentW / 2, bodyFontSize);
-  y -= charLineH;
-
-  // Row 2: Raça (checkbox SRD / Outra)
-  const isSrd = data.breed === "Sem raça definida";
-  const racaLabel = "Raça: ";
-  const racaLabelW = boldFont.widthOfTextAtSize(racaLabel, bodyFontSize);
-  page.drawText(racaLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  const srdBox = `${checkbox(isSrd)} Sem raça definida   ${checkbox(!isSrd)} Outra: `;
-  page.drawText(srdBox, { x: col1X + racaLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-  if (!isSrd) {
-    const srdBoxW = font.widthOfTextAtSize(srdBox, smallSize);
-    page.drawText(data.breed, { x: col1X + racaLabelW + srdBoxW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-    drawUnderline(page, col1X + racaLabelW + srdBoxW, y, contentW - racaLabelW - srdBoxW);
-  }
-  y -= charLineH;
-
-  // Row 3: Sexo | Idade
-  const sexLabel = "Sexo: ";
-  const sexLabelW = boldFont.widthOfTextAtSize(sexLabel, bodyFontSize);
-  page.drawText(sexLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  const sexF = data.sex === "female";
-  const sexM = data.sex === "male";
-  const sexStr = `${checkbox(sexF)} F   ${checkbox(sexM)} M`;
-  page.drawText(sexStr, { x: col1X + sexLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-
-  const idadeLabel = "Idade: ";
-  const idadeLabelW = boldFont.widthOfTextAtSize(idadeLabel, bodyFontSize);
-  page.drawText(idadeLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  const idadeVal = data.estimatedAge ?? "";
-  page.drawText(idadeVal, { x: col2X + idadeLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  drawUnderline(page, col2X + idadeLabelW, y, contentW / 2 - idadeLabelW);
-  y -= charLineH;
-
-  // Row 4: Pelagem e cor | Porte
-  const pelagemLabel = "Pelagem e cor: ";
-  const pelagemLabelW = boldFont.widthOfTextAtSize(pelagemLabel, bodyFontSize);
-  page.drawText(pelagemLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  page.drawText(data.coatColor, { x: col1X + pelagemLabelW, y, size: bodyFontSize, font, color: rgb(0, 0, 0) });
-  drawUnderline(page, col1X + pelagemLabelW, y, contentW / 2 - 10 - pelagemLabelW);
-
-  const porteLabel = "Porte: ";
-  const porteLabelW = boldFont.widthOfTextAtSize(porteLabel, bodyFontSize);
-  page.drawText(porteLabel, { x: col2X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  const sizeCode = officialSizeLabel(data.size);
-  const porteStr = `${checkbox(sizeCode === "P")} P   ${checkbox(sizeCode === "M")} M   ${checkbox(sizeCode === "G")} G`;
-  page.drawText(porteStr, { x: col2X + porteLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-  y -= charLineH;
-
-  // Row 5: Castrado(a)
-  const castLabel = "Castrado(a): ";
-  const castLabelW = boldFont.widthOfTextAtSize(castLabel, bodyFontSize);
-  page.drawText(castLabel, { x: col1X, y, size: bodyFontSize, font: boldFont, color: rgb(0, 0, 0) });
-  const isNeutered = data.neutered === true;
-  const castStr = `${checkbox(isNeutered)} S   ${checkbox(!isNeutered)} N`;
-  page.drawText(castStr, { x: col1X + castLabelW, y, size: smallSize, font, color: rgb(0, 0, 0) });
-  y -= 32;
+  animals.forEach((animal, index) => {
+    y = drawOfficialAnimalSection(
+      page,
+      font,
+      boldFont,
+      animal,
+      index,
+      animals.length,
+      M,
+      y,
+      contentW,
+      bodyFontSize,
+      smallSize
+    );
+  });
 
   // ── Cláusulas ─────────────────────────────────────────────────────────────
   const paragraphIndent = 18;
