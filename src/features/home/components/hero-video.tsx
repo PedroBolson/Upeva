@@ -280,7 +280,7 @@ export function HeroVideo() {
         className="relative z-10 mx-auto max-w-6xl w-full px-4 sm:px-6 lg:px-8
                    pt-20 sm:pt-[10vh] md:pt-[11vh] lg:pt-[12vh] pb-16"
       >
-        <div className="max-w-[760px]">
+        <div className="max-w-190">
 
           <h1
             className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight hero-animate-h1"
@@ -337,7 +337,7 @@ export function HeroVideo() {
               <Button
                 variant="outline"
                 size="lg"
-                className="border border-primary/35 bg-white/80 text-foreground shadow-sm backdrop-blur-sm hover:!border-primary/35 hover:!bg-white/80 hover:!text-foreground hover:opacity-90 active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-primary/45 dark:bg-card/80 dark:text-foreground dark:hover:!border-primary/45 dark:hover:!bg-card/80 dark:hover:!text-foreground"
+                className="border border-primary/35 bg-white/80 text-foreground shadow-sm backdrop-blur-sm hover:border-primary/35! hover:bg-white/80! hover:text-foreground! hover:opacity-90 active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-primary/45 dark:bg-card/80 dark:text-foreground dark:hover:border-primary/45! dark:hover:bg-card/80! dark:hover:text-foreground!"
               >
                 Conheça a Upeva
               </Button>
