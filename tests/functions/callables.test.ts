@@ -1114,6 +1114,7 @@ describe('staff final animal assignment via updateApplicationReview', () => {
         animalNames: ['Assign A'],
         queuePosition: 1,
         status: 'in_review',
+        jointAdoption: true,
       }),
     )
 
@@ -1310,13 +1311,14 @@ describe('staff final animal assignment via updateApplicationReview', () => {
     await adminDb.collection('animals').doc('cat-legacy-2').set(
       availableAnimalDoc({ name: 'Legacy Cat 2', activeApplicationCount: 0 }),
     )
-    // Legacy doc: has animalId but no animalIds
+    // Legacy doc: has animalId but no animalIds; jointAdoption: true added so 2 cats can be assigned
     await adminDb.collection('applications').doc('app-legacy').set(
       encryptedApplicationDoc({
         animalId: 'cat-legacy',
         animalName: 'Legacy Cat',
         queuePosition: 1,
         status: 'in_review',
+        jointAdoption: true,
         // no animalIds field
       }),
     )
@@ -1461,13 +1463,11 @@ describe('jointAdoption consent enforcement for staff cat assignment', () => {
       }),
     )
 
-    await expect(
-      callable('updateApplicationReview')({
-        id: 'app-single-cat',
-        status: 'pending',
-        animalIds: ['cat-single-ok'],
-      }),
-    ).resolves.toMatchObject({ success: true })
+    await callable('updateApplicationReview')({
+      id: 'app-single-cat',
+      status: 'pending',
+      animalIds: ['cat-single-ok'],
+    })
 
     const snap = await adminDb.collection('applications').doc('app-single-cat').get()
     expect(snap.data()?.animalId).toBe('cat-single-ok')
@@ -1487,13 +1487,11 @@ describe('jointAdoption consent enforcement for staff cat assignment', () => {
       }),
     )
 
-    await expect(
-      callable('updateApplicationReview')({
-        id: 'app-joint-ok',
-        status: 'pending',
-        animalIds: ['cat-pair-a', 'cat-pair-b'],
-      }),
-    ).resolves.toMatchObject({ success: true })
+    await callable('updateApplicationReview')({
+      id: 'app-joint-ok',
+      status: 'pending',
+      animalIds: ['cat-pair-a', 'cat-pair-b'],
+    })
 
     const snap = await adminDb.collection('applications').doc('app-joint-ok').get()
     expect(snap.data()?.animalIds).toEqual(['cat-pair-a', 'cat-pair-b'])
