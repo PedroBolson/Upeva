@@ -1403,3 +1403,99 @@ describe('staff final animal assignment via updateApplicationReview', () => {
     expect(pdfContent).not.toContain('Porte ')
   })
 })
+
+describe('jointAdoption consent enforcement for staff cat assignment', () => {
+  it('rejects 2 cats when jointAdoption is false', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-joint-a').set(availableAnimalDoc({ name: 'Cat A' }))
+    await adminDb.collection('animals').doc('cat-joint-b').set(availableAnimalDoc({ name: 'Cat B' }))
+    await adminDb.collection('applications').doc('app-no-joint').set(
+      encryptedApplicationDoc({
+        species: 'cat',
+        jointAdoption: false,
+        status: 'in_review',
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-no-joint',
+        status: 'in_review',
+        animalIds: ['cat-joint-a', 'cat-joint-b'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('rejects 2 cats when jointAdoption field is missing (legacy)', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-legacy-joint-a').set(availableAnimalDoc({ name: 'Legacy A' }))
+    await adminDb.collection('animals').doc('cat-legacy-joint-b').set(availableAnimalDoc({ name: 'Legacy B' }))
+    await adminDb.collection('applications').doc('app-missing-joint').set(
+      encryptedApplicationDoc({
+        species: 'cat',
+        status: 'pending',
+        // jointAdoption intentionally absent
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-missing-joint',
+        status: 'pending',
+        animalIds: ['cat-legacy-joint-a', 'cat-legacy-joint-b'],
+      }),
+    ).rejects.toMatchObject({ code: 'functions/failed-precondition' })
+  })
+
+  it('allows 1 cat when jointAdoption is false', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-single-ok').set(availableAnimalDoc({ name: 'Solo Cat' }))
+    await adminDb.collection('applications').doc('app-single-cat').set(
+      encryptedApplicationDoc({
+        species: 'cat',
+        jointAdoption: false,
+        status: 'pending',
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-single-cat',
+        status: 'pending',
+        animalIds: ['cat-single-ok'],
+      }),
+    ).resolves.toMatchObject({ success: true })
+
+    const snap = await adminDb.collection('applications').doc('app-single-cat').get()
+    expect(snap.data()?.animalId).toBe('cat-single-ok')
+    expect(snap.data()?.animalIds).toEqual(['cat-single-ok'])
+  })
+
+  it('allows 2 cats when jointAdoption is true', async () => {
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-pair-a').set(availableAnimalDoc({ name: 'Pair A' }))
+    await adminDb.collection('animals').doc('cat-pair-b').set(availableAnimalDoc({ name: 'Pair B' }))
+    await adminDb.collection('applications').doc('app-joint-ok').set(
+      encryptedApplicationDoc({
+        species: 'cat',
+        jointAdoption: true,
+        status: 'pending',
+      }),
+    )
+
+    await expect(
+      callable('updateApplicationReview')({
+        id: 'app-joint-ok',
+        status: 'pending',
+        animalIds: ['cat-pair-a', 'cat-pair-b'],
+      }),
+    ).resolves.toMatchObject({ success: true })
+
+    const snap = await adminDb.collection('applications').doc('app-joint-ok').get()
+    expect(snap.data()?.animalIds).toEqual(['cat-pair-a', 'cat-pair-b'])
+  })
+})

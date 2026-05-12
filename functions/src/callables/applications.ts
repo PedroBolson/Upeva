@@ -497,6 +497,13 @@ export const updateApplicationReview = onCall(
             );
           }
 
+          if (uniqueStaffIds.length > 1 && application.jointAdoption !== true) {
+            throw new HttpsError(
+              "failed-precondition",
+              "O candidato não autorizou adoção conjunta. Apenas 1 gato pode ser vinculado a esta candidatura."
+            );
+          }
+
           const addedIds = uniqueStaffIds.filter((id) => !currentAnimalIds.includes(id));
           const removedIds = currentAnimalIds.filter((id) => !uniqueStaffIds.includes(id));
 

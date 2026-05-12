@@ -320,9 +320,13 @@ export function ApplicationDetailPage() {
 
   function handleSaveCatAssignment() {
     if (!id || !app) return
-    const ids = [catSlot1, catSlot2].filter(Boolean)
+    const ids = [catSlot1, app.jointAdoption ? catSlot2 : ''].filter(Boolean)
     if (ids.length === 0) {
       setCatAssignmentError('Selecione pelo menos um gato.')
+      return
+    }
+    if (ids.length > 1 && !app.jointAdoption) {
+      setCatAssignmentError('O candidato não autorizou adoção conjunta.')
       return
     }
     setCatAssignmentError(null)
@@ -992,21 +996,22 @@ export function ApplicationDetailPage() {
                     }}
                     disabled={availableCatsLoading || isPending}
                   />
-                  <Select
-                    label="Gato 2 (opcional)"
-                    options={[
-                      { value: '', label: 'Nenhum' },
-                      ...availableCats
-                        .filter((c) => c.id !== catSlot1)
-                        .map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                    value={catSlot2}
-                    onChange={(v) => setCatSlot2Draft(v || '')}
-                    disabled={availableCatsLoading || isPending}
-                  />
-                  {catSlot2 && !app.jointAdoption && (
-                    <p className="text-xs text-warning">
-                      Dois gatos selecionados, mas o candidato não marcou preferência por adoção conjunta.
+                  {app.jointAdoption ? (
+                    <Select
+                      label="Gato 2 (opcional)"
+                      options={[
+                        { value: '', label: 'Nenhum' },
+                        ...availableCats
+                          .filter((c) => c.id !== catSlot1)
+                          .map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                      value={catSlot2}
+                      onChange={(v) => setCatSlot2Draft(v || '')}
+                      disabled={availableCatsLoading || isPending}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      O candidato não aceitou adoção conjunta; apenas 1 gato pode ser vinculado.
                     </p>
                   )}
                   <Button
@@ -1040,6 +1045,11 @@ export function ApplicationDetailPage() {
                   {(app.status === 'approved' || app.status === 'rejected') && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Animais bloqueados após decisão final.
+                    </p>
+                  )}
+                  {appAnimalIds.length > 1 && !app.jointAdoption && (
+                    <p className="mt-1 text-xs text-warning">
+                      Atenção: dois gatos vinculados, mas o candidato não aceitou adoção conjunta.
                     </p>
                   )}
                 </div>
