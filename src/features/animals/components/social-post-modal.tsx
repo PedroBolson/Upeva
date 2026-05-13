@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/utils/cn'
-import { buildAnimalSocialPost, getAnimalAdoptionUrl } from '../utils/social-post'
+import { buildAnimalSocialPost, getAnimalPublicUrl } from '../utils/social-post'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS } from '../types/animal.types'
 import type { Animal } from '../types/animal.types'
 
@@ -246,10 +246,10 @@ interface SocialPostModalProps {
 
 export function SocialPostModal({ open, onClose, animal }: SocialPostModalProps) {
   const coverIdx = Math.min(animal.coverPhotoIndex, Math.max(0, animal.photos.length - 1))
-  const adoptionUrl = getAnimalAdoptionUrl(animal.id)
+  const publicUrl = getAnimalPublicUrl(animal.id)
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(coverIdx)
-  const [caption, setCaption] = useState(() => buildAnimalSocialPost(animal, adoptionUrl))
+  const [caption, setCaption] = useState(() => buildAnimalSocialPost(animal, publicUrl))
   const [copied, setCopied] = useState(false)
   const [corsBlocked, setCorsBlocked] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)

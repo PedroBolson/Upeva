@@ -1,11 +1,11 @@
 import type { Animal } from '../types/animal.types'
 import { SEX_LABELS, SIZE_LABELS } from '../types/animal.types'
 
-export function getAnimalAdoptionUrl(animalId: string): string {
-  return `${window.location.origin}/adotar/${animalId}`
+export function getAnimalPublicUrl(animalId: string): string {
+  return `${window.location.origin}/animais/${animalId}`
 }
 
-export function buildAnimalSocialPost(animal: Animal, adoptionUrl?: string): string {
+export function buildAnimalSocialPost(animal: Animal, publicUrl?: string): string {
   const parts: string[] = []
 
   const article = animal.sex === 'female' ? 'a' : 'o'
@@ -60,9 +60,9 @@ export function buildAnimalSocialPost(animal: Animal, adoptionUrl?: string): str
   }
 
   parts.push('')
-  if (adoptionUrl) {
+  if (publicUrl) {
     parts.push(
-      `Para conhecer melhor e se candidatar à adoção, acesse:\n${adoptionUrl}`,
+      `Para conhecer melhor e saber como adotar, acesse:\n${publicUrl}`,
     )
   } else {
     const contraction = animal.sex === 'female' ? 'pela' : 'pelo'
