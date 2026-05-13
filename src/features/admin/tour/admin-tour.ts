@@ -13,6 +13,13 @@ export interface TourStepConfig {
   // Only set on interactive elements (nav links, route links) where clicking
   // naturally causes navigation. Do NOT set on informational cards/divs.
   clickAdvances: boolean
+  // If true, disable pointer events on child <a> links while this step is
+  // highlighted, preventing the user from navigating into a specific record
+  // (animals, applications) and breaking the tour flow.
+  blockInnerLinks?: boolean
+  // If true, the mobile sidebar should be opened before this step is shown
+  // so the nav item is visible and highlightable on small screens.
+  opensNavOnMobile?: boolean
 }
 
 export function firestoreTourKey(role: UserRole): string {
@@ -38,12 +45,22 @@ export function markTourCompletedLocally(role: UserRole | undefined): void {
   localStorage.setItem(localStorageTourKey(role), 'true')
 }
 
-// Nav elements in the sidebar are only always-visible on desktop.
-// On mobile, the sidebar closes after each navigation, so returning undefined
-// makes driver.js show a centered popover without highlighting — safe on mobile.
-function safeNavEl(selector: string): string | undefined {
+function safeNavEl(selector: string): string {
+  return selector
+}
+
+// Returns undefined on mobile so driver.js shows a centered popover instead of
+// trying to highlight an element that's hidden or replaced by a compact variant.
+function desktopEl(selector: string): string | undefined {
   if (typeof window !== 'undefined' && window.innerWidth < 768) return undefined
   return selector
+}
+
+// Sidebar popover: appears to the right on desktop, below the item on mobile
+// so the highlighted nav button stays visible above the popover.
+function navPopoverSide(): 'right' | 'bottom' {
+  if (typeof window !== 'undefined' && window.innerWidth < 768) return 'bottom'
+  return 'right'
 }
 
 export function getAdminTourConfigs(): TourStepConfig[] {
@@ -79,13 +96,14 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-animais"]'),
         popover: {
           title: 'Menu — Animais',
           description:
             'Clique em "Animais" para acessar a lista de animais cadastrados. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -95,7 +113,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="animal-filters"]',
+        element: desktopEl('[data-tour="animal-filters"]'),
         popover: {
           title: 'Filtros e busca',
           description:
@@ -109,6 +127,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
+      blockInnerLinks: true,
       step: {
         element: '[data-tour="animals-list-area"]',
         popover: {
@@ -220,27 +239,58 @@ export function getAdminTourConfigs(): TourStepConfig[] {
       },
     },
 
-    // 12 – Candidaturas nav item → navigate to /admin/candidaturas
+    // 12 – Destaques nav item → navigate to /admin/destaques
+    {
+      navTarget: '/admin/destaques',
+      clickAdvances: true,
+      opensNavOnMobile: true,
+      step: {
+        element: safeNavEl('[data-tour="nav-destaques"]'),
+        popover: {
+          title: 'Menu — Destaques',
+          description:
+            'Clique em "Destaques" para definir quais animais aparecem na página inicial. Você também pode clicar em Avançar que eu abro essa tela para você.',
+          side: navPopoverSide(),
+        },
+      },
+    },
+
+    // 13 – Featured area (on /admin/destaques)
+    {
+      navTarget: null,
+      clickAdvances: false,
+      step: {
+        element: '[data-tour="featured-area"]',
+        popover: {
+          title: 'Animais em Destaque',
+          description:
+            'Defina quais animais aparecem na página inicial. Com exatamente 4, a ordem escolhida é respeitada. Com mais de 4, o sistema sorteia 4 por sessão — animais no topo têm mais chance de aparecer, com probabilidade decrescente. Com menos de 4, o sistema completa com outros animais disponíveis. Arraste para reordenar, use "Adicionar animal" para incluir novos e "Salvar destaques" para confirmar.',
+        },
+      },
+    },
+
+    // 14 – Candidaturas nav item → navigate to /admin/candidaturas
     {
       navTarget: '/admin/candidaturas',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-candidaturas"]'),
         popover: {
           title: 'Menu — Candidaturas',
           description:
             'Clique em "Candidaturas" para acessar todas as solicitações de adoção. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
 
-    // 13 – Applications: status tabs (on /admin/candidaturas)
+    // 15 – Applications: status tabs (on /admin/candidaturas)
     {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="applications-status-tabs"]',
+        element: desktopEl('[data-tour="applications-status-tabs"]'),
         popover: {
           title: 'Filtro por status',
           description:
@@ -254,6 +304,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
+      blockInnerLinks: true,
       step: {
         element: '[data-tour="applications-list-area"]',
         popover: {
@@ -268,13 +319,14 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/arquivos',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-arquivos"]'),
         popover: {
           title: 'Menu — Arquivos',
           description:
             'Clique em "Arquivos" para acessar os PDFs gerados pelo sistema. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -297,13 +349,14 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/usuarios',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-usuarios"]'),
         popover: {
           title: 'Menu — Usuários (somente admin)',
           description:
             'Clique em "Usuários" para gerenciar quem tem acesso ao painel. Área exclusiva para administradores. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -327,13 +380,14 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/privacidade',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-privacidade"]'),
         popover: {
           title: 'Menu — Privacidade / LGPD (somente admin)',
           description:
             'Clique em "Privacidade" para atender solicitações de exclusão de dados pessoais. Área exclusiva para administradores. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -358,12 +412,12 @@ export function getAdminTourConfigs(): TourStepConfig[] {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="tour-replay-button"]',
+        element: desktopEl('[data-tour="tour-replay-button"]'),
         popover: {
           title: 'Replay do tutorial',
           description:
             'Você pode rever este tutorial a qualquer momento clicando em "Tutorial" na barra lateral. O tutorial não aparece novamente automaticamente após ser concluído.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -403,13 +457,14 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-animais"]'),
         popover: {
           title: 'Menu — Animais',
           description:
             'Clique em "Animais" para acessar a lista de animais. Como analista, você pode cadastrar e editar animais. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -419,7 +474,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="animal-filters"]',
+        element: desktopEl('[data-tour="animal-filters"]'),
         popover: {
           title: 'Filtros e busca',
           description:
@@ -433,6 +488,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
+      blockInnerLinks: true,
       step: {
         element: '[data-tour="animals-list-area"]',
         popover: {
@@ -487,7 +543,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
       },
     },
 
-    // 8 – Animal form: actions (nav-candidaturas step follows)
+    // 8 – Animal form: actions (nav-destaques step follows)
     {
       navTarget: null,
       clickAdvances: false,
@@ -502,17 +558,48 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
       },
     },
 
-    // 9 – Candidaturas nav item → navigate to /admin/candidaturas
+    // 9 – Destaques nav item → navigate to /admin/destaques
+    {
+      navTarget: '/admin/destaques',
+      clickAdvances: true,
+      opensNavOnMobile: true,
+      step: {
+        element: safeNavEl('[data-tour="nav-destaques"]'),
+        popover: {
+          title: 'Menu — Destaques',
+          description:
+            'Clique em "Destaques" para definir quais animais aparecem na página inicial. Você também pode clicar em Avançar que eu abro essa tela para você.',
+          side: navPopoverSide(),
+        },
+      },
+    },
+
+    // 10 – Featured area (on /admin/destaques)
+    {
+      navTarget: null,
+      clickAdvances: false,
+      step: {
+        element: '[data-tour="featured-area"]',
+        popover: {
+          title: 'Animais em Destaque',
+          description:
+            'Defina quais animais aparecem na página inicial. Com exatamente 4, a ordem escolhida é respeitada. Com mais de 4, o sistema sorteia 4 por sessão — animais no topo têm mais chance de aparecer, com probabilidade decrescente. Com menos de 4, o sistema completa com outros animais disponíveis. Arraste para reordenar, use "Adicionar animal" para incluir novos e "Salvar destaques" para confirmar.',
+        },
+      },
+    },
+
+    // 11 – Candidaturas nav item → navigate to /admin/candidaturas
     {
       navTarget: '/admin/candidaturas',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-candidaturas"]'),
         popover: {
           title: 'Menu — Candidaturas',
           description:
             'Clique em "Candidaturas" — é o principal espaço de trabalho da triagem. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -522,7 +609,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="applications-status-tabs"]',
+        element: desktopEl('[data-tour="applications-status-tabs"]'),
         popover: {
           title: 'Filtro por status',
           description:
@@ -536,6 +623,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
+      blockInnerLinks: true,
       step: {
         element: '[data-tour="applications-list-area"]',
         popover: {
@@ -550,13 +638,14 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/arquivos',
       clickAdvances: true,
+      opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-arquivos"]'),
         popover: {
           title: 'Menu — Arquivos',
           description:
             'Clique em "Arquivos" para acessar os PDFs gerados pelo sistema. Você também pode clicar em Avançar que eu abro essa tela para você.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },
@@ -580,12 +669,12 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
       navTarget: null,
       clickAdvances: false,
       step: {
-        element: '[data-tour="tour-replay-button"]',
+        element: desktopEl('[data-tour="tour-replay-button"]'),
         popover: {
           title: 'Replay do tutorial',
           description:
             'Clique em "Tutorial" na barra lateral a qualquer momento para rever este tutorial. O tutorial não aparece novamente automaticamente após ser concluído.',
-          side: 'right',
+          side: navPopoverSide(),
         },
       },
     },

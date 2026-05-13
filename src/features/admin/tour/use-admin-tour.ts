@@ -65,9 +65,24 @@ function isInputFocused(): boolean {
   )
 }
 
+// Intercepts clicks that land inside `el` using a document-level capture listener,
+// which fires before React's synthetic onClick can dispatch.
+// The tour popover lives outside `el` so tour buttons are unaffected.
+function blockElementClicks(el: Element): () => void {
+  const handler = (e: Event) => {
+    if (el.contains(e.target as Node)) {
+      e.stopPropagation()
+      e.preventDefault()
+    }
+  }
+  document.addEventListener('click', handler, true)
+  return () => document.removeEventListener('click', handler, true)
+}
+
 export function useAdminTour(
   role: UserRole | undefined,
   onBeforeStart: () => void,
+  openSidebar: () => void,
   uid: string | undefined,
   completedTours: Record<string, Timestamp> | undefined,
 ) {
@@ -95,15 +110,18 @@ export function useAdminTour(
     // and the "Avançar" button fire for the same step.
     let isAdvancing = false
 
-    // Cleanup handles for the active click listener and element wait.
+    // Cleanup handles for the active click listener, element wait, and link blocking.
     let cancelClick: (() => void) | null = null
     let cancelWait: (() => void) | null = null
+    let unblockLinks: (() => void) | null = null
 
     function cancelPending() {
       cancelClick?.()
       cancelClick = null
       cancelWait?.()
       cancelWait = null
+      unblockLinks?.()
+      unblockLinks = null
     }
 
     // Core advancement: navigate (if needed) then wait for the next element,
@@ -116,29 +134,54 @@ export function useAdminTour(
 
       const config = configs[currentIndex]
       const navTarget = config?.navTarget
+      const nextConfig = configs[currentIndex + 1]
+      const nextEl = nextConfig?.step.element
+      const nextSelector = typeof nextEl === 'string' ? nextEl : null
 
       const doMove = () => {
         isAdvancing = false
         ref.d?.moveNext()
       }
 
+      const waitAndMove = () => {
+        if (nextSelector) {
+          cancelWait = waitForElement(nextSelector, doMove)
+        } else {
+          const t = setTimeout(doMove, 400)
+          cancelWait = () => clearTimeout(t)
+        }
+      }
+
       if (navTarget) {
         // "button" path: we navigate; "click" path: React Router already did it.
         if (source === 'button') navigate(navTarget)
 
-        // Determine what the next step needs in the DOM.
-        const nextEl = configs[currentIndex + 1]?.step.element
-        const nextSelector = typeof nextEl === 'string' ? nextEl : null
-
-        if (nextSelector) {
-          cancelWait = waitForElement(nextSelector, doMove)
+        if (nextConfig?.opensNavOnMobile && window.innerWidth < 768) {
+          // After navigate, closeSidebar fires. Open sidebar then wait a fixed 400ms —
+          // enough for React commit + 200ms Framer Motion animation + buffer.
+          // We skip waitForElement because the MutationObserver fires the instant the
+          // element enters the DOM (before the animation starts), causing driver.js to
+          // measure the element while it is still off-screen at translateX(-240px).
+          const t1 = setTimeout(() => {
+            openSidebar()
+            const t2 = setTimeout(doMove, 400)
+            cancelWait = () => clearTimeout(t2)
+          }, 200)
+          cancelWait = () => clearTimeout(t1)
         } else {
-          // No specific element to wait for — short delay for React to settle.
-          const t = setTimeout(doMove, 400)
-          cancelWait = () => clearTimeout(t)
+          waitAndMove()
         }
       } else {
-        doMove()
+        // No navigation. If the next step needs the sidebar open, open it and wait
+        // 400ms (React commit + 200ms animation + buffer) before calling moveNext so
+        // driver.js measures the correct on-screen position, not the mid-animation one.
+        if (nextConfig?.opensNavOnMobile && window.innerWidth < 768) {
+          openSidebar()
+          const t = setTimeout(doMove, 400)
+          cancelWait = () => clearTimeout(t)
+        } else {
+          doMove()
+        }
       }
     }
 
@@ -155,24 +198,46 @@ export function useAdminTour(
         return
       }
 
+      const prevConfig = configs[prevIndex]
+      const prevEl = prevConfig.step.element
+      const prevSelector = typeof prevEl === 'string' ? prevEl : null
+
       const doMovePrev = () => {
         isAdvancing = false
         ref.d?.movePrevious()
       }
 
-      const targetRoute = stepRoutes[prevIndex]
-      if (targetRoute && targetRoute !== window.location.pathname) {
-        navigate(targetRoute)
-        const prevEl = configs[prevIndex].step.element
-        const prevSelector = typeof prevEl === 'string' ? prevEl : null
+      const waitAndMovePrev = () => {
         if (prevSelector) {
           cancelWait = waitForElement(prevSelector, doMovePrev)
         } else {
           const t = setTimeout(doMovePrev, 400)
           cancelWait = () => clearTimeout(t)
         }
+      }
+
+      const targetRoute = stepRoutes[prevIndex]
+      if (targetRoute && targetRoute !== window.location.pathname) {
+        navigate(targetRoute)
+
+        if (prevConfig.opensNavOnMobile && window.innerWidth < 768) {
+          const t1 = setTimeout(() => {
+            openSidebar()
+            const t2 = setTimeout(doMovePrev, 400)
+            cancelWait = () => clearTimeout(t2)
+          }, 200)
+          cancelWait = () => clearTimeout(t1)
+        } else {
+          waitAndMovePrev()
+        }
       } else {
-        doMovePrev()
+        if (prevConfig.opensNavOnMobile && window.innerWidth < 768) {
+          openSidebar()
+          const t = setTimeout(doMovePrev, 400)
+          cancelWait = () => clearTimeout(t)
+        } else {
+          doMovePrev()
+        }
       }
     }
 
@@ -196,15 +261,22 @@ export function useAdminTour(
         },
 
         // Called when a step's element begins highlighting.
-        // Attaches a click listener on interactive (clickAdvances) elements.
+        // Attaches a click listener on interactive (clickAdvances) elements
+        // and blocks inner links on list area steps.
         onHighlightStarted: (element, _step, { state }) => {
           // Reset so the next step can advance freely.
           isAdvancing = false
           cancelClick?.()
           cancelClick = null
+          unblockLinks?.()
+          unblockLinks = null
 
           const i = state.activeIndex ?? 0
           const config = configs[i]
+
+          if (config?.blockInnerLinks && element instanceof Element) {
+            unblockLinks = blockElementClicks(element)
+          }
 
           if (config?.clickAdvances && element instanceof Element) {
             let fired = false
@@ -238,7 +310,7 @@ export function useAdminTour(
 
       ref.d.drive()
     }, 400)
-  }, [role, onBeforeStart, navigate, uid])
+  }, [role, onBeforeStart, openSidebar, navigate, uid])
 
   // Auto-start once per role+version if not yet completed.
   useEffect(() => {

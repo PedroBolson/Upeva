@@ -253,9 +253,12 @@ function AdminLayoutContent() {
   const closeSidebar = useEffectEvent(() => setSidebarOpen(false))
   const expandForTour = useCallback(() => {
     setCollapsed(false)
-    if (window.innerWidth < 768) setSidebarOpen(true)
   }, [])
-  const { startTour } = useAdminTour(userProfile?.role, expandForTour, user?.uid, userProfile?.completedTours)
+  const openSidebar = useCallback(() => {
+    setCollapsed(false)
+    setSidebarOpen(true)
+  }, [])
+  const { startTour } = useAdminTour(userProfile?.role, expandForTour, openSidebar, user?.uid, userProfile?.completedTours)
 
   useEffect(() => {
     closeSidebar()

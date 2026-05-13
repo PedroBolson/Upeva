@@ -294,7 +294,7 @@ export function FeaturedAnimalsPage() {
   if (isLoading) return <AdminListSkeleton columns={1} />
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-tour="featured-area" className="flex flex-col gap-6">
       {saveError && (
         <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           {saveError instanceof Error ? saveError.message : 'Não foi possível salvar os destaques. Tente novamente.'}
