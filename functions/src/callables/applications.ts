@@ -743,7 +743,7 @@ export const updateApplicationReview = onCall(
             payload.queuePosition = staffNewQueuePosition;
             payload.waitlistEntry = staffNewQueuePosition > 1;
           }
-        } else if (isGeneralInterest && nextAnimalId && nextAnimalName) {
+        } else if (isGeneralInterest && requestedAnimalId && nextAnimalId && nextAnimalName) {
           payload.animalId = nextAnimalId;
           payload.animalIds = [nextAnimalId];
           payload.animalName = nextAnimalName;

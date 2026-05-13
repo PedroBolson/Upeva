@@ -1370,6 +1370,54 @@ describe('staff final animal assignment via updateApplicationReview', () => {
     expect(catB.data()?.adoptedApplicationId).toBe('app-dual-approval')
   })
 
+  it('approval without re-sending animalIds preserves two-cat assignment when jointAdoption is true', async () => {
+    // Regression: jointAdoption:true makes isGeneralInterest return true, which caused
+    // the approval path to overwrite animalIds:['a','b'] with animalIds:['a'] only.
+    await signInAsAdmin()
+
+    await adminDb.collection('animals').doc('cat-joint-persist-a').set(availableAnimalDoc({ name: 'Frida' }))
+    await adminDb.collection('animals').doc('cat-joint-persist-b').set(availableAnimalDoc({ name: 'Luna' }))
+    await adminDb.collection('applications').doc('app-joint-persist').set(
+      encryptedApplicationDoc({
+        animalId: 'cat-joint-persist-a',
+        animalIds: ['cat-joint-persist-a', 'cat-joint-persist-b'],
+        animalName: 'Frida',
+        animalNames: ['Frida', 'Luna'],
+        jointAdoption: true,
+        status: 'in_review',
+      }),
+    )
+
+    // Approve without re-sending animalIds — mirrors the real admin UI flow
+    await callable('updateApplicationReview')({
+      id: 'app-joint-persist',
+      status: 'approved',
+    })
+
+    const appDoc = await adminDb.collection('applications').doc('app-joint-persist').get()
+    const data = appDoc.data() ?? {}
+
+    expect(data.status).toBe('approved')
+    // Both cats must still be persisted — the approval must not collapse animalIds to a single entry
+    expect(data.animalId).toBe('cat-joint-persist-a')
+    expect(data.animalIds).toEqual(['cat-joint-persist-a', 'cat-joint-persist-b'])
+    expect(data.animalNames).toEqual(['Frida', 'Luna'])
+
+    const [catA, catB] = await Promise.all([
+      adminDb.collection('animals').doc('cat-joint-persist-a').get(),
+      adminDb.collection('animals').doc('cat-joint-persist-b').get(),
+    ])
+    expect(catA.data()?.status).toBe('adopted')
+    expect(catB.data()?.status).toBe('adopted')
+
+    // The archive file must also reference both animals
+    const archiveFileId = data.contractArchiveFileId as string
+    expect(typeof archiveFileId).toBe('string')
+    const archiveDoc = await adminDb.collection('archiveFiles').doc(archiveFileId).get()
+    expect(archiveDoc.data()?.animalIds).toEqual(['cat-joint-persist-a', 'cat-joint-persist-b'])
+    expect(archiveDoc.data()?.animalNames).toEqual(['Frida', 'Luna'])
+  })
+
   it('cat adoption contract does not contain "Porte:" label', async () => {
     await signInAsAdmin()
 

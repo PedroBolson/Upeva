@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, CalendarClock, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, ArrowLeft, CalendarClock, ExternalLink, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
 import { ApplicationAnimalSelector } from '@/features/adoption/components/application-animal-selector'
@@ -21,10 +21,10 @@ import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
 import {
+  getApplicationAnimalDisplayNames,
   getApplicationAnimalLabel,
   hasApplicationAnimals,
   normalizeApplicationAnimalIds,
-  normalizeApplicationAnimalNames,
 } from '@/features/adoption/utils/application-animals'
 import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
@@ -232,7 +232,7 @@ export function ApplicationDetailPage() {
   const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
   const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
   const appAnimalIds = app ? normalizeApplicationAnimalIds(app) : []
-  const appAnimalNames = app ? normalizeApplicationAnimalNames(app) : []
+  const appAnimalDisplayNames = app ? getApplicationAnimalDisplayNames(app) : []
   const currentAnimalId = animalSelectionCleared ? '' : selectedAnimal?.animal.id ?? appAnimalIds[0] ?? ''
 
   // Campos PII nunca lidos direto do Firestore — sempre via CF getApplicationPII
@@ -281,7 +281,7 @@ export function ApplicationDetailPage() {
     staleTime: 1000 * 60 * 5,
   })
 
-  const selectedAnimalName = selectedAnimal?.animal.name ?? appAnimalNames[0] ?? 'Animal vinculado'
+  const selectedAnimalName = selectedAnimal?.animal.name ?? appAnimalDisplayNames[0] ?? 'Animal vinculado'
 
   // Available cats for the staff animal assignment dropdowns.
   // Loaded for all cat applications (general and specific alike).
@@ -301,14 +301,28 @@ export function ApplicationDetailPage() {
     app?.status !== 'approved' &&
     app?.status !== 'rejected'
 
-  const approvalAnimalId = currentStatus === 'approved' ? (appAnimalIds[0] ?? currentAnimalId) : null
+  const approvalAnimalIds = currentStatus === 'approved'
+    ? (appAnimalIds.length > 0 ? appAnimalIds : currentAnimalId ? [currentAnimalId] : [])
+    : []
 
-  const { data: affectedCandidates = [] } = useQuery({
-    queryKey: ['applications', 'active-for-animal', approvalAnimalId, id],
-    queryFn: () => getActiveApplicationsForAnimal(approvalAnimalId!, id!),
-    enabled: Boolean(approvalAnimalId && id),
-    staleTime: 1000 * 60 * 5,
+  const affectedCandidateQueries = useQueries({
+    queries: approvalAnimalIds.map((animalId) => ({
+      queryKey: ['applications', 'active-for-animal', animalId, id],
+      queryFn: () => getActiveApplicationsForAnimal(animalId, id!),
+      enabled: Boolean(animalId && id),
+      staleTime: 1000 * 60 * 5,
+    })),
   })
+  const affectedCandidates = useMemo(() => {
+    const candidatesById = new Map<string, Pick<AdoptionApplication, 'id' | 'fullName' | 'status' | 'queuePosition'>>()
+    for (const queryResult of affectedCandidateQueries) {
+      for (const candidate of queryResult.data ?? []) {
+        candidatesById.set(candidate.id, candidate)
+      }
+    }
+    return Array.from(candidatesById.values())
+      .sort((a, b) => (a.queuePosition ?? 9999) - (b.queuePosition ?? 9999))
+  }, [affectedCandidateQueries])
 
   const needsRelinkConfirmation = Boolean(
     isGeneralInterest &&
@@ -517,7 +531,10 @@ export function ApplicationDetailPage() {
 
   const hasSpecificAnimal = appAnimalIds.length > 0
   const animalLabel = hasSpecificAnimal ? getApplicationAnimalLabel(app) : 'Interesse geral'
-  const animalHelper = !isGeneralInterest
+  const animalSubjectLabel = hasSpecificAnimal
+    ? isGeneralInterest ? 'Animal vinculado' : 'Animal'
+    : 'Busca'
+  const animalPreferenceSummary = !isGeneralInterest
     ? SPECIES_LABELS[app.species]
     : app.species === 'dog'
       ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)} · Porte: ${formatPreferenceLabel(app.preferredSize, SIZE_LABELS)}`
@@ -525,11 +542,16 @@ export function ApplicationDetailPage() {
         app.preferredSex ? `Sexo: ${formatPreferenceLabel(app.preferredSex, SEX_LABELS)}` : null,
         app.jointAdoption !== undefined ? `Adoção conjunta: ${app.jointAdoption ? 'Sim' : 'Não'}` : null,
       ].filter(Boolean).join(' · ') || '—'
+  const animalSummaryHelper = app.previousAnimalName
+    ? `Inscreveu-se para ${app.previousAnimalName} · adotado`
+    : hasSpecificAnimal
+      ? undefined
+      : animalPreferenceSummary
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <AnimalQuickViewModal
         animalIds={appAnimalIds}
-        animalNames={appAnimalNames}
+        animalNames={appAnimalDisplayNames}
         open={isAnimalModalOpen}
         onClose={() => setIsAnimalModalOpen(false)}
       />
@@ -638,9 +660,9 @@ export function ApplicationDetailPage() {
           <div className="mt-4 grid gap-3 w-full sm:grid-cols-2 lg:grid-cols-3 lg:w-fit lg:mx-auto">
             <SummaryCard
               icon={PawPrint}
-              label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
+              label={animalSubjectLabel}
               value={animalLabel}
-              helper={app.previousAnimalName ? `Inscreveu-se para ${app.previousAnimalName} · adotado` : animalHelper}
+              helper={animalSummaryHelper}
               onClick={hasSpecificAnimal ? () => setIsAnimalModalOpen(true) : undefined}
             />
             <SummaryCard
@@ -1033,11 +1055,21 @@ export function ApplicationDetailPage() {
               ) : (
                 <div className="mt-4 flex flex-col gap-2">
                   {appAnimalIds.length > 0 ? (
-                    appAnimalNames.map((name, i) => (
-                      <p key={appAnimalIds[i]} className="text-sm text-foreground">
-                        {i === 0 ? 'Principal:' : 'Segundo:'}{' '}
-                        <span className="font-medium">{name}</span>
-                      </p>
+                    appAnimalIds.map((animalId, i) => (
+                      <div key={animalId} className="flex flex-col gap-1">
+                        <p className="text-sm text-foreground">
+                          {i === 0 ? 'Principal:' : `Animal ${i + 1}:`}{' '}
+                          <span className="font-medium">{appAnimalDisplayNames[i] ?? animalId}</span>
+                        </p>
+                        <Link
+                          to={`/admin/animais/${animalId}/editar`}
+                          state={{ from: 'application-detail', applicationId: app.id }}
+                          className="inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <ExternalLink size={13} />
+                          Abrir cadastro
+                        </Link>
+                      </div>
                     ))
                   ) : (
                     <p className="text-sm text-muted-foreground">Nenhum animal atribuído.</p>
@@ -1062,12 +1094,8 @@ export function ApplicationDetailPage() {
             <div className="mt-4 flex flex-col gap-4">
               <SidebarField label="Status atual do formulário" value={<ApplicationStatusBadge status={app.status} />} />
               <SidebarField
-                label={!isGeneralInterest ? 'Animal' : hasSpecificAnimal ? 'Animal vinculado' : 'Busca'}
-                value={
-                  !isGeneralInterest
-                    ? `${animalLabel} (${SPECIES_LABELS[app.species]})`
-                    : `${animalLabel} · ${animalHelper}`
-                }
+                label={animalSubjectLabel}
+                value={hasSpecificAnimal ? animalLabel : animalPreferenceSummary}
               />
               <SidebarField
                 label="Posição na fila"

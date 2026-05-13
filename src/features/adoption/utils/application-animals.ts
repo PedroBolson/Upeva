@@ -24,8 +24,19 @@ export function normalizeApplicationAnimalNames(
   return application.animalName?.trim() ? [application.animalName.trim()] : []
 }
 
-export function getApplicationAnimalLabel(application: AdoptionApplication): string {
+export function getApplicationAnimalDisplayNames(
+  application: Pick<AdoptionApplication, 'animalId' | 'animalIds' | 'animalName' | 'animalNames'>,
+): string[] {
+  const ids = normalizeApplicationAnimalIds(application)
   const names = normalizeApplicationAnimalNames(application)
+
+  if (ids.length === 0) return names
+
+  return ids.map((id, index) => names[index] ?? id)
+}
+
+export function getApplicationAnimalLabel(application: AdoptionApplication): string {
+  const names = getApplicationAnimalDisplayNames(application)
   if (names.length === 0) return 'Interesse geral'
   return names.join(' + ')
 }

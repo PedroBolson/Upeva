@@ -22,11 +22,12 @@ export function AnimalQuickViewModal({
   onClose,
 }: AnimalQuickViewModalProps) {
   const ids = animalIds.slice(0, 2)
+  const displayNames = ids.map((id, index) => animalNames[index]?.trim() || id)
   const isSingle = ids.length <= 1
 
   const title = isSingle
-    ? (animalNames[0] ?? ids[0] ?? 'Animal')
-    : (animalNames.slice(0, 2).join(' + ') || 'Animais vinculados')
+    ? (displayNames[0] ?? 'Animal')
+    : (displayNames.join(' + ') || 'Animais vinculados')
 
   return (
     <Modal
@@ -47,7 +48,7 @@ export function AnimalQuickViewModal({
         <AnimalPanel
           key={id}
           animalId={id}
-          fallbackName={animalNames[index]}
+          fallbackName={displayNames[index]}
           label={isSingle ? undefined : `Animal ${index + 1}`}
           showDivider={index > 0}
         />
@@ -99,11 +100,20 @@ function AnimalPanel({
       )}
 
       {isError && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {fallbackName
-            ? `Não foi possível carregar os dados de ${fallbackName}.`
-            : 'Não foi possível carregar os dados do animal.'}
-        </p>
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {fallbackName
+              ? `Não foi possível carregar os dados de ${fallbackName}.`
+              : 'Não foi possível carregar os dados do animal.'}
+          </p>
+          <Link
+            to={`/admin/animais/${animalId}/editar`}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ExternalLink size={13} />
+            Abrir cadastro do animal
+          </Link>
+        </div>
       )}
 
       {animal && (
