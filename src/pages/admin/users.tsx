@@ -441,7 +441,7 @@ export function UsersPage() {
 
       {!isLoading && !error && (
         <>
-          <Card className="border-border/80 p-5">
+          <Card data-tour="users-list-area" className="border-border/80 p-5">
             <div className="mb-4 flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">
                 {search.trim()

@@ -172,7 +172,7 @@ export function AdminAnimalsPage() {
 
   const headerActions = useMemo(
     () => (
-      <div ref={containerRef} className="relative flex min-w-0 items-center gap-2">
+      <div ref={containerRef} data-tour="animal-filters" className="relative flex min-w-0 items-center gap-2">
         <div
           ref={measureRef}
           aria-hidden="true"
@@ -222,7 +222,7 @@ export function AdminAnimalsPage() {
           </div>
         )}
 
-        <Link to="/admin/animais/novo" className="shrink-0">
+        <Link data-tour="create-animal-button" to="/admin/animais/novo" className="shrink-0">
           {isCompact ? (
             <Button size="icon" className="h-9 w-9" aria-label="Cadastrar animal">
               <Plus size={16} />
@@ -392,7 +392,7 @@ export function AdminAnimalsPage() {
       )}
 
       {!isLoading && !error && (
-        <Card className={cn('border-border/80 p-5 transition-opacity duration-150', isFiltering && 'opacity-50 pointer-events-none')}>
+        <Card data-tour="animals-list-area" className={cn('border-border/80 p-5 transition-opacity duration-150', isFiltering && 'opacity-50 pointer-events-none')}>
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
               {filtered.length} {filtered.length !== 1 ? 'animais' : 'animal'} carregado{filtered.length !== 1 ? 's' : ''}
@@ -430,7 +430,7 @@ export function AdminAnimalsPage() {
               <AnimalMobileCard
                 animal={animal}
                 onEdit={() => navigate(`/admin/animais/${animal.id}/editar`)}
-	                onStatusChange={(status) => handleStatusChange(animal, status)}
+                onStatusChange={(status) => handleStatusChange(animal, status)}
                 onDelete={canDeleteAnimals
                   ? () => {
                     setDeleteError(null)
@@ -528,19 +528,19 @@ function AnimalMobileCard({
 
         <div className="mt-4 flex flex-col gap-3">
           <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-	            <Select
-	              options={animalStatusOptionsFor(animal)}
-	              value={animal.status}
-	              onChange={(value) => onStatusChange(value as AnimalStatus)}
-	              className="h-11 rounded-xl text-sm"
-	              aria-label={`Alterar status de ${animal.name}`}
-	            />
-	            {animal.status === 'adopted' && (
-	              <p className="mt-2 text-xs text-muted-foreground">
-	                {ADOPTION_REVERSAL_HELPER}
-	              </p>
-	            )}
-	          </div>
+            <Select
+              options={animalStatusOptionsFor(animal)}
+              value={animal.status}
+              onChange={(value) => onStatusChange(value as AnimalStatus)}
+              className="h-11 rounded-xl text-sm"
+              aria-label={`Alterar status de ${animal.name}`}
+            />
+            {animal.status === 'adopted' && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {ADOPTION_REVERSAL_HELPER}
+              </p>
+            )}
+          </div>
 
           <Button
             variant="outline"

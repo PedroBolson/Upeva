@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import { Navigate, Outlet, NavLink, Link, useLocation, useNavigate, ScrollRestoration } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   Star,
   Archive,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -25,6 +26,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth'
 import { useAuthContext } from '@/features/auth/contexts/auth.context'
 import { isStaffRole } from '@/features/auth/utils/roles'
 import { isStandalone } from '@/utils/pwa'
+import { useAdminTour } from '@/features/admin/tour/use-admin-tour'
 import type { User } from 'firebase/auth'
 import type { UserRole } from '@/types/common'
 
@@ -48,14 +50,14 @@ function AdminAccessDeniedState() {
 }
 
 const navItems = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, role: undefined as UserRole | undefined },
-  { to: '/admin/animais', label: 'Animais', icon: PawPrint, end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/destaques', label: 'Destaques', icon: Star, end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/arquivos', label: 'Arquivos', icon: Archive, end: false, role: undefined as UserRole | undefined },
-  { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole },
-  { to: '/admin/privacidade', label: 'Privacidade', icon: ShieldCheck, end: false, role: 'admin' as UserRole },
-  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined },
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, role: undefined as UserRole | undefined, tourId: 'nav-dashboard' },
+  { to: '/admin/animais', label: 'Animais', icon: PawPrint, end: false, role: undefined as UserRole | undefined, tourId: 'nav-animais' },
+  { to: '/admin/destaques', label: 'Destaques', icon: Star, end: false, role: undefined as UserRole | undefined, tourId: 'nav-destaques' },
+  { to: '/admin/candidaturas', label: 'Candidaturas', icon: ClipboardList, end: false, role: undefined as UserRole | undefined, tourId: 'nav-candidaturas' },
+  { to: '/admin/arquivos', label: 'Arquivos', icon: Archive, end: false, role: undefined as UserRole | undefined, tourId: 'nav-arquivos' },
+  { to: '/admin/usuarios', label: 'Usuários', icon: Users, end: false, role: 'admin' as UserRole, tourId: 'nav-usuarios' },
+  { to: '/admin/privacidade', label: 'Privacidade', icon: ShieldCheck, end: false, role: 'admin' as UserRole, tourId: 'nav-privacidade' },
+  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, end: false, role: undefined as UserRole | undefined, tourId: 'nav-configuracoes' },
 ]
 
 interface AdminSidebarProps {
@@ -65,6 +67,7 @@ interface AdminSidebarProps {
   user: User | null
   userRole: UserRole | undefined
   onLogout: () => void
+  onStartTour: () => void
 }
 
 function AdminSidebar({
@@ -74,6 +77,7 @@ function AdminSidebar({
   user,
   userRole,
   onLogout,
+  onStartTour,
 }: AdminSidebarProps) {
   const visibleItems = navItems.filter((item) => !item.role || item.role === userRole)
   const navigate = useNavigate()
@@ -117,12 +121,13 @@ function AdminSidebar({
       {/* Nav */}
       <nav aria-label="Menu administrativo" className="flex-1 overflow-y-auto py-4 px-2">
         <ul className="flex flex-col gap-1">
-          {visibleItems.map(({ to, label, icon: Icon, end }) => (
+          {visibleItems.map(({ to, label, icon: Icon, end, tourId }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 end={end}
                 onClick={onNavigate}
+                data-tour={tourId}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150',
@@ -154,6 +159,22 @@ function AdminSidebar({
           </div>
         )}
         <div className={cn('flex gap-2', collapsed ? 'flex-col' : 'grid grid-cols-2')}>
+          <button
+            onClick={() => {
+              onNavigate?.()
+              onStartTour()
+            }}
+            data-tour="tour-replay-button"
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground',
+              'hover:text-foreground hover:bg-accent transition-colors duration-150 w-full',
+              collapsed ? 'justify-center px-2' : 'col-span-2 justify-start',
+            )}
+            title={collapsed ? 'Tutorial' : undefined}
+          >
+            <HelpCircle size={16} className="shrink-0" />
+            {!collapsed && <span>Tutorial</span>}
+          </button>
           <a
             href="/"
             target={standalone ? undefined : '_blank'}
@@ -230,6 +251,11 @@ function AdminLayoutContent() {
   const { user, userProfile, logout } = useAuth()
   const { header } = useAdminHeader()
   const closeSidebar = useEffectEvent(() => setSidebarOpen(false))
+  const expandForTour = useCallback(() => {
+    setCollapsed(false)
+    if (window.innerWidth < 768) setSidebarOpen(true)
+  }, [])
+  const { startTour } = useAdminTour(userProfile?.role, expandForTour, user?.uid, userProfile?.completedTours)
 
   useEffect(() => {
     closeSidebar()
@@ -273,6 +299,7 @@ function AdminLayoutContent() {
           user={user}
           userRole={userProfile?.role}
           onLogout={logout}
+          onStartTour={startTour}
         />
       </aside>
 
@@ -301,6 +328,7 @@ function AdminLayoutContent() {
                 user={user}
                 userRole={userProfile?.role}
                 onLogout={logout}
+                onStartTour={startTour}
               />
             </motion.aside>
           </>
@@ -310,7 +338,7 @@ function AdminLayoutContent() {
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="relative z-20 h-16 shrink-0 border-b border-border bg-card">
+        <header data-tour="privacy-header-area" className="relative z-20 h-16 shrink-0 border-b border-border bg-card">
           <div className="flex h-full items-center gap-2 px-4 lg:px-6">
             <Button
               variant="ghost"

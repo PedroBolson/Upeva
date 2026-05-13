@@ -1,4 +1,5 @@
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import { useSafeBack } from '@/hooks/use-safe-back'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -33,7 +34,7 @@ const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } }
 
 export function AnimalDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const safeBack = useSafeBack('/animais')
   const { data: animal, isLoading, error, refetch } = useAnimal(id)
   const { data: similar = [] } = useSimilarAnimals(animal ?? undefined)
 
@@ -64,10 +65,12 @@ export function AnimalDetailPage() {
           onRetry={animal === null ? undefined : refetch}
         />
         <div className="mt-6 flex justify-center">
-          <Button variant="outline" onClick={() => navigate('/animais')} className="gap-2">
-            <ArrowLeft size={16} />
-            Ver outros animais
-          </Button>
+          <Link to="/animais">
+            <Button variant="outline" className="gap-2">
+              <ArrowLeft size={16} />
+              Ver outros animais
+            </Button>
+          </Link>
         </div>
       </div>
     )
@@ -104,7 +107,7 @@ export function AnimalDetailPage() {
         transition={{ duration: 0.2 }}
       >
         <button
-          onClick={() => navigate(-1)}
+          onClick={safeBack}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
         >
           <ArrowLeft size={15} />
@@ -322,8 +325,8 @@ function HealthItem({
           neutral
             ? 'text-warning mt-0.5 shrink-0'
             : positive
-            ? 'text-success mt-0.5 shrink-0'
-            : 'text-muted-foreground mt-0.5 shrink-0'
+              ? 'text-success mt-0.5 shrink-0'
+              : 'text-muted-foreground mt-0.5 shrink-0'
         }
       />
       <span className="text-sm text-foreground">{label}</span>

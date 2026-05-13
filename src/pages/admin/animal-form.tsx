@@ -473,7 +473,7 @@ export function AnimalFormPage() {
         className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]"
       >
         <div className="flex flex-col gap-6">
-          <Card className="border-border/80 p-6">
+          <Card data-tour="animal-form-basic" className="border-border/80 p-6">
             <div className="flex flex-col gap-1">
               <h2 className="text-sm font-semibold text-foreground">Informações principais</h2>
               <p className="text-sm text-muted-foreground">
@@ -579,7 +579,7 @@ export function AnimalFormPage() {
             </div>
           </Card>
 
-          <Card className="border-border/80 p-6">
+          <Card data-tour="animal-form-photos" className="border-border/80 p-6">
             <div className="flex flex-col gap-1">
               <h2 className="text-sm font-semibold text-foreground">Fotos</h2>
               <p className="text-sm text-muted-foreground">
@@ -644,7 +644,7 @@ export function AnimalFormPage() {
             </div>
           </Card>
 
-          <Card className="border-border/80 p-6">
+          <Card data-tour="animal-form-description" className="border-border/80 p-6">
             <div className="flex flex-col gap-1">
               <h2 className="text-sm font-semibold text-foreground">Descrição</h2>
               <p className="text-sm text-muted-foreground">
@@ -664,7 +664,7 @@ export function AnimalFormPage() {
             </div>
           </Card>
 
-          <Card className="border-border/80 p-6">
+          <Card data-tour="animal-form-health" className="border-border/80 p-6">
             <div className="flex flex-col gap-1">
               <h2 className="text-sm font-semibold text-foreground">Saúde e cuidados</h2>
               <p className="text-sm text-muted-foreground">
@@ -738,7 +738,7 @@ export function AnimalFormPage() {
         </div>
 
         <div className="flex flex-col gap-6 xl:sticky xl:top-22 xl:self-start">
-          <Card className="border-border/80 p-5">
+          <Card data-tour="animal-form-publication" className="border-border/80 p-5">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Publicação</h2>
@@ -749,15 +749,15 @@ export function AnimalFormPage() {
                 name="status"
                 control={control}
                 render={({ field }) => (
-	                  <Select
-	                    label="Status"
-	                    options={statusOptions}
-	                    value={field.value}
-	                    onChange={(v) => handleStatusChange(v, field.onChange)}
-	                    onBlur={field.onBlur}
-	                    hint={statusHint}
-	                    required
-	                  />
+                  <Select
+                    label="Status"
+                    options={statusOptions}
+                    value={field.value}
+                    onChange={(v) => handleStatusChange(v, field.onChange)}
+                    onBlur={field.onBlur}
+                    hint={statusHint}
+                    required
+                  />
                 )}
               />
 
@@ -832,7 +832,7 @@ export function AnimalFormPage() {
             </Card>
           )}
 
-          <Card className="border-border/80 p-5">
+          <Card data-tour="animal-form-actions" className="border-border/80 p-5">
             <h2 className="text-sm font-semibold text-foreground">Ações</h2>
 
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -1,0 +1,121 @@
+/*
+ * driver.js theme overrides.
+ * Loaded after driver.js/dist/driver.css so these rules win on equal specificity.
+ * All colors reference the app's CSS variables (--card, --foreground, etc.)
+ * which already switch values between :root (light) and .dark (dark mode),
+ * so this file needs no separate dark-mode block.
+ */
+
+/* ── Popover container ─────────────────────────────────────── */
+.driver-popover {
+  background-color: var(--card) !important;
+  color: var(--card-foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.1),
+    0 10px 24px -4px oklch(0 0 0 / 0.15) !important;
+  min-width: 280px !important;
+  max-width: 360px !important;
+  padding: 18px !important;
+}
+
+/* ── Title ─────────────────────────────────────────────────── */
+.driver-popover-title {
+  color: var(--card-foreground) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  font-family: inherit !important;
+  line-height: 1.4 !important;
+}
+
+/* ── Description ───────────────────────────────────────────── */
+.driver-popover-description {
+  color: var(--muted-foreground) !important;
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+  font-family: inherit !important;
+  margin-top: 6px !important;
+}
+
+/* ── Close button ──────────────────────────────────────────── */
+.driver-popover-close-btn {
+  color: var(--muted-foreground) !important;
+  font-size: 20px !important;
+  opacity: 0.7;
+  transition: opacity 0.15s, color 0.15s !important;
+}
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus {
+  color: var(--foreground) !important;
+  opacity: 1;
+}
+
+/* ── Footer ────────────────────────────────────────────────── */
+.driver-popover-footer {
+  margin-top: 16px !important;
+}
+
+/* ── Progress text ─────────────────────────────────────────── */
+.driver-popover-progress-text {
+  color: var(--muted-foreground) !important;
+  font-size: 12px !important;
+  font-family: inherit !important;
+}
+
+/* ── All footer buttons baseline ──────────────────────────── */
+.driver-popover-footer button {
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: calc(var(--radius) - 2px) !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 5px 12px !important;
+  text-shadow: none !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s, opacity 0.15s !important;
+}
+.driver-popover-footer button:hover,
+.driver-popover-footer button:focus-visible {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
+
+/* ── Next / Done button (primary style) ───────────────────── */
+.driver-popover-next-btn {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  border-color: var(--primary) !important;
+}
+.driver-popover-next-btn:hover,
+.driver-popover-next-btn:focus-visible {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  opacity: 0.88 !important;
+}
+
+/* ── Disabled buttons ──────────────────────────────────────── */
+.driver-popover-footer .driver-popover-btn-disabled {
+  opacity: 0.4 !important;
+  pointer-events: none !important;
+}
+
+/* ── Arrow — must match popover background per direction ─────── */
+/* driver.js base CSS sets border: solid #fff, then per-direction classes
+   set 3 sides to transparent. We override only the one visible side per
+   direction so the triangle keeps its shape (no global border-color which
+   would override the transparent rules and create a square). */
+.driver-popover-arrow-side-left   { border-left-color:   var(--card) !important; }
+.driver-popover-arrow-side-right  { border-right-color:  var(--card) !important; }
+.driver-popover-arrow-side-top    { border-top-color:    var(--card) !important; }
+.driver-popover-arrow-side-bottom { border-bottom-color: var(--card) !important; }
+
+/* ── Highlight ring around the active element ──────────────── */
+/* driver.js adds .driver-active-element to the highlighted DOM node */
+.driver-active-element {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 3px !important;
+  border-radius: calc(var(--radius) - 2px) !important;
+}

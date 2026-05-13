@@ -127,7 +127,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'uid', 'email', 'displayName', 'role', 'createdAt', 'createdBy',
           'updatedAt', 'updatedBy', 'updatedByLabel',
-          'roleUpdatedAt', 'roleUpdatedBy', 'roleUpdatedByLabel'
+          'roleUpdatedAt', 'roleUpdatedBy', 'roleUpdatedByLabel',
+          'completedTours'
         ])
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.email == resource.data.email
@@ -136,7 +137,7 @@ service cloud.firestore {
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.diff(resource.data)
             .affectedKeys()
-            .hasOnly(['displayName', 'updatedAt']);
+            .hasOnly(['displayName', 'updatedAt', 'completedTours']);
 
       allow create, delete: if false; // Cloud Functions only
     }

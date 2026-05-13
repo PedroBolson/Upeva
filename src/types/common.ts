@@ -17,6 +17,7 @@ export interface UserProfile {
   roleUpdatedAt?: Timestamp
   roleUpdatedBy?: string
   roleUpdatedByLabel?: string
+  completedTours?: Record<string, Timestamp>
 }
 
 export type Species = 'dog' | 'cat'

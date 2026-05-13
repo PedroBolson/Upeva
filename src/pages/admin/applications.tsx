@@ -164,7 +164,7 @@ export function ApplicationsPage() {
 
         {!isCompact && (
           <>
-            <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+            <div data-tour="applications-status-tabs" className="flex min-w-0 items-center gap-2 whitespace-nowrap">
               {tabButtons}
             </div>
             {animalOptions.length > 0 && (
@@ -297,7 +297,7 @@ export function ApplicationsPage() {
       )}
 
       {!isLoading && !error && (
-        <Card className="border-border/80 p-5">
+        <Card data-tour="applications-list-area" className="border-border/80 p-5">
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
               {sortedApplications.length} candidatura{sortedApplications.length !== 1 ? 's' : ''}{' '}

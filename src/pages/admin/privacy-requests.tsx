@@ -524,7 +524,7 @@ export function PrivacyRequestsPage() {
         onConfirm={handleBackfillConfirm}
       />
 
-      <div className="flex flex-col gap-1">
+      <div data-tour="privacy-search-area" className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <ShieldCheck size={22} className="text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Privacidade e LGPD</h1>

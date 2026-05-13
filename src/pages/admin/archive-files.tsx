@@ -230,7 +230,7 @@ export function ArchiveFilesPage() {
         loading={isDeletingArchive}
       />
 
-      <Card className="border-border/80 p-5">
+      <Card data-tour="archive-info-card" className="border-border/80 p-5">
         <div className="flex items-start gap-3">
           <Archive size={18} className="mt-0.5 shrink-0 text-muted-foreground" />
           <div>

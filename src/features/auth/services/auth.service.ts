@@ -5,7 +5,7 @@ import {
   confirmPasswordReset,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc, terminate, clearIndexedDbPersistence } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, serverTimestamp, terminate, clearIndexedDbPersistence } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '@/lib/firebase'
 import type { UserProfile } from '@/types/common'
@@ -60,6 +60,14 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid))
   if (!snap.exists()) return null
   return snap.data() as UserProfile
+}
+
+// Writes a tour completion timestamp into the user's own document.
+// Uses a nested field-path update so rules see only 'completedTours' in affectedKeys().
+export async function updateCompletedTour(uid: string, tourKey: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), {
+    [`completedTours.${tourKey}`]: serverTimestamp(),
+  })
 }
 
 export async function refreshUserClaims(): Promise<void> {

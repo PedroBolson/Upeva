@@ -395,7 +395,7 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div data-tour="dashboard-charts" className="grid gap-6 xl:grid-cols-2">
         <Card className="border-border/80">
           <CardHeader>
             <CardTitle>Status dos animais</CardTitle>
