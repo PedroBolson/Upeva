@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { Controller, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, ClipboardList, FileText, Loader2, Plus, Star, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, FileText, Loader2, Plus, Share2, Star, Trash2, X } from 'lucide-react'
 import { AnimalStatusBadge, Button, Card, Checkbox, Input, Select, useToast } from '@/components/ui'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +12,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { useAnimal } from '@/features/animals/hooks/use-animal'
 import { useArchiveAnimal, useCreateAnimal, useDeleteAnimal, useUpdateAnimal, useUpdateAnimalStatus } from '@/features/animals/hooks/use-animal-mutations'
 import { ArchiveAnimalModal } from '@/features/animals/components/archive-animal-modal'
+import { SocialPostModal } from '@/features/animals/components/social-post-modal'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
 import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
@@ -109,6 +110,8 @@ export function AnimalFormPage() {
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleteAnimalModalOpen, setIsDeleteAnimalModalOpen] = useState(false)
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false)
+  const [isSocialPostModalOpen, setIsSocialPostModalOpen] = useState(false)
+  const [socialPostKey, setSocialPostKey] = useState(0)
   const [isSrd, setIsSrd] = useState(false)
 
   const {
@@ -396,6 +399,15 @@ export function AnimalFormPage() {
         onConfirm={handleConfirmArchive}
         loading={isArchiving}
       />
+
+      {isEditing && animal && (
+        <SocialPostModal
+          key={socialPostKey}
+          open={isSocialPostModalOpen}
+          onClose={() => setIsSocialPostModalOpen(false)}
+          animal={animal}
+        />
+      )}
 
       <ConfirmModal
         open={photoToDelete !== null}
@@ -840,6 +852,21 @@ export function AnimalFormPage() {
                   Cancelar
                 </Button>
               </Link>
+
+              {isEditing && animal && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-1.5 sm:col-span-2"
+                  onClick={() => {
+                    setSocialPostKey((k) => k + 1)
+                    setIsSocialPostModalOpen(true)
+                  }}
+                >
+                  <Share2 size={16} />
+                  Criar arte de divulgação
+                </Button>
+              )}
 
               {isEditing && animal && canDeleteAnimals && (
                 <Button
