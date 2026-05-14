@@ -296,6 +296,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               {open && menuPosition && (
                 <motion.div
                   ref={menuRef}
+                  data-ui-select-menu="true"
                   initial={{
                     opacity: 0,
                     y: menuPosition.placement === 'bottom' ? -6 : 6,

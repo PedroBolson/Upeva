@@ -15,6 +15,18 @@ import {
 } from '../services/archive.service'
 import type { DocumentSnapshot } from 'firebase/firestore'
 
+export function invalidateArchiveFileQueries({ delayedFilterOptions = false } = {}) {
+  void queryClient.invalidateQueries({ queryKey: ['archive-files', 'list'] })
+  void queryClient.invalidateQueries({ queryKey: ['archive-files', 'related'] })
+  void queryClient.invalidateQueries({ queryKey: ['archive-files', 'filter-options'] })
+
+  if (delayedFilterOptions) {
+    globalThis.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['archive-files', 'filter-options'] })
+    }, 2500)
+  }
+}
+
 export function useArchiveFiles(filter: ArchiveFilesFilter = {}) {
   const result = useInfiniteQuery<
     ArchiveFilesPageResult,

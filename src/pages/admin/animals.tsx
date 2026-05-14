@@ -238,7 +238,7 @@ export function AdminAnimalsPage() {
 
         {isCompact && (
           <AdminHeaderOverflow
-            label={statusFilter ? 'Status' : 'Filtros'}
+            label={statusFilter ? STATUS_LABELS[statusFilter] : 'Filtros'}
             active={Boolean(statusFilter)}
           >
             <Select

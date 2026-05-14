@@ -29,6 +29,12 @@ const TYPE_OPTIONS: { value: ArchiveFileType | ''; label: string }[] = [
   { value: 'archivedAnimal', label: 'Animais arquivados' },
 ]
 
+const TYPE_COMPACT_LABELS: Record<ArchiveFileType, string> = {
+  contract: 'Contratos',
+  rejection: 'Rejeições',
+  archivedAnimal: 'Arquivados',
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -65,6 +71,10 @@ export function ArchiveFilesPage() {
     yearFilter === '' || !hasMetadataYears || metadataYears?.includes(yearFilter)
   const effectiveYearFilter = selectedYearHasData ? yearFilter : ''
   const yearFilterValue = effectiveYearFilter === '' ? '' : String(effectiveYearFilter)
+  const compactFilterLabel = [
+    typeFilter ? TYPE_COMPACT_LABELS[typeFilter] : null,
+    effectiveYearFilter ? String(effectiveYearFilter) : null,
+  ].filter(Boolean).join(' · ') || 'Filtros'
   const {
     files,
     hasMore,
@@ -153,10 +163,10 @@ export function ArchiveFilesPage() {
 
         {isCompact && (
           <AdminHeaderOverflow
-            label="Filtros"
+            label={compactFilterLabel}
             active={typeFilter !== '' || effectiveYearFilter !== ''}
           >
-            {(close) => (
+            {() => (
               <div className="grid gap-3">
                 <Select
                   label="Tipo"
@@ -165,7 +175,6 @@ export function ArchiveFilesPage() {
                   onChange={(value) => {
                     setTypeFilter(value as ArchiveFileType | '')
                     setYearFilter('')
-                    close()
                   }}
                   className="h-10 rounded-lg"
                 />
@@ -173,10 +182,7 @@ export function ArchiveFilesPage() {
                   label="Ano"
                   options={yearSelectOptions}
                   value={yearFilterValue}
-                  onChange={(value) => {
-                    setYearFilter(value ? Number(value) : '')
-                    close()
-                  }}
+                  onChange={(value) => setYearFilter(value ? Number(value) : '')}
                   className="h-10 rounded-lg"
                 />
               </div>
@@ -185,7 +191,16 @@ export function ArchiveFilesPage() {
         )}
       </div>
     ),
-    [containerRef, effectiveYearFilter, isCompact, measureRef, typeFilter, yearFilterValue, yearSelectOptions],
+    [
+      compactFilterLabel,
+      containerRef,
+      effectiveYearFilter,
+      isCompact,
+      measureRef,
+      typeFilter,
+      yearFilterValue,
+      yearSelectOptions,
+    ],
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))

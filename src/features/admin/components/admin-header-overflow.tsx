@@ -43,7 +43,15 @@ export function AdminHeaderOverflow({
     if (!open) return
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        target instanceof Element &&
+        target.closest('[data-ui-select-menu="true"]')
+      ) {
+        return
+      }
+
+      if (!rootRef.current?.contains(target)) {
         close()
       }
     }

@@ -17,7 +17,10 @@ import { useRejectionFlag } from '@/features/adoption/hooks/use-rejection-flag'
 import { useUpdateApplicationReview } from '@/features/adoption/hooks/use-application-mutations'
 import { TraceabilityCard } from '@/features/admin/components/traceability-card'
 import { useAdminPageHeader } from '@/features/admin/hooks/use-admin-header'
-import { useRelatedArchiveFiles } from '@/features/admin/hooks/use-archive-files'
+import {
+  invalidateArchiveFileQueries,
+  useRelatedArchiveFiles,
+} from '@/features/admin/hooks/use-archive-files'
 import { formatActorLabel, formatTraceDate } from '@/features/admin/utils/traceability'
 import { getRejectionReasonLabel } from '@/features/adoption/config/rejection-reason-labels'
 import {
@@ -180,7 +183,7 @@ export function ApplicationDetailPage() {
     mutationFn: () => generateAdoptionContractNow(id!),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['applications', 'detail', id] })
-      void queryClient.invalidateQueries({ queryKey: ['archive-files'] })
+      invalidateArchiveFileQueries({ delayedFilterOptions: true })
       void refetch()
       setContractError(null)
     },
