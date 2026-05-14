@@ -20,6 +20,9 @@ export interface TourStepConfig {
   // If true, the mobile sidebar should be opened before this step is shown
   // so the nav item is visible and highlightable on small screens.
   opensNavOnMobile?: boolean
+  // If true, the highlighted mobile menu button should open the sidebar before
+  // advancing to the following nav item step.
+  opensSidebarOnMobileClick?: boolean
 }
 
 export function firestoreTourKey(role: UserRole): string {
@@ -45,26 +48,86 @@ export function markTourCompletedLocally(role: UserRole | undefined): void {
   localStorage.setItem(localStorageTourKey(role), 'true')
 }
 
-function safeNavEl(selector: string): string {
-  return selector
+function isMobileViewport(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth < 768
+}
+
+function findVisibleElement(selector: string): Element | null {
+  if (typeof document === 'undefined') return null
+
+  return Array.from(document.querySelectorAll(selector)).find((element) => {
+    const rect = element.getBoundingClientRect()
+    const style = window.getComputedStyle(element)
+
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.display !== 'none' &&
+      style.visibility !== 'hidden'
+    )
+  }) ?? null
+}
+
+function visibleEl(selector: string): () => Element {
+  return () => findVisibleElement(selector) ?? document.querySelector(selector) ?? document.body
+}
+
+function safeNavEl(selector: string): () => Element {
+  return visibleEl(selector)
 }
 
 // Returns undefined on mobile so driver.js shows a centered popover instead of
 // trying to highlight an element that's hidden or replaced by a compact variant.
 function desktopEl(selector: string): string | undefined {
-  if (typeof window !== 'undefined' && window.innerWidth < 768) return undefined
+  if (isMobileViewport()) return undefined
   return selector
 }
 
-// Sidebar popover: appears to the right on desktop, below the item on mobile
-// so the highlighted nav button stays visible above the popover.
+// Sidebar popover: appears to the side of the highlighted item so the
+// clickable navigation target remains clear.
 function navPopoverSide(): 'right' | 'bottom' {
-  if (typeof window !== 'undefined' && window.innerWidth < 768) return 'bottom'
   return 'right'
 }
 
+function navPopoverClass(): string | undefined {
+  return isMobileViewport() ? 'driver-popover-mobile-nav' : undefined
+}
+
+function mobileNavToggleStep(): TourStepConfig {
+  return {
+    navTarget: null,
+    clickAdvances: true,
+    opensSidebarOnMobileClick: true,
+    step: {
+      element: visibleEl('[data-tour="mobile-nav-toggle"]'),
+      popover: {
+        title: 'Abrir menu',
+        description:
+          'Toque no botão de menu para mostrar a navegação. Em seguida, escolha a área indicada.',
+        side: 'bottom',
+        align: 'start',
+        popoverClass: 'driver-popover-mobile-toggle',
+      },
+    },
+  }
+}
+
+function withMobileNavSteps(configs: TourStepConfig[]): TourStepConfig[] {
+  if (!isMobileViewport()) return configs
+
+  const steps: TourStepConfig[] = []
+  for (const config of configs) {
+    if (config.opensNavOnMobile) {
+      steps.push(mobileNavToggleStep())
+    }
+    steps.push(config)
+  }
+
+  return steps
+}
+
 export function getAdminTourConfigs(): TourStepConfig[] {
-  return [
+  return withMobileNavSteps([
     // 0 – Welcome
     {
       navTarget: null,
@@ -104,6 +167,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Animais" para acessar a lista de animais cadastrados. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -251,6 +315,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Destaques" para definir quais animais aparecem na página inicial. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -281,6 +346,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Candidaturas" para acessar todas as solicitações de adoção. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -327,6 +393,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Arquivos" para acessar os PDFs gerados pelo sistema. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -357,6 +424,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Usuários" para gerenciar quem tem acesso ao painel. Área exclusiva para administradores. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -388,6 +456,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Privacidade" para atender solicitações de exclusão de dados pessoais. Área exclusiva para administradores. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -421,11 +490,11 @@ export function getAdminTourConfigs(): TourStepConfig[] {
         },
       },
     },
-  ]
+  ])
 }
 
 export function getReviewerTourConfigs(): TourStepConfig[] {
-  return [
+  return withMobileNavSteps([
     // 0 – Welcome
     {
       navTarget: null,
@@ -465,6 +534,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Animais" para acessar a lista de animais. Como analista, você pode cadastrar e editar animais. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -570,6 +640,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Destaques" para definir quais animais aparecem na página inicial. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -600,6 +671,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Candidaturas" — é o principal espaço de trabalho da triagem. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -646,6 +718,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
           description:
             'Clique em "Arquivos" para acessar os PDFs gerados pelo sistema. Você também pode clicar em Avançar que eu abro essa tela para você.',
           side: navPopoverSide(),
+          popoverClass: navPopoverClass(),
         },
       },
     },
@@ -678,5 +751,5 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
         },
       },
     },
-  ]
+  ])
 }

@@ -15,13 +15,31 @@ import {
 
 // Waits for a CSS selector to appear in the DOM, then calls callback.
 // Returns a cleanup function that cancels the watch.
+function findVisibleElement(selector: string): Element | null {
+  return Array.from(document.querySelectorAll(selector)).find((element) => {
+    const rect = element.getBoundingClientRect()
+    const style = window.getComputedStyle(element)
+
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.display !== 'none' &&
+      style.visibility !== 'hidden'
+    )
+  }) ?? null
+}
+
+function findTourElement(selector: string): Element | null {
+  return findVisibleElement(selector) ?? document.querySelector(selector)
+}
+
 function waitForElement(
   selector: string,
   callback: () => void,
   timeoutMs = 3000,
 ): () => void {
   // Element already present — fire on next tick so driver has settled
-  if (document.querySelector(selector)) {
+  if (findTourElement(selector)) {
     const t = setTimeout(callback, 60)
     return () => clearTimeout(t)
   }
@@ -37,7 +55,7 @@ function waitForElement(
   }
 
   const observer = new MutationObserver(() => {
-    if (document.querySelector(selector)) resolve()
+    if (findTourElement(selector)) resolve()
   })
   observer.observe(document.body, { childList: true, subtree: true })
 
@@ -114,6 +132,8 @@ export function useAdminTour(
     let cancelClick: (() => void) | null = null
     let cancelWait: (() => void) | null = null
     let unblockLinks: (() => void) | null = null
+    let cancelViewportWatch: (() => void) | null = null
+    let refreshTimer: number | null = null
 
     function cancelPending() {
       cancelClick?.()
@@ -122,6 +142,31 @@ export function useAdminTour(
       cancelWait = null
       unblockLinks?.()
       unblockLinks = null
+    }
+
+    function queueRefresh(delay = 120) {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        ref.d?.refresh()
+      }, delay)
+    }
+
+    function startViewportWatch() {
+      const handleViewportChange = () => queueRefresh(160)
+      window.addEventListener('resize', handleViewportChange)
+      window.addEventListener('orientationchange', handleViewportChange)
+      window.visualViewport?.addEventListener('resize', handleViewportChange)
+
+      cancelViewportWatch = () => {
+        window.removeEventListener('resize', handleViewportChange)
+        window.removeEventListener('orientationchange', handleViewportChange)
+        window.visualViewport?.removeEventListener('resize', handleViewportChange)
+        if (refreshTimer !== null) {
+          window.clearTimeout(refreshTimer)
+          refreshTimer = null
+        }
+      }
     }
 
     // Core advancement: navigate (if needed) then wait for the next element,
@@ -141,6 +186,7 @@ export function useAdminTour(
       const doMove = () => {
         isAdvancing = false
         ref.d?.moveNext()
+        queueRefresh()
       }
 
       const waitAndMove = () => {
@@ -205,6 +251,7 @@ export function useAdminTour(
       const doMovePrev = () => {
         isAdvancing = false
         ref.d?.movePrevious()
+        queueRefresh()
       }
 
       const waitAndMovePrev = () => {
@@ -253,6 +300,8 @@ export function useAdminTour(
 
         onDestroyed: () => {
           cancelPending()
+          cancelViewportWatch?.()
+          cancelViewportWatch = null
           if (!role) return
           markTourCompletedLocally(role)
           if (uid) {
@@ -280,15 +329,23 @@ export function useAdminTour(
 
           if (config?.clickAdvances && element instanceof Element) {
             let fired = false
-            const handler = () => {
+            const useCapture = Boolean(config.opensSidebarOnMobileClick && window.innerWidth < 768)
+            const handler = (event: Event) => {
               if (fired) return
               fired = true
+              if (useCapture) {
+                event.preventDefault()
+                event.stopPropagation()
+                openSidebar()
+              }
               cancelClick = null
               advance(i, 'click')
             }
-            element.addEventListener('click', handler, { once: true })
-            cancelClick = () => element.removeEventListener('click', handler)
+            element.addEventListener('click', handler, { capture: useCapture, once: true })
+            cancelClick = () => element.removeEventListener('click', handler, { capture: useCapture })
           }
+
+          queueRefresh(80)
         },
 
         // Called by the "Próximo/Concluir" button AND by ArrowRight keyboard.
@@ -308,6 +365,7 @@ export function useAdminTour(
         steps,
       })
 
+      startViewportWatch()
       ref.d.drive()
     }, 400)
   }, [role, onBeforeStart, openSidebar, navigate, uid])

@@ -36,7 +36,7 @@ export function AnimalQuickViewModal({
       title={title}
       ariaLabel={title}
       size="xl"
-      className="sm:max-w-2xl"
+      className="sm:max-w-3xl"
     >
       {ids.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">
@@ -85,7 +85,7 @@ function AnimalPanel({
 
   return (
     <>
-      {showDivider && <hr className="my-5 border-border" />}
+      {showDivider && <hr className="my-6 border-border" />}
 
       {label && (
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -118,8 +118,8 @@ function AnimalPanel({
 
       {animal && (
         <>
-          <div className="max-h-[70vh] overflow-y-auto flex flex-col gap-5 sm:flex-row sm:gap-6 pr-1">
-            <div className="sm:w-1/2 sm:shrink-0">
+          <div className="flex flex-col gap-5 md:flex-row md:gap-6">
+            <div className="md:w-1/2 md:shrink-0">
               <AnimalPhotoGallery
                 photos={animal.photos}
                 animalName={animal.name}
@@ -127,14 +127,14 @@ function AnimalPanel({
               />
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="min-w-0 flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-2">
                 <AnimalStatusBadge status={animal.status} />
                 <Badge variant="outline">{SPECIES_LABELS[animal.species]}</Badge>
               </div>
 
               {infoChips.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {infoChips.map((chip) => (
                     <div
                       key={chip.label}

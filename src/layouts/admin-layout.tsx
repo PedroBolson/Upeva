@@ -346,6 +346,7 @@ function AdminLayoutContent() {
             <Button
               variant="ghost"
               size="icon"
+              data-tour="mobile-nav-toggle"
               className="h-9 w-9 shrink-0 md:hidden"
               onClick={() => setSidebarOpen((o) => !o)}
               aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}

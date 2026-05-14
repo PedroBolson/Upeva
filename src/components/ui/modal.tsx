@@ -117,7 +117,7 @@ export function Modal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -140,15 +140,15 @@ export function Modal({
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className={cn(
-              'relative z-10 w-full rounded-xl border border-border bg-card shadow-xl',
+              'relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl',
               'focus:outline-none',
               sizeClasses[size],
               className,
             )}
           >
             {(title || description) && (
-              <div className="flex items-start justify-between gap-4 p-6 pb-0">
-                <div className="flex flex-col gap-1">
+              <div className="flex shrink-0 items-start justify-between gap-4 p-4 pb-0 sm:p-6 sm:pb-0">
+                <div className="min-w-0 flex flex-col gap-1">
                   {title && (
                     <h2 id={titleId} className="text-lg font-semibold text-card-foreground">
                       {title}
@@ -172,10 +172,10 @@ export function Modal({
               </div>
             )}
 
-            <div className="p-6">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
 
             {footer && (
-              <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
+              <div className="flex shrink-0 items-center justify-end gap-3 border-t border-border px-4 py-3 sm:px-6 sm:py-4">
                 {footer}
               </div>
             )}

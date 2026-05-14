@@ -151,6 +151,7 @@ export function ApplicationDetailPage() {
     animal: Animal
     speciesChangeConfirmed: boolean
   } | null>(null)
+  const [draftSourceKey, setDraftSourceKey] = useState<string | null>(null)
   const [animalSelectionCleared, setAnimalSelectionCleared] = useState(false)
   const [adminNotesDraft, setAdminNotesDraft] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -226,14 +227,25 @@ export function ApplicationDetailPage() {
     return Array.from(items.values())
   }, [app?.contractArchiveFileId, flagResult, relatedArchiveFiles])
 
-  const currentStatus = selectedStatus ?? app?.status ?? 'pending'
   const formattedCreatedAt = useMemo(() => tsToDate(app?.createdAt), [app?.createdAt])
   const formattedUpdatedAt = useMemo(() => tsToDate(app?.updatedAt), [app?.updatedAt])
-  const adminNotes = adminNotesDraft ?? app?.adminNotes ?? ''
   const isGeneralInterest = app ? isGeneralInterestApplication(app) : false
-  const appAnimalIds = app ? normalizeApplicationAnimalIds(app) : []
-  const appAnimalDisplayNames = app ? getApplicationAnimalDisplayNames(app) : []
-  const currentAnimalId = animalSelectionCleared ? '' : selectedAnimal?.animal.id ?? appAnimalIds[0] ?? ''
+  const appAnimalIds = useMemo(() => app ? normalizeApplicationAnimalIds(app) : [], [app])
+  const appAnimalDisplayNames = useMemo(() => app ? getApplicationAnimalDisplayNames(app) : [], [app])
+  const appAnimalIdsKey = appAnimalIds.join('|')
+  const appSyncKey = `${app?.id ?? ''}|${app?.status ?? ''}|${app?.adminNotes ?? ''}|${appAnimalIdsKey}`
+  const draftsCurrent = draftSourceKey === appSyncKey
+  const currentStatus = (draftsCurrent ? selectedStatus : null) ?? app?.status ?? 'pending'
+  const adminNotes = draftsCurrent ? adminNotesDraft ?? app?.adminNotes ?? '' : app?.adminNotes ?? ''
+  const currentAnimalId = draftsCurrent && animalSelectionCleared
+    ? ''
+    : draftsCurrent && selectedAnimal
+      ? selectedAnimal.animal.id
+      : appAnimalIds[0] ?? ''
+
+  function markDraftSource() {
+    setDraftSourceKey(appSyncKey)
+  }
 
   // Campos PII nunca lidos direto do Firestore — sempre via CF getApplicationPII
   const phone = pii?.phone ?? ''
@@ -281,21 +293,40 @@ export function ApplicationDetailPage() {
     staleTime: 1000 * 60 * 5,
   })
 
-  const selectedAnimalName = selectedAnimal?.animal.name ?? appAnimalDisplayNames[0] ?? 'Animal vinculado'
+  const selectedAnimalName = draftsCurrent && selectedAnimal
+    ? selectedAnimal.animal.name
+    : appAnimalDisplayNames[0] ?? 'Animal vinculado'
 
   // Available cats for the staff animal assignment dropdowns.
   // Loaded for all cat applications (general and specific alike).
   const { data: availableCats = [], isLoading: availableCatsLoading } = useQuery({
-    queryKey: ['animals', 'linkable-cats', app?.id],
+    queryKey: ['animals', 'linkable-cats', app?.id, app?.status, appAnimalIdsKey],
     queryFn: () => getLinkableAnimalsForApplication({ species: 'cat', scope: 'same-species' }),
     enabled: Boolean(app) && app?.species === 'cat',
     staleTime: 1000 * 60 * 5,
   })
 
+  const catOptions = useMemo(() => {
+    const options = new Map<string, string>()
+
+    appAnimalIds.forEach((animalId, index) => {
+      const name = availableCats.find((cat) => cat.id === animalId)?.name ??
+        appAnimalDisplayNames[index] ??
+        animalId
+      options.set(animalId, name)
+    })
+
+    availableCats.forEach((cat) => {
+      options.set(cat.id, cat.name)
+    })
+
+    return Array.from(options, ([value, label]) => ({ value, label }))
+  }, [appAnimalDisplayNames, appAnimalIds, availableCats])
+
   // Resolved current selections: draft if changed, otherwise app's current value
-  const catSlot1 = catSlot1Draft ?? appAnimalIds[0] ?? ''
-  const catSlot2 = catSlot2Draft ?? appAnimalIds[1] ?? ''
-  const catAssignmentChanged = catSlot1Draft !== null || catSlot2Draft !== null
+  const catSlot1 = draftsCurrent ? catSlot1Draft ?? appAnimalIds[0] ?? '' : appAnimalIds[0] ?? ''
+  const catSlot2 = draftsCurrent ? catSlot2Draft ?? appAnimalIds[1] ?? '' : appAnimalIds[1] ?? ''
+  const catAssignmentChanged = draftsCurrent && (catSlot1Draft !== null || catSlot2Draft !== null)
   const catAssignmentEditable =
     app?.species === 'cat' &&
     app?.status !== 'approved' &&
@@ -348,6 +379,28 @@ export function ApplicationDetailPage() {
       { id, status: app.status, animalIds: ids },
       {
         onSuccess: () => {
+          const animalNames = ids.map((animalId) => (
+            catOptions.find((option) => option.value === animalId)?.label ?? animalId
+          ))
+          queryClient.setQueryData<AdoptionApplication | null>(
+            ['applications', 'detail', id],
+            (current) => current
+              ? {
+                ...current,
+                animalId: ids[0],
+                animalIds: ids,
+                animalName: animalNames[0],
+                animalNames,
+              }
+              : current,
+          )
+          setDraftSourceKey((current) => (
+            current === appSyncKey
+              ? `${app.id}|${app.status}|${app.adminNotes ?? ''}|${ids.join('|')}`
+              : current
+          ))
+          void refetch()
+          void queryClient.invalidateQueries({ queryKey: ['animals', 'linkable-cats', id] })
           setCatSlot1Draft(null)
           setCatSlot2Draft(null)
           setCatAssignmentSaved(true)
@@ -378,6 +431,32 @@ export function ApplicationDetailPage() {
       },
       {
         onSuccess: () => {
+          queryClient.setQueryData<AdoptionApplication | null>(
+            ['applications', 'detail', id],
+            (current) => {
+              if (!current) return current
+
+              const next: AdoptionApplication = {
+                ...current,
+                status: currentStatus,
+                adminNotes,
+              }
+
+              if (isGeneralInterest && animalOverride) {
+                next.animalId = animalOverride.animal.id
+                next.animalIds = [animalOverride.animal.id]
+                next.animalName = animalOverride.animal.name
+                next.animalNames = [animalOverride.animal.name]
+              }
+
+              return next
+            },
+          )
+          void refetch()
+          void queryClient.invalidateQueries({ queryKey: ['animals', 'linkable-cats', id] })
+          setDraftSourceKey(null)
+          setSelectedStatus(null)
+          setAdminNotesDraft(null)
           setSelectedAnimal(null)
           setAnimalSelectionCleared(false)
           setSaved(true)
@@ -410,6 +489,7 @@ export function ApplicationDetailPage() {
   }
 
   function handleSelectAnimal(animal: Animal) {
+    markDraftSource()
     setSaveError(null)
     setSaved(false)
     if (currentAnimalId === animal.id) {
@@ -430,6 +510,7 @@ export function ApplicationDetailPage() {
 
   function confirmSpeciesChange() {
     if (!speciesChangeCandidate) return
+    markDraftSource()
     const confirmedAnimal = speciesChangeCandidate
     const nextSelection = { animal: confirmedAnimal, speciesChangeConfirmed: true }
     setAnimalSelectionCleared(false)
@@ -930,7 +1011,10 @@ export function ApplicationDetailPage() {
                     <Select
                       options={APPLICATION_STATUS_OPTIONS}
                       value={currentStatus}
-                      onChange={(value) => setSelectedStatus(value as ApplicationStatus)}
+                      onChange={(value) => {
+                        markDraftSource()
+                        setSelectedStatus(value as ApplicationStatus)
+                      }}
                     />
                   </div>
 
@@ -956,7 +1040,10 @@ export function ApplicationDetailPage() {
                     placeholder="Motivo, observações para a equipe…"
                     rows={6}
                     value={adminNotes}
-                    onChange={(e) => setAdminNotesDraft(e.target.value)}
+                    onChange={(e) => {
+                      markDraftSource()
+                      setAdminNotesDraft(e.target.value)
+                    }}
                   />
                 </div>
 
@@ -1007,29 +1094,31 @@ export function ApplicationDetailPage() {
                     label="Gato 1 (principal)"
                     options={[
                       { value: '', label: 'Selecionar gato…' },
-                      ...availableCats.map((c) => ({ value: c.id, label: c.name })),
+                      ...catOptions,
                     ]}
                     value={catSlot1}
                     onChange={(v) => {
-                      setCatSlot1Draft(v || null)
-                      if (v && v === (catSlot2Draft ?? appAnimalIds[1] ?? '')) {
+                      markDraftSource()
+                      setCatSlot1Draft(v === (appAnimalIds[0] ?? '') ? null : v)
+                      if (v && v === catSlot2) {
                         setCatSlot2Draft('')
                       }
                     }}
-                    disabled={availableCatsLoading || isPending}
+                    disabled={(availableCatsLoading && catOptions.length === 0) || isPending}
                   />
                   {app.jointAdoption ? (
                     <Select
                       label="Gato 2 (opcional)"
                       options={[
                         { value: '', label: 'Nenhum' },
-                        ...availableCats
-                          .filter((c) => c.id !== catSlot1)
-                          .map((c) => ({ value: c.id, label: c.name })),
+                        ...catOptions.filter((option) => option.value !== catSlot1),
                       ]}
                       value={catSlot2}
-                      onChange={(v) => setCatSlot2Draft(v || '')}
-                      disabled={availableCatsLoading || isPending}
+                      onChange={(v) => {
+                        markDraftSource()
+                        setCatSlot2Draft(v === (appAnimalIds[1] ?? '') ? null : v)
+                      }}
+                      disabled={(availableCatsLoading && catOptions.length === 0) || isPending}
                     />
                   ) : (
                     <p className="text-xs text-muted-foreground">
