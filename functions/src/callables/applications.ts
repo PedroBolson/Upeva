@@ -43,6 +43,14 @@ type SpeciesChangeDecision = {
   linkedAnimalSpecies: string | null;
 };
 
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function getSpeciesChangeDecision(
   application: ApplicationRecord & Record<string, unknown>,
   animal: AnimalRecord,
@@ -271,6 +279,8 @@ export const createApplication = onCall(
           animalIds: requestedAnimalIds,
           animalName: resolvedAnimalNames[0],
           animalNames: resolvedAnimalNames,
+          animalNameSearch: normalizeSearchText(resolvedAnimalNames[0]),
+          animalNamesSearch: resolvedAnimalNames.map(normalizeSearchText),
           queuePosition: nextQueuePosition,
           queuePositions: Object.fromEntries(
             requestedAnimalIds.map((id, index) => [id, nextQueuePositions[index]])
@@ -736,6 +746,9 @@ export const updateApplicationReview = onCall(
           payload.animalIds = nextAnimalIds;
           payload.animalName = nextAnimalName;
           payload.animalNames = staffAnimalNames ?? (nextAnimalName ? [nextAnimalName] : []);
+          if (nextAnimalName) payload.animalNameSearch = normalizeSearchText(nextAnimalName);
+          payload.animalNamesSearch = (staffAnimalNames ?? (nextAnimalName ? [nextAnimalName] : []))
+            .map(normalizeSearchText);
           if (staffQueuePositionsMap !== undefined) {
             payload.queuePositions = staffQueuePositionsMap;
           }
@@ -748,6 +761,8 @@ export const updateApplicationReview = onCall(
           payload.animalIds = [nextAnimalId];
           payload.animalName = nextAnimalName;
           payload.animalNames = [nextAnimalName];
+          payload.animalNameSearch = normalizeSearchText(nextAnimalName);
+          payload.animalNamesSearch = [normalizeSearchText(nextAnimalName)];
         }
 
         if (!handledByAnimalIds && isGeneralInterest && requestedAnimalId && linkSpeciesDecision && linkedAnimalSnapshot) {
@@ -865,6 +880,8 @@ export const updateApplicationReview = onCall(
               animalIds: FieldValue.delete(),
               animalName: FieldValue.delete(),
               animalNames: FieldValue.delete(),
+              animalNameSearch: FieldValue.delete(),
+              animalNamesSearch: FieldValue.delete(),
               queuePosition: FieldValue.delete(),
               queuePositions: FieldValue.delete(),
               waitlistEntry: FieldValue.delete(),

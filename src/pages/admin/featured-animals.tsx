@@ -78,44 +78,36 @@ interface AnimalPickerModalProps {
 
 function AnimalPickerModal({ open, onClose, selectedIds, onConfirm, remaining }: AnimalPickerModalProps) {
   const [search, setSearch] = useState('')
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
+  const [pendingAnimals, setPendingAnimals] = useState<Map<string, Animal>>(new Map())
 
-  const { animals: allAnimals, hasMore, isLoading, isFetchingMore, fetchMore } = useAdminAnimals(null)
-
-  const pickable = useMemo(
-    () => allAnimals.filter((a) => a.status === 'available' || a.status === 'under_review'),
-    [allAnimals],
-  )
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return q ? pickable.filter((a) => a.name.toLowerCase().includes(q)) : pickable
-  }, [pickable, search])
+  const { animals, hasMore, isLoading, isFetchingMore, fetchMore } = useAdminAnimals({
+    statuses: ['available', 'under_review'],
+    search,
+  })
 
   function toggleAnimal(animal: Animal) {
     if (selectedIds.has(animal.id)) return
-    setPendingIds((prev) => {
-      const next = new Set(prev)
+    setPendingAnimals((prev) => {
+      const next = new Map(prev)
       if (next.has(animal.id)) next.delete(animal.id)
-      else next.add(animal.id)
+      else next.set(animal.id, animal)
       return next
     })
   }
 
   function handleConfirm() {
-    const toAdd = allAnimals.filter((a) => pendingIds.has(a.id))
-    onConfirm(toAdd)
-    setPendingIds(new Set())
+    onConfirm(Array.from(pendingAnimals.values()))
+    setPendingAnimals(new Map())
     setSearch('')
   }
 
   function handleClose() {
-    setPendingIds(new Set())
+    setPendingAnimals(new Map())
     setSearch('')
     onClose()
   }
 
-  const canAddMore = pendingIds.size > 0 && pendingIds.size <= remaining
+  const canAddMore = pendingAnimals.size > 0 && pendingAnimals.size <= remaining
 
   return (
     <Modal
@@ -128,8 +120,8 @@ function AnimalPickerModal({ open, onClose, selectedIds, onConfirm, remaining }:
         <>
           <Button variant="outline" onClick={handleClose}>Cancelar</Button>
           <Button onClick={handleConfirm} disabled={!canAddMore}>
-            {pendingIds.size > 0
-              ? `Adicionar ${pendingIds.size} ${pendingIds.size !== 1 ? 'animais' : 'animal'}`
+            {pendingAnimals.size > 0
+              ? `Adicionar ${pendingAnimals.size} ${pendingAnimals.size !== 1 ? 'animais' : 'animal'}`
               : 'Adicionar selecionados'}
           </Button>
         </>
@@ -145,13 +137,13 @@ function AnimalPickerModal({ open, onClose, selectedIds, onConfirm, remaining }:
 
         {isLoading ? (
           <div className="flex justify-center py-8"><Spinner /></div>
-        ) : filtered.length === 0 ? (
+        ) : animals.length === 0 ? (
           <EmptyState title="Nenhum animal encontrado" />
         ) : (
           <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
-            {filtered.map((animal) => {
+            {animals.map((animal) => {
               const isAlreadySelected = selectedIds.has(animal.id)
-              const isPending = pendingIds.has(animal.id)
+              const isPending = pendingAnimals.has(animal.id)
               const coverPhoto = animal.photos[animal.coverPhotoIndex] ?? animal.photos[0]
 
               return (

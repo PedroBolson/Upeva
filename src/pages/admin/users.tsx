@@ -52,6 +52,7 @@ export function UsersPage() {
 
   const { userProfile: currentUser } = useAuth()
   const { toast } = useToast()
+  const [search, setSearch] = useState('')
   const {
     data,
     isLoading,
@@ -60,7 +61,7 @@ export function UsersPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useUsers()
+  } = useUsers(search)
 
   const users = useMemo(() => data?.pages.flatMap((p) => p.users) ?? [], [data])
   const { mutateAsync: createUser, isPending: creating } = useCreateUser()
@@ -78,7 +79,6 @@ export function UsersPage() {
     }
   }, [searchParams, setSearchParams])
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null)
-  const [search, setSearch] = useState('')
   const [sortColumn, setSortColumn] = useState<string>('displayName')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [updatingRoleIds, setUpdatingRoleIds] = useState<Set<string>>(new Set())
@@ -174,29 +174,17 @@ export function UsersPage() {
     }
   }
 
-  const filtered = useMemo(
-    () =>
-      search.trim()
-        ? users.filter(
-            (u) =>
-              u.displayName?.toLowerCase().includes(search.toLowerCase()) ||
-              u.email?.toLowerCase().includes(search.toLowerCase()),
-          )
-        : users,
-    [users, search],
-  )
-
   const sorted = useMemo(() => {
     const fn = SORT_KEYS[sortColumn]
-    if (!fn) return filtered
-    return [...filtered].sort((a, b) => {
+    if (!fn) return users
+    return [...users].sort((a, b) => {
       const av = fn(a)
       const bv = fn(b)
       if (av < bv) return sortDir === 'asc' ? -1 : 1
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [filtered, sortColumn, sortDir])
+  }, [users, sortColumn, sortDir])
 
   const columns: Column<UserProfile>[] = [
     {
@@ -445,7 +433,7 @@ export function UsersPage() {
             <div className="mb-4 flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">
                 {search.trim()
-                  ? `${filtered.length} de ${users.length} usuário${users.length !== 1 ? 's' : ''}`
+                  ? `${users.length} usuário${users.length !== 1 ? 's' : ''} encontrado${users.length !== 1 ? 's' : ''}`
                   : `${users.length} usuário${users.length !== 1 ? 's' : ''} cadastrado${users.length !== 1 ? 's' : ''}`}
               </p>
             </div>

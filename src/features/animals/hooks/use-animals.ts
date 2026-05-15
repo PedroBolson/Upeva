@@ -13,18 +13,17 @@ import type { DocumentSnapshot } from 'firebase/firestore'
 
 /**
  * Infinite query for the public /animais page.
- * - Server-side filters: species, sex, size (Firestore where clauses)
- * - Client-side filter: name search (applied to accumulated results)
+ * - Server-side filters: species, sex, size, name search (Firestore clauses)
  * - Changing any server-side filter resets to page 1
  */
 export function useAnimals(filters: AnimalFilters = {}) {
   const { species, sex, size, search } = filters
 
   const result = useInfiniteQuery<AnimalPage>({
-    queryKey: ['animals', 'public', { species, sex, size }],
+    queryKey: ['animals', 'public', { species, sex, size, search: search?.trim() ?? '' }],
     queryFn: ({ pageParam }) =>
       getAvailableAnimalsPaginated(
-        { species, sex, size },
+        { species, sex, size, search },
         (pageParam as DocumentSnapshot | null) ?? null,
       ),
     initialPageParam: null,
@@ -36,17 +35,10 @@ export function useAnimals(filters: AnimalFilters = {}) {
     placeholderData: keepPreviousData,
   })
 
-  // Flatten all pages and apply client-side name search
-  const allAnimals = useMemo(
+  const animals = useMemo(
     () => result.data?.pages.flatMap((p) => p.animals) ?? [],
     [result.data],
   )
-
-  const animals = useMemo(() => {
-    if (!search) return allAnimals
-    const q = search.toLowerCase()
-    return allAnimals.filter((a) => a.name.toLowerCase().includes(q))
-  }, [allAnimals, search])
 
   const hasMore = result.data?.pages[result.data.pages.length - 1]?.hasMore ?? false
 

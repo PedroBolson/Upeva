@@ -7,7 +7,9 @@ export type UserRole = 'admin' | 'reviewer'
 export interface UserProfile {
   uid: string
   email: string
+  emailSearch?: string
   displayName: string
+  displayNameSearch?: string
   role: UserRole
   createdAt: Timestamp
   createdBy: string

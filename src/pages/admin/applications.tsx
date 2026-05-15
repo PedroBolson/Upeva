@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApplicationStatusBadge, Badge, Button, Card, ResponsiveDataList, Select } from '@/components/ui'
+import { Search } from 'lucide-react'
+import { ApplicationStatusBadge, Badge, Button, Card, Input, ResponsiveDataList } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { Spinner } from '@/components/ui/spinner'
 import { AdminListSkeleton } from '@/components/ui/skeleton'
@@ -34,7 +35,7 @@ export function ApplicationsPage() {
 
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<ApplicationStatus | 'all'>('all')
-  const [animalFilter, setAnimalFilter] = useState('')
+  const [animalSearch, setAnimalSearch] = useState('')
   const [sortColumn, setSortColumn] = useState<string>('queue')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const { containerRef, measureRef, isCompact } = useHeaderCompaction()
@@ -49,30 +50,12 @@ export function ApplicationsPage() {
     error,
     fetchMore,
     refetch,
-  } = useApplications(activeTab === 'all' ? null : activeTab)
+  } = useApplications(activeTab === 'all' ? null : activeTab, animalSearch)
 
   const applications = useMemo(
     () => allApplications,
     [allApplications],
   )
-
-  const animalOptions = useMemo(() => {
-    const seen = new Set<string>()
-    const options: { value: string; label: string }[] = []
-    for (const a of applications) {
-      const name = getApplicationSubject(a)
-      if (name && !seen.has(name)) {
-        seen.add(name)
-        options.push({ value: name, label: name })
-      }
-    }
-    return options.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-  }, [applications])
-
-  const filteredApplications = useMemo(() => {
-    if (!animalFilter) return applications
-    return applications.filter((a) => getApplicationSubject(a) === animalFilter)
-  }, [applications, animalFilter])
 
   const sortKeys: Record<string, (a: AdoptionApplication) => string | number> = {
     applicant: (a) => a.fullName.toLowerCase(),
@@ -97,8 +80,8 @@ export function ApplicationsPage() {
 
   const sortedApplications = useMemo(() => {
     const fn = sortKeys[sortColumn]
-    if (!fn) return filteredApplications
-    return [...filteredApplications].sort((a, b) => {
+    if (!fn) return applications
+    return [...applications].sort((a, b) => {
       const av = fn(a)
       const bv = fn(b)
       if (av < bv) return sortDir === 'asc' ? -1 : 1
@@ -106,7 +89,7 @@ export function ApplicationsPage() {
       return 0
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredApplications, sortColumn, sortDir])
+  }, [applications, sortColumn, sortDir])
 
   // Counts for tab badges come from metadata (no extra reads)
   const statusCounts = useMemo(() => {
@@ -133,7 +116,6 @@ export function ApplicationsPage() {
           key={value}
           onClick={() => {
             setActiveTab(value)
-            setAnimalFilter('')
           }}
           aria-current={activeTab === value ? 'true' : undefined}
           className={cn(
@@ -163,6 +145,15 @@ export function ApplicationsPage() {
           className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap"
         >
           {tabButtons}
+          <div className="w-44 shrink-0">
+            <Input
+              placeholder="Buscar animal..."
+              value={animalSearch}
+              onChange={() => undefined}
+              leftIcon={<Search size={14} />}
+              className="h-9 rounded-lg"
+            />
+          </div>
         </div>
 
         {!isCompact && (
@@ -170,22 +161,22 @@ export function ApplicationsPage() {
             <div data-tour="applications-status-tabs" className="flex min-w-0 items-center gap-2 whitespace-nowrap">
               {tabButtons}
             </div>
-            {animalOptions.length > 0 && (
-              <div className="w-44 shrink-0">
-                <Select
-                  options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
-                  value={animalFilter}
-                  onChange={(v) => setAnimalFilter(v)}
-                />
-              </div>
-            )}
+            <div className="w-44 shrink-0">
+              <Input
+                placeholder="Buscar animal..."
+                value={animalSearch}
+                onChange={(event) => setAnimalSearch(event.target.value)}
+                leftIcon={<Search size={14} />}
+                className="h-9 rounded-lg"
+              />
+            </div>
           </>
         )}
 
         {isCompact && (
           <AdminHeaderOverflow
             label="Filtros"
-            active={activeTab !== 'all' || !!animalFilter}
+            active={activeTab !== 'all' || !!animalSearch.trim()}
           >
             {(close) => (
               <div className="grid gap-2">
@@ -197,7 +188,6 @@ export function ApplicationsPage() {
                     className="w-full justify-between"
                     onClick={() => {
                       setActiveTab(value)
-                      setAnimalFilter('')
                       close()
                     }}
                   >
@@ -216,26 +206,22 @@ export function ApplicationsPage() {
                     )}
                   </Button>
                 ))}
-                {animalOptions.length > 0 && (
-                  <div className="flex flex-col gap-1.5 border-t border-border pt-2">
-                    <span className="text-xs font-medium text-muted-foreground">Animal</span>
-                    <Select
-                      options={[{ value: '', label: 'Todos os animais' }, ...animalOptions]}
-                      value={animalFilter}
-                      onChange={(v) => {
-                        setAnimalFilter(v)
-                        close()
-                      }}
-                    />
-                  </div>
-                )}
+                <div className="flex flex-col gap-1.5 border-t border-border pt-2">
+                  <span className="text-xs font-medium text-muted-foreground">Animal</span>
+                  <Input
+                    placeholder="Buscar animal..."
+                    value={animalSearch}
+                    onChange={(event) => setAnimalSearch(event.target.value)}
+                    leftIcon={<Search size={14} />}
+                  />
+                </div>
               </div>
             )}
           </AdminHeaderOverflow>
         )}
       </div>
     ),
-    [activeTab, animalFilter, animalOptions, containerRef, isCompact, measureRef, statusCounts, tabButtons],
+    [activeTab, animalSearch, containerRef, isCompact, measureRef, statusCounts, tabButtons],
   )
 
   useAdminPageHeader(useMemo(() => ({ actions: headerActions }), [headerActions]))
@@ -305,10 +291,15 @@ export function ApplicationsPage() {
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
               {sortedApplications.length} candidatura{sortedApplications.length !== 1 ? 's' : ''}{' '}
-              {animalFilter ? 'encontrada' : 'carregada'}{sortedApplications.length !== 1 ? 's' : ''}
+              {animalSearch.trim() ? 'encontrada' : 'carregada'}{sortedApplications.length !== 1 ? 's' : ''}
             </p>
             <p className="text-sm text-muted-foreground">
               Mostrando o status <strong className="text-foreground">{activeTabLabel}</strong>.
+              {animalSearch.trim() ? (
+                <>
+                  {' '}Busca por animal: <strong className="text-foreground">"{animalSearch.trim()}"</strong>.
+                </>
+              ) : null}
             </p>
           </div>
 

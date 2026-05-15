@@ -86,7 +86,12 @@ export function AnimalFormPage() {
   const { mutateAsync: updateAnimalStatus } = useUpdateAnimalStatus()
   const { mutateAsync: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
   const { mutate: archiveAnimal, isPending: isArchiving } = useArchiveAnimal()
-  const { data: relatedArchiveFiles = [] } = useRelatedArchiveFiles({ animalId: animal?.id })
+  const {
+    data: relatedArchiveFiles = [],
+    hasMore: hasMoreRelatedArchiveFiles,
+    isFetchingMore: isFetchingMoreRelatedArchiveFiles,
+    fetchMore: fetchMoreRelatedArchiveFiles,
+  } = useRelatedArchiveFiles({ animalId: animal?.id })
 
   useDocumentTitle(
     buildAdminTitle(
@@ -825,6 +830,18 @@ export function AnimalFormPage() {
                     {item.label}
                   </Link>
                 ))}
+                {hasMoreRelatedArchiveFiles && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit text-primary"
+                    loading={isFetchingMoreRelatedArchiveFiles}
+                    onClick={() => fetchMoreRelatedArchiveFiles()}
+                  >
+                    Carregar mais documentos
+                  </Button>
+                )}
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Os arquivos usam a rota interna de arquivos e são exibidos com acesso temporário.
                 </p>

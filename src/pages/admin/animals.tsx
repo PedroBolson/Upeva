@@ -60,7 +60,7 @@ export function AdminAnimalsPage() {
   const canDeleteAnimals = userProfile?.role === 'admin'
 
   const { animals: allAnimals, hasMore, isLoading, isFiltering, isFetchingMore, error, fetchMore, refetch } =
-    useAdminAnimals(statusFilter || null)
+    useAdminAnimals({ status: statusFilter || null, search })
 
   const { mutate: updateStatus } = useUpdateAnimalStatus()
   const { mutate: deleteAnimal, isPending: isDeletingAnimal } = useDeleteAnimal()
@@ -108,14 +108,6 @@ export function AdminAnimalsPage() {
     )
   }
 
-  const filtered = useMemo(
-    () =>
-      search
-        ? allAnimals.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
-        : allAnimals,
-    [allAnimals, search],
-  )
-
   const sortKeys: Record<string, (a: Animal) => string | number> = {
     name: (a) => a.name.toLowerCase(),
     profile: (a) => `${a.species}${a.sex}${a.size ?? ''}`,
@@ -133,8 +125,8 @@ export function AdminAnimalsPage() {
 
   const sorted = useMemo(() => {
     const fn = sortKeys[sortColumn]
-    if (!fn) return filtered
-    return [...filtered].sort((a, b) => {
+    if (!fn) return allAnimals
+    return [...allAnimals].sort((a, b) => {
       const av = fn(a)
       const bv = fn(b)
       if (av < bv) return sortDir === 'asc' ? -1 : 1
@@ -142,7 +134,7 @@ export function AdminAnimalsPage() {
       return 0
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, sortColumn, sortDir])
+  }, [allAnimals, sortColumn, sortDir])
 
   const activeStatusLabel = statusFilter ? STATUS_LABELS[statusFilter] : 'Todos os status'
   const searchTerm = search.trim()
@@ -395,7 +387,7 @@ export function AdminAnimalsPage() {
         <Card data-tour="animals-list-area" className={cn('border-border/80 p-5 transition-opacity duration-150', isFiltering && 'opacity-50 pointer-events-none')}>
           <div className="mb-4 flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">
-              {filtered.length} {filtered.length !== 1 ? 'animais' : 'animal'} carregado{filtered.length !== 1 ? 's' : ''}
+              {allAnimals.length} {allAnimals.length !== 1 ? 'animais' : 'animal'} carregado{allAnimals.length !== 1 ? 's' : ''}
             </p>
             <p className="text-sm text-muted-foreground">
               Mostrando o status <strong className="text-foreground">{activeStatusLabel}</strong>

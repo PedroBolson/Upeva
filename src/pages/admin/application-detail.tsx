@@ -144,7 +144,12 @@ export function ApplicationDetailPage() {
   const { data: pii, isLoading: piiLoading } = useApplicationPII(id)
   const { data: flagResult } = useRejectionFlag(id)
   const { mutate: updateReview, isPending } = useUpdateApplicationReview()
-  const { data: relatedArchiveFiles = [] } = useRelatedArchiveFiles({ applicationId: app?.id })
+  const {
+    data: relatedArchiveFiles = [],
+    hasMore: hasMoreRelatedArchiveFiles,
+    isFetchingMore: isFetchingMoreRelatedArchiveFiles,
+    fetchMore: fetchMoreRelatedArchiveFiles,
+  } = useRelatedArchiveFiles({ applicationId: app?.id })
   const locationState = location.state as ApplicationDetailLocationState | null
 
   useDocumentTitle(buildAdminTitle(app ? `Candidatura - ${app.fullName}` : 'Candidatura'))
@@ -1287,6 +1292,18 @@ export function ApplicationDetailPage() {
                     {item.label}
                   </Link>
                 ))}
+                {hasMoreRelatedArchiveFiles && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit text-primary"
+                    loading={isFetchingMoreRelatedArchiveFiles}
+                    onClick={() => fetchMoreRelatedArchiveFiles()}
+                  >
+                    Carregar mais documentos
+                  </Button>
+                )}
               </div>
             </Card>
           )}

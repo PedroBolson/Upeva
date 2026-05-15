@@ -6,6 +6,8 @@ import {
   query,
   orderBy,
   limit,
+  startAt,
+  endAt,
   startAfter,
   where,
   type DocumentSnapshot,
@@ -49,6 +51,14 @@ function docToApplication(id: string, data: Record<string, unknown>): AdoptionAp
   return { id, ...(data as Omit<AdoptionApplication, 'id'>) }
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 // ── Public ────────────────────────────────────────────────────────────────────
 
 /**
@@ -84,14 +94,24 @@ export async function createApplication(
 export async function getApplicationsPaginated(
   status: ApplicationStatus | null = null,
   cursor: DocumentSnapshot | null = null,
+  animalSearch = '',
 ): Promise<ApplicationPage> {
-  const constraints: QueryConstraint[] = [
-    orderBy('createdAt', 'desc'),
-    limit(ADMIN_PAGE_SIZE + 1),
-  ]
+  const normalizedAnimalSearch = normalizeSearchText(animalSearch)
+  const constraints: QueryConstraint[] = []
 
-  if (status) constraints.unshift(where('status', '==', status))
-  if (cursor) constraints.push(startAfter(cursor))
+  if (status) constraints.push(where('status', '==', status))
+
+  if (normalizedAnimalSearch) {
+    constraints.push(orderBy('animalNameSearch', 'asc'))
+    if (cursor) constraints.push(startAfter(cursor))
+    else constraints.push(startAt(normalizedAnimalSearch))
+    constraints.push(endAt(`${normalizedAnimalSearch}\uf8ff`))
+  } else {
+    constraints.push(orderBy('createdAt', 'desc'))
+    if (cursor) constraints.push(startAfter(cursor))
+  }
+
+  constraints.push(limit(ADMIN_PAGE_SIZE + 1))
 
   const snap = await getDocs(query(collection(db, 'applications'), ...constraints))
   const hasMore = snap.docs.length > ADMIN_PAGE_SIZE

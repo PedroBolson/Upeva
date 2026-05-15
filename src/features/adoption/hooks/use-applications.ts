@@ -9,11 +9,16 @@ import type { DocumentSnapshot } from 'firebase/firestore'
  * - Server-side status filter (Firestore where clause)
  * - "Load more" pattern with 25 applications per page
  */
-export function useApplications(status: ApplicationStatus | null = null) {
+export function useApplications(status: ApplicationStatus | null = null, animalSearch = '') {
+  const normalizedAnimalSearch = animalSearch.trim()
   const result = useInfiniteQuery<ApplicationPage>({
-    queryKey: ['applications', { status }],
+    queryKey: ['applications', { status, animalSearch: normalizedAnimalSearch }],
     queryFn: ({ pageParam }) =>
-      getApplicationsPaginated(status, (pageParam as DocumentSnapshot | null) ?? null),
+      getApplicationsPaginated(
+        status,
+        (pageParam as DocumentSnapshot | null) ?? null,
+        normalizedAnimalSearch,
+      ),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
     staleTime: 1000 * 60 * 2,

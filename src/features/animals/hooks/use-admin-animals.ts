@@ -3,13 +3,30 @@ import { getAdminAnimalsPaginated, type AnimalPage } from '../services/animals.s
 import type { AnimalStatus } from '@/types/common'
 import type { DocumentSnapshot } from 'firebase/firestore'
 
-export function useAdminAnimals(status: AnimalStatus | null = null) {
+interface AdminAnimalsFilters {
+  status?: AnimalStatus | null
+  statuses?: AnimalStatus[] | null
+  search?: string
+}
+
+export function useAdminAnimals(statusOrFilters: AnimalStatus | null | AdminAnimalsFilters = null) {
   const qc = useQueryClient()
+  const filters = typeof statusOrFilters === 'object' && statusOrFilters !== null
+    ? statusOrFilters
+    : { status: statusOrFilters }
+  const status = filters.status ?? null
+  const statuses = filters.statuses ?? null
+  const search = filters.search?.trim() ?? ''
 
   const result = useInfiniteQuery<AnimalPage>({
-    queryKey: ['admin', 'animals', { status }],
+    queryKey: ['admin', 'animals', { status, statuses: statuses?.join('|') ?? null, search }],
     queryFn: ({ pageParam }) =>
-      getAdminAnimalsPaginated(status, (pageParam as DocumentSnapshot | null) ?? null),
+      getAdminAnimalsPaginated(
+        status,
+        (pageParam as DocumentSnapshot | null) ?? null,
+        search,
+        statuses,
+      ),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.lastDoc ?? undefined,
     placeholderData: keepPreviousData,

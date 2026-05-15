@@ -16,6 +16,14 @@ import {
   UserRole,
 } from "../lib/shared.js";
 
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 // ── createUser: admin creates a new staff user ────────────────────────────────
 export const createUser = onCall(
   { region: "southamerica-east1", maxInstances: 3 },
@@ -77,7 +85,9 @@ export const createUser = onCall(
       const userPayload: Record<string, unknown> = {
         uid: newUser.uid,
         email,
+        emailSearch: email.trim().toLowerCase(),
         displayName,
+        displayNameSearch: normalizeSearchText(displayName),
         role,
         createdAt: FieldValue.serverTimestamp(),
         createdBy: request.auth.uid,

@@ -68,6 +68,8 @@ export interface AdoptionApplication extends AdoptionFormData {
   animalIds?: string[]
   animalName?: string
   animalNames?: string[]
+  animalNameSearch?: string
+  animalNamesSearch?: string[]
   previousAnimalId?: string
   previousAnimalName?: string
   waitlistEntry?: boolean

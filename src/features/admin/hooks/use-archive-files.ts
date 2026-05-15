@@ -4,7 +4,7 @@ import type { InfiniteData } from '@tanstack/react-query'
 import { queryClient } from '@/lib/query-client'
 import {
   listArchiveFilesPage,
-  listRelatedArchiveFiles,
+  listRelatedArchiveFilesPage,
   getArchiveFilterOptions,
   recalibrateArchiveFilterOptions,
   getArchiveFileUrl,
@@ -12,6 +12,8 @@ import {
   type ArchiveFilesFilter,
   type ArchiveFilesPageResult,
   type RelatedArchiveFilesFilter,
+  type RelatedArchiveFilesCursor,
+  type RelatedArchiveFilesPageResult,
 } from '../services/archive.service'
 import type { DocumentSnapshot } from 'firebase/firestore'
 
@@ -78,12 +80,39 @@ export function useRelatedArchiveFiles(filter: RelatedArchiveFilesFilter = {}) {
   const animalId = filter.animalId?.trim() || null
   const animalIds = filter.animalIds?.map((id) => id.trim()).filter(Boolean) ?? []
 
-  return useQuery({
+  const result = useInfiniteQuery<
+    RelatedArchiveFilesPageResult,
+    Error,
+    InfiniteData<RelatedArchiveFilesPageResult>,
+    (string | null)[],
+    RelatedArchiveFilesCursor
+  >({
     queryKey: ['archive-files', 'related', applicationId, animalId, animalIds.join('|')],
-    queryFn: () => listRelatedArchiveFiles({ applicationId, animalId, animalIds }),
+    queryFn: ({ pageParam }) =>
+      listRelatedArchiveFilesPage({ applicationId, animalId, animalIds }, pageParam),
+    initialPageParam: {},
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.cursors : undefined,
     enabled: Boolean(applicationId || animalId || animalIds.length > 0),
     staleTime: 1000 * 60 * 2,
   })
+
+  const files = useMemo(() => {
+    const byId = new Map<string, RelatedArchiveFilesPageResult['files'][number]>()
+    for (const page of result.data?.pages ?? []) {
+      for (const file of page.files) {
+        byId.set(file.id, file)
+      }
+    }
+    return Array.from(byId.values())
+  }, [result.data])
+
+  return {
+    ...result,
+    data: files,
+    hasMore: result.hasNextPage,
+    isFetchingMore: result.isFetchingNextPage,
+    fetchMore: result.fetchNextPage,
+  }
 }
 
 export function useArchiveDocumentUrl(archiveFileId: string | undefined) {

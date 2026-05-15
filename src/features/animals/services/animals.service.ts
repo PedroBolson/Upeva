@@ -72,23 +72,30 @@ function decorateAnimalPayload<T extends Partial<AnimalPayload>>(data: T): T & {
 
 /**
  * Returns a paginated page of available animals, with optional server-side
- * filters for species, sex, and size.  Name search is intentionally kept
- * client-side (Firestore doesn't support full-text search natively).
+ * filters for species, sex, size, and name prefix.
  */
 export async function getAvailableAnimalsPaginated(
-  filters: Pick<AnimalFilters, 'species' | 'sex' | 'size'> = {},
+  filters: AnimalFilters = {},
   cursor: DocumentSnapshot | null = null,
 ): Promise<AnimalPage> {
+  const normalizedSearch = normalizeAnimalNameSearch(filters.search ?? '')
   const constraints: QueryConstraint[] = [where('status', 'in', ['available', 'under_review'])]
 
   if (filters.species) constraints.push(where('species', '==', filters.species))
   if (filters.sex) constraints.push(where('sex', '==', filters.sex))
   if (filters.size) constraints.push(where('size', '==', filters.size))
 
-  constraints.push(orderBy('createdAt', 'desc'))
-  constraints.push(limit(PUBLIC_PAGE_SIZE + 1))
+  if (normalizedSearch) {
+    constraints.push(orderBy('nameSearch', 'asc'))
+    if (cursor) constraints.push(startAfter(cursor))
+    else constraints.push(startAt(normalizedSearch))
+    constraints.push(endAt(`${normalizedSearch}\uf8ff`))
+  } else {
+    constraints.push(orderBy('createdAt', 'desc'))
+    if (cursor) constraints.push(startAfter(cursor))
+  }
 
-  if (cursor) constraints.push(startAfter(cursor))
+  constraints.push(limit(PUBLIC_PAGE_SIZE + 1))
 
   const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
   const hasMore = snap.docs.length > PUBLIC_PAGE_SIZE
@@ -447,14 +454,26 @@ export async function getLinkableAnimalsPageForApplication(
 export async function getAdminAnimalsPaginated(
   status: AnimalStatus | null = null,
   cursor: DocumentSnapshot | null = null,
+  search = '',
+  statuses: AnimalStatus[] | null = null,
 ): Promise<AnimalPage> {
-  const constraints: QueryConstraint[] = [
-    orderBy('createdAt', 'desc'),
-    limit(ADMIN_PAGE_SIZE + 1),
-  ]
+  const normalizedSearch = normalizeAnimalNameSearch(search)
+  const constraints: QueryConstraint[] = []
 
-  if (status) constraints.unshift(where('status', '==', status))
-  if (cursor) constraints.push(startAfter(cursor))
+  if (statuses?.length) constraints.push(where('status', 'in', statuses))
+  else if (status) constraints.push(where('status', '==', status))
+
+  if (normalizedSearch) {
+    constraints.push(orderBy('nameSearch', 'asc'))
+    if (cursor) constraints.push(startAfter(cursor))
+    else constraints.push(startAt(normalizedSearch))
+    constraints.push(endAt(`${normalizedSearch}\uf8ff`))
+  } else {
+    constraints.push(orderBy('createdAt', 'desc'))
+    if (cursor) constraints.push(startAfter(cursor))
+  }
+
+  constraints.push(limit(ADMIN_PAGE_SIZE + 1))
 
   const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
   const hasMore = snap.docs.length > ADMIN_PAGE_SIZE

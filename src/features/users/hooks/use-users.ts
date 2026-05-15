@@ -5,7 +5,8 @@ import type { UsersPage, CreateUserPayload } from '../services/users.service'
 import type { DocumentSnapshot } from 'firebase/firestore'
 import type { UserRole } from '@/types/common'
 
-export function useUsers() {
+export function useUsers(search = '') {
+  const normalizedSearch = search.trim()
   return useInfiniteQuery<
     UsersPage,
     Error,
@@ -13,8 +14,8 @@ export function useUsers() {
     string[],
     DocumentSnapshot | null
   >({
-    queryKey: ['users'],
-    queryFn: ({ pageParam }) => getUsersPaginated(pageParam),
+    queryKey: ['users', normalizedSearch],
+    queryFn: ({ pageParam }) => getUsersPaginated(pageParam, normalizedSearch),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.lastDoc : undefined,
   })

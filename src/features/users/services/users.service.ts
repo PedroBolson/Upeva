@@ -4,6 +4,8 @@ import {
   orderBy,
   query,
   limit,
+  startAt,
+  endAt,
   startAfter,
   type DocumentSnapshot,
 } from 'firebase/firestore'
@@ -23,14 +25,33 @@ function docToProfile(id: string, data: Record<string, unknown>): UserProfile {
   return { uid: id, ...(data as Omit<UserProfile, 'uid'>) }
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 export async function getUsersPaginated(
   cursor: DocumentSnapshot | null = null,
+  search = '',
 ): Promise<UsersPage> {
-  const constraints = [
-    orderBy('createdAt', 'asc'),
-    limit(USERS_PAGE_SIZE + 1),
-    ...(cursor ? [startAfter(cursor)] : []),
-  ]
+  const normalizedSearch = normalizeSearchText(search)
+  const field = normalizedSearch.includes('@') ? 'emailSearch' : 'displayNameSearch'
+  const constraints = normalizedSearch
+    ? [
+        orderBy(field, 'asc'),
+        ...(cursor ? [startAfter(cursor)] : [startAt(normalizedSearch)]),
+        endAt(`${normalizedSearch}\uf8ff`),
+        limit(USERS_PAGE_SIZE + 1),
+      ]
+    : [
+        orderBy('createdAt', 'asc'),
+        limit(USERS_PAGE_SIZE + 1),
+        ...(cursor ? [startAfter(cursor)] : []),
+      ]
+
   const snap = await getDocs(query(collection(db, 'users'), ...constraints))
   const hasMore = snap.docs.length > USERS_PAGE_SIZE
   const docs = hasMore ? snap.docs.slice(0, USERS_PAGE_SIZE) : snap.docs
