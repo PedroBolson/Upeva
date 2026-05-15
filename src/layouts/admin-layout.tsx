@@ -314,14 +314,15 @@ function AdminLayoutContent() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-foreground/30 backdrop-blur-sm md:hidden"
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="fixed inset-0 z-40 bg-foreground/30 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
             <motion.aside
               initial={{ x: -240 }}
               animate={{ x: 0 }}
               exit={{ x: -240 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              transition={{ duration: 0.16, ease: [0.2, 0, 0.2, 1] }}
               className="fixed left-0 top-0 z-50 h-full w-52 md:hidden"
             >
               <AdminSidebar

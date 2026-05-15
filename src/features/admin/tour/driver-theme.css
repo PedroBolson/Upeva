@@ -6,6 +6,50 @@
  * so this file needs no separate dark-mode block.
  */
 
+@keyframes tour-popover-in {
+  from {
+    opacity: 0;
+    translate: 0 3px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes tour-active-ring-in {
+  from {
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 10%, transparent);
+  }
+
+  to {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent);
+  }
+}
+
+@keyframes tour-popover-content-in {
+  from {
+    opacity: 0.62;
+    translate: 0 2px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes tour-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 /* ── Popover container ─────────────────────────────────────── */
 .driver-popover {
   background-color: var(--card) !important;
@@ -18,6 +62,38 @@
   min-width: 280px !important;
   max-width: 360px !important;
   padding: 18px !important;
+}
+
+.driver-simple.driver-tour-first-step .driver-popover {
+  animation: tour-popover-in 150ms cubic-bezier(0.2, 0, 0.2, 1) both !important;
+  will-change: opacity, translate;
+}
+
+.driver-simple.driver-tour-step-change .driver-popover {
+  will-change: opacity, translate;
+}
+
+.driver-simple.driver-tour-step-change .driver-popover-title,
+.driver-simple.driver-tour-step-change .driver-popover-description,
+.driver-simple.driver-tour-step-change .driver-popover-footer {
+  animation: tour-popover-content-in 130ms ease-out both !important;
+  will-change: opacity, translate;
+}
+
+.driver-simple.driver-tour-step-change .driver-popover-description {
+  animation-duration: 150ms !important;
+}
+
+.driver-simple.driver-tour-step-change .driver-popover-footer {
+  animation-duration: 150ms !important;
+}
+
+.driver-simple .driver-overlay {
+  animation: tour-overlay-in 140ms ease-out both !important;
+}
+
+.driver-overlay path {
+  transition: opacity 140ms ease-out;
 }
 
 /* ── Title ─────────────────────────────────────────────────── */
@@ -43,12 +119,16 @@
   color: var(--muted-foreground) !important;
   font-size: 20px !important;
   opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s !important;
+  transition: color 140ms ease-out, opacity 140ms ease-out, scale 120ms ease-out !important;
 }
 .driver-popover-close-btn:hover,
 .driver-popover-close-btn:focus {
   color: var(--foreground) !important;
   opacity: 1;
+}
+
+.driver-popover-close-btn:active {
+  scale: 0.94;
 }
 
 /* ── Footer ────────────────────────────────────────────────── */
@@ -75,12 +155,26 @@
   padding: 5px 12px !important;
   text-shadow: none !important;
   cursor: pointer !important;
-  transition: background-color 0.15s, opacity 0.15s !important;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    box-shadow 140ms ease-out,
+    color 140ms ease-out,
+    opacity 140ms ease-out,
+    translate 120ms ease-out !important;
 }
 .driver-popover-footer button:hover,
 .driver-popover-footer button:focus-visible {
   background-color: var(--accent) !important;
   color: var(--accent-foreground) !important;
+}
+
+.driver-popover-footer button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 28%, transparent) !important;
+}
+
+.driver-popover-footer button:active {
+  translate: 0 1px;
 }
 
 /* ── Next / Done button (primary style) ───────────────────── */
@@ -118,6 +212,12 @@
   outline: 2px solid var(--ring) !important;
   outline-offset: 3px !important;
   border-radius: calc(var(--radius) - 2px) !important;
+  animation: tour-active-ring-in 120ms ease-out both !important;
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent) !important;
+  transition:
+    box-shadow 140ms ease-out,
+    outline-color 140ms ease-out,
+    outline-offset 140ms ease-out !important;
 }
 
 @media (max-width: 767px) {
@@ -162,5 +262,21 @@
 
   .driver-popover-mobile-nav .driver-popover-footer {
     margin-top: 10px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-simple .driver-popover,
+  .driver-simple .driver-overlay,
+  .driver-popover *,
+  .driver-active-element {
+    animation: none !important;
+  }
+
+  .driver-overlay path,
+  .driver-popover,
+  .driver-popover *,
+  .driver-active-element {
+    transition: none !important;
   }
 }

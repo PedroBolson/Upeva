@@ -13,10 +13,9 @@ export interface TourStepConfig {
   // Only set on interactive elements (nav links, route links) where clicking
   // naturally causes navigation. Do NOT set on informational cards/divs.
   clickAdvances: boolean
-  // If true, disable pointer events on child <a> links while this step is
-  // highlighted, preventing the user from navigating into a specific record
-  // (animals, applications) and breaking the tour flow.
-  blockInnerLinks?: boolean
+  // If true, the highlighted page element may receive real pointer/touch events.
+  // Defaults to blocked so explanatory steps cannot mutate page state.
+  allowInteraction?: boolean
   // If true, the mobile sidebar should be opened before this step is shown
   // so the nav item is visible and highlightable on small screens.
   opensNavOnMobile?: boolean
@@ -97,6 +96,7 @@ function mobileNavToggleStep(): TourStepConfig {
   return {
     navTarget: null,
     clickAdvances: true,
+    allowInteraction: true,
     opensSidebarOnMobileClick: true,
     step: {
       element: visibleEl('[data-tour="mobile-nav-toggle"]'),
@@ -136,7 +136,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
         popover: {
           title: 'Bem-vindo ao painel Upeva',
           description:
-            'Este tutorial mostra as principais áreas do sistema e os fluxos mais importantes.<br><br>Use o botão <strong>Avançar</strong> ou a tecla <strong>→</strong> para ir ao próximo passo. Para voltar um passo, use a tecla <strong>←</strong> ou o botão <strong>Voltar</strong>. Para sair, clique no <strong>X</strong> ou pressione a tecla <strong>Esc</strong>.',
+            'Este tutorial mostra as principais áreas do sistema e os fluxos mais importantes.<br><br>Use o botão <strong>Avançar</strong> ou a tecla <strong>→</strong> para ir ao próximo passo. Para voltar, use a tecla <strong>←</strong> ou o botão <strong>Voltar</strong>. Para sair, clique no <strong>X</strong>.',
         },
       },
     },
@@ -159,6 +159,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-animais"]'),
@@ -191,7 +192,6 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
-      blockInnerLinks: true,
       step: {
         element: '[data-tour="animals-list-area"]',
         popover: {
@@ -206,6 +206,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais/novo',
       clickAdvances: true,
+      allowInteraction: true,
       step: {
         element: '[data-tour="create-animal-button"]',
         popover: {
@@ -307,6 +308,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/destaques',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-destaques"]'),
@@ -338,6 +340,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/candidaturas',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-candidaturas"]'),
@@ -370,7 +373,6 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
-      blockInnerLinks: true,
       step: {
         element: '[data-tour="applications-list-area"]',
         popover: {
@@ -385,6 +387,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/arquivos',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-arquivos"]'),
@@ -416,6 +419,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/usuarios',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-usuarios"]'),
@@ -448,6 +452,7 @@ export function getAdminTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/privacidade',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-privacidade"]'),
@@ -503,7 +508,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
         popover: {
           title: 'Bem-vindo ao painel Upeva',
           description:
-            'Este tutorial mostra as principais áreas disponíveis para analistas.<br><br>Use o botão <strong>Avançar</strong> ou a tecla <strong>→</strong> para ir ao próximo passo. Para voltar um passo, use a tecla <strong>←</strong> ou o botão <strong>Voltar</strong>. Para sair, clique no <strong>X</strong> ou pressione a tecla <strong>Esc</strong>.',
+            'Este tutorial mostra as principais áreas disponíveis para analistas.<br><br>Use o botão <strong>Avançar</strong> ou a tecla <strong>→</strong> para ir ao próximo passo. Para voltar, use a tecla <strong>←</strong> ou o botão <strong>Voltar</strong>. Para sair, clique no <strong>X</strong>.',
         },
       },
     },
@@ -526,6 +531,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-animais"]'),
@@ -558,7 +564,6 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
-      blockInnerLinks: true,
       step: {
         element: '[data-tour="animals-list-area"]',
         popover: {
@@ -573,6 +578,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/animais/novo',
       clickAdvances: true,
+      allowInteraction: true,
       step: {
         element: '[data-tour="create-animal-button"]',
         popover: {
@@ -632,6 +638,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/destaques',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-destaques"]'),
@@ -663,6 +670,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/candidaturas',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-candidaturas"]'),
@@ -695,7 +703,6 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: null,
       clickAdvances: false,
-      blockInnerLinks: true,
       step: {
         element: '[data-tour="applications-list-area"]',
         popover: {
@@ -710,6 +717,7 @@ export function getReviewerTourConfigs(): TourStepConfig[] {
     {
       navTarget: '/admin/arquivos',
       clickAdvances: true,
+      allowInteraction: true,
       opensNavOnMobile: true,
       step: {
         element: safeNavEl('[data-tour="nav-arquivos"]'),
