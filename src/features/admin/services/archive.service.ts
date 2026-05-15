@@ -115,16 +115,17 @@ export async function listArchiveFilesPage(
   if (filter.year) constraints.push(where('year', '==', filter.year))
 
   constraints.push(orderBy('createdAt', 'desc'))
-  constraints.push(limit(pageSize))
   if (cursor) constraints.push(startAfter(cursor))
+  constraints.push(limit(pageSize + 1))
 
   const snap = await getDocs(query(collection(db, 'archiveFiles'), ...constraints))
-  const docs = snap.docs
+  const hasMore = snap.docs.length > pageSize
+  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs
 
   return {
     files: docs.map((d) => docToArchiveFile(d.id, d.data())),
     lastDoc: docs[docs.length - 1] ?? null,
-    hasMore: docs.length === pageSize,
+    hasMore,
   }
 }
 
