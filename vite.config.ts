@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 type WorkboxRouteMatch = {
   request: {
     destination?: string
+    mode?: string
   }
   url: URL
 }
@@ -40,14 +41,26 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
+            urlPattern: ({ request, url }: WorkboxRouteMatch) => (
+              url.origin === 'https://firebasestorage.googleapis.com' &&
+              request.destination === 'image' &&
+              request.mode === 'cors'
+            ),
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: ({ request, url }: WorkboxRouteMatch) => {
               if (
                 url.origin !== 'https://firebasestorage.googleapis.com' ||
-                request.destination !== 'image'
+                request.destination !== 'image' ||
+                request.mode !== 'no-cors'
               ) {
                 return false
               }
 
+              // Only regular <img> loads are cached here. Canvas loads use
+              // crossOrigin="anonymous", arrive as CORS requests, and must never
+              // be answered with an opaque response from this runtime cache.
               const signedStorageParams = new Set([
                 'expires',
                 'googleaccessid',
