@@ -10,6 +10,8 @@ import {
   where,
   orderBy,
   limit,
+  startAt,
+  endAt,
   startAfter,
   type DocumentSnapshot,
   type QueryConstraint,
@@ -32,6 +34,7 @@ const PUBLIC_PAGE_SIZE = 12
 const ADMIN_PAGE_SIZE = 25
 const LINKABLE_ANIMALS_LIMIT = 25
 const LINKABLE_ANIMALS_SCOPE_LIMIT = 25
+const LINKABLE_ANIMALS_PAGE_SIZE = 25
 const SIMILAR_ANIMAL_STATUSES = new Set<AnimalStatus>(['available'])
 
 function docToAnimal(id: string, data: Record<string, unknown>): Animal {
@@ -46,6 +49,23 @@ function stripUndefinedFields<T extends Record<string, unknown>>(data: T): Parti
   return Object.fromEntries(
     Object.entries(data).filter(([, value]) => value !== undefined),
   ) as Partial<T>
+}
+
+export function normalizeAnimalNameSearch(value: string): string {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function decorateAnimalPayload<T extends Partial<AnimalPayload>>(data: T): T & { nameSearch?: string } {
+  return {
+    ...data,
+    ...(typeof data.name === 'string'
+      ? { nameSearch: normalizeAnimalNameSearch(data.name) }
+      : {}),
+  }
 }
 
 // ── Public ────────────────────────────────────────────────────────────────────
@@ -209,6 +229,19 @@ export interface LinkableAnimalFilters {
   preferredSex?: Sex | 'any'
   preferredSize?: Size | 'any'
   scope?: 'same-species' | 'different-species'
+  search?: string
+  pageSize?: number
+}
+
+export interface LinkableAnimalsCursor {
+  searchDoc?: DocumentSnapshot | null
+  scanDoc?: DocumentSnapshot | null
+}
+
+export interface LinkableAnimalsPage {
+  animals: Animal[]
+  cursor: LinkableAnimalsCursor | null
+  hasMore: boolean
 }
 
 async function queryLinkableAnimals(
@@ -277,6 +310,134 @@ export async function getLinkableAnimalsForApplication(
   return animals.slice(0, LINKABLE_ANIMALS_LIMIT * queryPlans.length)
 }
 
+function isLinkableAnimal(animal: Animal, species: Species): boolean {
+  return (
+    animal.species === species &&
+    (animal.status === 'available' || animal.status === 'under_review')
+  )
+}
+
+function matchesLegacyLinkableSearch(animal: Animal, normalizedSearch: string): boolean {
+  if (!normalizedSearch) return true
+  return (
+    normalizeAnimalNameSearch(animal.name).includes(normalizedSearch) ||
+    animal.id.toLowerCase().includes(normalizedSearch)
+  )
+}
+
+async function getExactLinkableAnimalById(
+  id: string,
+  species: Species,
+): Promise<Animal | null> {
+  if (!id) return null
+  const snap = await getDoc(doc(db, 'animals', id))
+  if (!snap.exists()) return null
+
+  const animal = docToAnimal(snap.id, snap.data())
+  return isLinkableAnimal(animal, species) ? animal : null
+}
+
+async function getLinkableAnimalsSearchPage(
+  species: Species,
+  rawSearch: string,
+  normalizedSearch: string,
+  cursor: LinkableAnimalsCursor | null,
+  pageSize: number,
+): Promise<LinkableAnimalsPage> {
+  const searchConstraints: QueryConstraint[] = [
+    where('status', 'in', ['available', 'under_review']),
+    where('species', '==', species),
+    orderBy('nameSearch', 'asc'),
+  ]
+
+  if (cursor?.searchDoc) {
+    searchConstraints.push(startAfter(cursor.searchDoc))
+  } else {
+    searchConstraints.push(startAt(normalizedSearch))
+  }
+
+  searchConstraints.push(endAt(`${normalizedSearch}\uf8ff`), limit(pageSize + 1))
+
+  const scanConstraints: QueryConstraint[] = [
+    where('status', 'in', ['available', 'under_review']),
+    where('species', '==', species),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize + 1),
+  ]
+
+  if (cursor?.scanDoc) scanConstraints.push(startAfter(cursor.scanDoc))
+
+  const [exactAnimal, searchSnap, scanSnap] = await Promise.all([
+    cursor ? Promise.resolve(null) : getExactLinkableAnimalById(rawSearch.trim(), species),
+    getDocs(query(collection(db, 'animals'), ...searchConstraints)),
+    getDocs(query(collection(db, 'animals'), ...scanConstraints)),
+  ])
+
+  const searchHasMore = searchSnap.docs.length > pageSize
+  const scanHasMore = scanSnap.docs.length > pageSize
+  const searchDocs = searchHasMore ? searchSnap.docs.slice(0, pageSize) : searchSnap.docs
+  const scanDocs = scanHasMore ? scanSnap.docs.slice(0, pageSize) : scanSnap.docs
+
+  const animalsById = new Map<string, Animal>()
+  if (exactAnimal) animalsById.set(exactAnimal.id, exactAnimal)
+  for (const docSnap of searchDocs) {
+    const animal = docToAnimal(docSnap.id, docSnap.data())
+    animalsById.set(animal.id, animal)
+  }
+  for (const docSnap of scanDocs) {
+    const animal = docToAnimal(docSnap.id, docSnap.data())
+    if (matchesLegacyLinkableSearch(animal, normalizedSearch)) {
+      animalsById.set(animal.id, animal)
+    }
+  }
+
+  return {
+    animals: Array.from(animalsById.values()),
+    cursor: {
+      searchDoc: searchDocs[searchDocs.length - 1] ?? cursor?.searchDoc ?? null,
+      scanDoc: scanDocs[scanDocs.length - 1] ?? cursor?.scanDoc ?? null,
+    },
+    hasMore: searchHasMore || scanHasMore,
+  }
+}
+
+export async function getLinkableAnimalsPageForApplication(
+  filters: LinkableAnimalFilters,
+  cursor: LinkableAnimalsCursor | null = null,
+): Promise<LinkableAnimalsPage> {
+  const pageSize = filters.pageSize ?? LINKABLE_ANIMALS_PAGE_SIZE
+  const species = filters.scope === 'different-species'
+    ? getOtherSpecies(filters.species)
+    : filters.species
+  const normalizedSearch = normalizeAnimalNameSearch(filters.search ?? '')
+
+  if (normalizedSearch) {
+    return getLinkableAnimalsSearchPage(species, filters.search ?? '', normalizedSearch, cursor, pageSize)
+  }
+
+  const constraints: QueryConstraint[] = [
+    where('status', 'in', ['available', 'under_review']),
+    where('species', '==', species),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize + 1),
+  ]
+
+  if (cursor?.scanDoc) constraints.push(startAfter(cursor.scanDoc))
+
+  const snap = await getDocs(query(collection(db, 'animals'), ...constraints))
+  const hasMore = snap.docs.length > pageSize
+  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs
+
+  return {
+    animals: docs.map((d) => docToAnimal(d.id, d.data())),
+    cursor: {
+      searchDoc: null,
+      scanDoc: docs[docs.length - 1] ?? null,
+    },
+    hasMore,
+  }
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -308,7 +469,7 @@ export async function getAdminAnimalsPaginated(
 
 export async function createAnimal(data: AnimalPayload): Promise<string> {
   const ref = await addDoc(collection(db, 'animals'), {
-    ...stripUndefinedFields(data),
+    ...stripUndefinedFields(decorateAnimalPayload(data)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
@@ -317,7 +478,7 @@ export async function createAnimal(data: AnimalPayload): Promise<string> {
 
 export async function updateAnimal(id: string, data: Partial<AnimalPayload>): Promise<void> {
   await updateDoc(doc(db, 'animals', id), {
-    ...stripUndefinedFields(data),
+    ...stripUndefinedFields(decorateAnimalPayload(data)),
     updatedAt: serverTimestamp(),
   })
 }

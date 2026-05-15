@@ -3,6 +3,7 @@ import type { Timestamp, Species, Sex, Size, AnimalStatus, ArchiveReason } from 
 export interface Animal {
   id: string
   name: string
+  nameSearch?: string
   species: Species
   sex: Sex
   size?: Size

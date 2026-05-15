@@ -30,11 +30,19 @@ type ApplicationAnimalSelectorProps = {
   preferredSize?: Size | 'any'
   sameSpeciesAnimals: Animal[]
   differentSpeciesAnimals: Animal[]
+  search: string
   selectedAnimalId?: string
   currentAnimalName?: string
   loadingSameSpecies?: boolean
   loadingDifferentSpecies?: boolean
+  hasMoreSameSpecies?: boolean
+  hasMoreDifferentSpecies?: boolean
+  fetchingMoreSameSpecies?: boolean
+  fetchingMoreDifferentSpecies?: boolean
   differentSpeciesVisible: boolean
+  onSearchChange: (value: string) => void
+  onLoadMoreSameSpecies?: () => void
+  onLoadMoreDifferentSpecies?: () => void
   onShowDifferentSpecies: () => void
   onSelectAnimal: (animal: Animal) => void
 }
@@ -71,6 +79,7 @@ function animalLabel(animal: Animal): string {
 function matchesSearch(animal: Animal, search: string): boolean {
   const normalizedSearch = search.trim().toLowerCase()
   if (!normalizedSearch) return true
+  if (animal.id.toLowerCase().includes(normalizedSearch)) return true
   return [
     animal.name,
     animal.breed,
@@ -148,15 +157,22 @@ export function ApplicationAnimalSelector({
   preferredSize,
   sameSpeciesAnimals,
   differentSpeciesAnimals,
+  search,
   selectedAnimalId,
   currentAnimalName,
   loadingSameSpecies = false,
   loadingDifferentSpecies = false,
+  hasMoreSameSpecies = false,
+  hasMoreDifferentSpecies = false,
+  fetchingMoreSameSpecies = false,
+  fetchingMoreDifferentSpecies = false,
   differentSpeciesVisible,
+  onSearchChange,
+  onLoadMoreSameSpecies,
+  onLoadMoreDifferentSpecies,
   onShowDifferentSpecies,
   onSelectAnimal,
 }: ApplicationAnimalSelectorProps) {
-  const [search, setSearch] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Partial<Record<GroupTitle, boolean>>>({})
   const isSearching = search.trim().length > 0
 
@@ -200,8 +216,8 @@ export function ApplicationAnimalSelector({
         />
         <Input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar animal..."
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Buscar por nome ou ID..."
           className="pl-9"
         />
       </div>
@@ -283,6 +299,34 @@ export function ApplicationAnimalSelector({
                 </div>
               ) : null
             ))}
+            {hasMoreSameSpecies && (
+              <div className="p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit text-primary"
+                  loading={fetchingMoreSameSpecies}
+                  onClick={onLoadMoreSameSpecies}
+                >
+                  Carregar mais animais
+                </Button>
+              </div>
+            )}
+            {differentSpeciesVisible && hasMoreDifferentSpecies && (
+              <div className="p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit text-primary"
+                  loading={fetchingMoreDifferentSpecies}
+                  onClick={onLoadMoreDifferentSpecies}
+                >
+                  Carregar mais animais de outra espécie
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -310,6 +354,19 @@ export function ApplicationAnimalSelector({
           <Spinner size="sm" />
           Carregando animais de outra espécie...
         </div>
+      )}
+
+      {differentSpeciesVisible && hasMoreDifferentSpecies && !hasVisibleAnimals && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit text-primary"
+          loading={fetchingMoreDifferentSpecies}
+          onClick={onLoadMoreDifferentSpecies}
+        >
+          Carregar mais animais
+        </Button>
       )}
 
       <p className="text-xs text-muted-foreground">

@@ -49,11 +49,11 @@ export function ApplicationsPage() {
     error,
     fetchMore,
     refetch,
-  } = useApplications(null)
+  } = useApplications(activeTab === 'all' ? null : activeTab)
 
   const applications = useMemo(
-    () => activeTab === 'all' ? allApplications : allApplications.filter((a) => a.status === activeTab),
-    [allApplications, activeTab],
+    () => allApplications,
+    [allApplications],
   )
 
   const animalOptions = useMemo(() => {
@@ -131,7 +131,10 @@ export function ApplicationsPage() {
       APPLICATION_STATUS_TABS.map(({ value, label }) => (
         <button
           key={value}
-          onClick={() => setActiveTab(value)}
+          onClick={() => {
+            setActiveTab(value)
+            setAnimalFilter('')
+          }}
           aria-current={activeTab === value ? 'true' : undefined}
           className={cn(
             'shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -194,6 +197,7 @@ export function ApplicationsPage() {
                     className="w-full justify-between"
                     onClick={() => {
                       setActiveTab(value)
+                      setAnimalFilter('')
                       close()
                     }}
                   >

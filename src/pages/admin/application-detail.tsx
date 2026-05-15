@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, CalendarClock, ExternalLink, FileText, HeartHandshake, Info, Loader2, Mail, MessageCircle, PawPrint, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button, Card, ConfirmModal, Select, ApplicationStatusBadge } from '@/components/ui'
 import { RejectionModal } from '@/features/adoption/components/rejection-modal'
@@ -29,7 +29,7 @@ import {
   hasApplicationAnimals,
   normalizeApplicationAnimalIds,
 } from '@/features/adoption/utils/application-animals'
-import { getLinkableAnimalsForApplication } from '@/features/animals/services/animals.service'
+import { useLinkableAnimals } from '@/features/animals/hooks/use-linkable-animals'
 import { getActiveApplicationsForAnimal } from '@/features/adoption/services/adoption.service'
 import { generateAdoptionContractNow, type ArchiveFile, type ArchiveFileType } from '@/features/admin/services/archive.service'
 import { SPECIES_LABELS, SIZE_LABELS, SEX_LABELS, type Animal } from '@/features/animals/types/animal.types'
@@ -161,6 +161,7 @@ export function ApplicationDetailPage() {
   const [saved, setSaved] = useState(false)
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [showDifferentSpeciesAnimals, setShowDifferentSpeciesAnimals] = useState(false)
+  const [animalSearch, setAnimalSearch] = useState('')
   const [speciesChangeCandidate, setSpeciesChangeCandidate] = useState<Animal | null>(null)
   const [confirmSpeciesChangeAndSave, setConfirmSpeciesChangeAndSave] = useState(false)
   const [isRelinkConfirmOpen, setIsRelinkConfirmOpen] = useState(false)
@@ -255,46 +256,36 @@ export function ApplicationDetailPage() {
   const whatsAppHref = piiLoading ? null : getWhatsAppHref(phone)
 
   const {
-    data: sameSpeciesAnimals = [],
+    animals: sameSpeciesAnimals,
+    hasMore: hasMoreSameSpeciesAnimals,
     isLoading: sameSpeciesAnimalsLoading,
-  } = useQuery({
-    queryKey: [
-      'animals',
-      'linkable-application',
-      'same-species',
-      app?.id,
-      app?.species,
-      app?.preferredSex,
-      app?.preferredSize,
-    ],
-    queryFn: () => getLinkableAnimalsForApplication({
-      species: app!.species,
-      preferredSex: app!.preferredSex,
-      preferredSize: app!.preferredSize,
+    isFetchingMore: fetchingMoreSameSpeciesAnimals,
+    fetchMore: fetchMoreSameSpeciesAnimals,
+  } = useLinkableAnimals(
+    {
+      species: app?.species ?? 'dog',
+      preferredSex: app?.preferredSex,
+      preferredSize: app?.preferredSize,
       scope: 'same-species',
-    }),
-    enabled: Boolean(app) && isGeneralInterest,
-    staleTime: 1000 * 60 * 5,
-  })
+      search: animalSearch,
+    },
+    Boolean(app) && isGeneralInterest,
+  )
 
   const {
-    data: differentSpeciesAnimals = [],
+    animals: differentSpeciesAnimals,
+    hasMore: hasMoreDifferentSpeciesAnimals,
     isLoading: differentSpeciesAnimalsLoading,
-  } = useQuery({
-    queryKey: [
-      'animals',
-      'linkable-application',
-      'different-species',
-      app?.id,
-      app?.species,
-    ],
-    queryFn: () => getLinkableAnimalsForApplication({
-      species: app!.species,
+    isFetchingMore: fetchingMoreDifferentSpeciesAnimals,
+    fetchMore: fetchMoreDifferentSpeciesAnimals,
+  } = useLinkableAnimals(
+    {
+      species: app?.species ?? 'dog',
       scope: 'different-species',
-    }),
-    enabled: Boolean(app) && isGeneralInterest && showDifferentSpeciesAnimals,
-    staleTime: 1000 * 60 * 5,
-  })
+      search: animalSearch,
+    },
+    Boolean(app) && isGeneralInterest && showDifferentSpeciesAnimals,
+  )
 
   const selectedAnimalName = draftsCurrent && selectedAnimal
     ? selectedAnimal.animal.name
@@ -302,12 +293,13 @@ export function ApplicationDetailPage() {
 
   // Available cats for the staff animal assignment dropdowns.
   // Loaded for all cat applications (general and specific alike).
-  const { data: availableCats = [], isLoading: availableCatsLoading } = useQuery({
-    queryKey: ['animals', 'linkable-cats', app?.id, app?.status, appAnimalIdsKey],
-    queryFn: () => getLinkableAnimalsForApplication({ species: 'cat', scope: 'same-species' }),
-    enabled: Boolean(app) && app?.species === 'cat',
-    staleTime: 1000 * 60 * 5,
-  })
+  const {
+    animals: availableCats = [],
+    isLoading: availableCatsLoading,
+  } = useLinkableAnimals(
+    { species: 'cat', scope: 'same-species', pageSize: 50 },
+    Boolean(app) && app?.species === 'cat',
+  )
 
   const catOptions = useMemo(() => {
     const options = new Map<string, string>()
@@ -1028,11 +1020,19 @@ export function ApplicationDetailPage() {
                       preferredSize={app.preferredSize}
                       sameSpeciesAnimals={sameSpeciesAnimals}
                       differentSpeciesAnimals={differentSpeciesAnimals}
+                      search={animalSearch}
                       selectedAnimalId={currentAnimalId || undefined}
                       currentAnimalName={currentAnimalId ? selectedAnimalName : undefined}
                       loadingSameSpecies={sameSpeciesAnimalsLoading}
                       loadingDifferentSpecies={differentSpeciesAnimalsLoading}
+                      hasMoreSameSpecies={hasMoreSameSpeciesAnimals}
+                      hasMoreDifferentSpecies={hasMoreDifferentSpeciesAnimals}
+                      fetchingMoreSameSpecies={fetchingMoreSameSpeciesAnimals}
+                      fetchingMoreDifferentSpecies={fetchingMoreDifferentSpeciesAnimals}
                       differentSpeciesVisible={showDifferentSpeciesAnimals}
+                      onSearchChange={setAnimalSearch}
+                      onLoadMoreSameSpecies={() => fetchMoreSameSpeciesAnimals()}
+                      onLoadMoreDifferentSpecies={() => fetchMoreDifferentSpeciesAnimals()}
                       onShowDifferentSpecies={() => setShowDifferentSpeciesAnimals(true)}
                       onSelectAnimal={handleSelectAnimal}
                     />
