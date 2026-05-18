@@ -30,3 +30,6 @@ dist-ssr
 .firebase/
 .claude/settings.local.json
 .claude/
+
+# Firebase service account key — never commit this
+serviceAccountKey.json

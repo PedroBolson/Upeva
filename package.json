@@ -15,7 +15,15 @@
     "seed:archive-test": "node functions/scripts/seed-archive-test.cjs",
     "run:archive-test": "node functions/scripts/run-archive-cleanup-test.cjs",
     "verify:archive-test": "node functions/scripts/verify-archive-test.cjs",
-    "clean:archive-test": "node functions/scripts/clean-archive-test.cjs"
+    "clean:archive-test": "node functions/scripts/clean-archive-test.cjs",
+    "db:reset:dry": "node scripts/reset-db.js",
+    "db:reset": "node scripts/reset-db.js --confirm-delete",
+    "db:validate:dry": "node scripts/validate-users.js",
+    "db:validate": "node scripts/validate-users.js --write",
+    "storage:reset:dry": "node scripts/reset-storage.js",
+    "storage:reset": "node scripts/reset-storage.js --confirm-delete",
+    "prod:reset:dry": "node scripts/prod-reset.js",
+    "prod:reset": "node scripts/prod-reset.js --confirm-delete"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
